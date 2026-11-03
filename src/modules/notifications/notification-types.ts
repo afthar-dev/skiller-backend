@@ -7,6 +7,9 @@ export const NOTIFICATION_TYPES = {
   "media.ready": { transactional: false },
   "media.failed": { transactional: true },
   "role.granted": { transactional: false },
+  "subscription.activated": { transactional: true },
+  "subscription.payment_failed": { transactional: true },
+  "subscription.expired": { transactional: true },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

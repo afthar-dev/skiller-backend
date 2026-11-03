@@ -3,9 +3,10 @@ import { z } from "zod";
 import { permissionRegistry } from "../src/modules/rbac/permission.registry";
 import { bootstrapSuperAdmin, seedSystemRoles, syncPermissions } from "../src/modules/rbac/permission-sync";
 import "../src/modules/rbac/permissions";
+import { seedPlans } from "../src/modules/billing/plans-seed";
 import { ensurePlatformAccounts } from "../src/modules/wallet/ledger-sql";
 
-/** Idempotent: permissions, system roles and the SUPER_ADMIN_EMAIL user with the super_admin role. */
+/** Idempotent: permissions, system roles, the SUPER_ADMIN_EMAIL user with the super_admin role, platform ledger accounts and the plan catalog. */
 export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
   const sync = await syncPermissions(prisma, permissionRegistry);
   const roles = await seedSystemRoles(prisma);
@@ -13,6 +14,7 @@ export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
   // Seeded flags start off; update: {} so a re-seed never overwrites what an admin changed.
   await prisma.featureFlag.upsert({ where: { key: "gig_orders" }, create: { key: "gig_orders", enabled: false }, update: {} });
   await ensurePlatformAccounts(prisma);
+  await seedPlans(prisma);
   return { ...sync, roles };
 }
 

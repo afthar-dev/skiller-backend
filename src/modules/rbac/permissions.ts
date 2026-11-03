@@ -1,4 +1,7 @@
 import { definePermissions, permissionRegistry } from "./permission.registry";
+// Other modules define their own keys next to their code; importing them here registers them in the default registry.
+import "../billing/permissions";
+import "../wallet/permissions";
 
 // Phase-1 permission keys. Later phases add their own definePermissions() calls next to their modules.
 export const ProfilePermissions = definePermissions("profile", { update_any: "Edit any user's profile" });
@@ -20,4 +23,4 @@ export const SettingsPermissions = definePermissions("settings", { manage: "Mana
 export const FlagsPermissions = definePermissions("flags", { manage: "Manage feature flags" });
 export const NotificationPermissions = definePermissions("notification", { view: "View notification delivery status" });
 
-export const PHASE_1_PERMISSION_KEYS: readonly string[] = permissionRegistry.all().map((p) => p.key);
+export const PLATFORM_PERMISSION_KEYS: readonly string[] = permissionRegistry.all().map((p) => p.key);

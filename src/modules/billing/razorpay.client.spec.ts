@@ -121,6 +121,16 @@ describe("HttpRazorpayClient (stubbed fetch)", () => {
     expect(seen[3].body).toEqual({ cancel_at_cycle_end: 1 });
   });
 
+  it("updateSubscription PATCHes the plan with schedule_change_at", async () => {
+    const { seen, client } = stub([{ body: { id: "sub_1", plan_id: "plan_2", status: "active" } }, { body: { id: "sub_1", plan_id: "plan_3", status: "active" } }]);
+    expect((await client.updateSubscription("sub_1", { planId: "plan_2", atCycleEnd: true })).planId).toBe("plan_2");
+    expect(seen[0].method).toBe("PATCH");
+    expect(seen[0].url).toBe("https://rzp.example/v1/subscriptions/sub_1");
+    expect(seen[0].body).toEqual({ plan_id: "plan_2", schedule_change_at: "cycle_end" });
+    await client.updateSubscription("sub_1", { planId: "plan_3", atCycleEnd: false });
+    expect(seen[1].body).toEqual({ plan_id: "plan_3", schedule_change_at: "now" });
+  });
+
   it("surfaces Razorpay errors as RazorpayApiError", async () => {
     const { client } = stub([{ status: 400, body: { error: { code: "BAD_REQUEST_ERROR", description: "The amount must be atleast INR 1.00" } } }]);
     await expect(client.createOrder({ amountPaise: 10n, receipt: "r" })).rejects.toMatchObject({ name: "RazorpayApiError", status: 400, code: "BAD_REQUEST_ERROR" });

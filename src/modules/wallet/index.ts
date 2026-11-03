@@ -4,3 +4,4 @@ export type { LedgerEntryInput, LedgerLineInput, PostResult } from "./ledger.ser
 export { AccountsService } from "./accounts.service";
 export type { PlatformKind, SellerKind } from "./ledger-sql";
 export { WalletModule } from "./wallet.module";
+export { WalletWorkerModule } from "./wallet-worker.module";

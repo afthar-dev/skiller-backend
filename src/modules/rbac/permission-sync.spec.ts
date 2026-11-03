@@ -1,7 +1,7 @@
 import { Controller, Get, Post } from "@nestjs/common";
 import { Public } from "../../common/auth/public.decorator";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
-import { PHASE_1_PERMISSION_KEYS } from "./permissions";
+import { PLATFORM_PERMISSION_KEYS } from "./permissions";
 import { PermissionRegistry, definePermissions } from "./permission.registry";
 import { RequirePermission } from "./require-permission.decorator";
 import { assertAllRoutesGuarded } from "./route-guard-check";
@@ -25,11 +25,12 @@ describe("PermissionRegistry / definePermissions", () => {
     expect(() => definePermissions("dup", { a: "A again" }, registry)).toThrow(/dup\.a/);
   });
 
-  it("defines exactly the Phase-1 keys in the default registry", () => {
-    expect([...PHASE_1_PERMISSION_KEYS].sort()).toEqual(
+  it("defines exactly the Phase-1 and Phase-2 keys in the default registry", () => {
+    expect([...PLATFORM_PERMISSION_KEYS].sort()).toEqual(
       [
         "profile.update_any", "user.view", "user.suspend", "user.revoke_sessions", "rbac.view", "rbac.manage", "role.grant", "audit.view",
         "media.upload", "media.manage_any", "org.create", "org.manage", "org.invite", "settings.manage", "flags.manage", "notification.view",
+        "billing.plans.manage", "billing.view_any", "billing.refund", "billing.coupons.manage", "finance.view", "payout.approve", "wallet.view_any",
       ].sort(),
     );
   });

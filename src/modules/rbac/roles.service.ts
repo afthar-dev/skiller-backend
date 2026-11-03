@@ -121,6 +121,13 @@ export class RolesService {
     return count > 0;
   }
 
+  /** People holding at least one active role in the org (the owner included). */
+  async countOrgMembers(orgId: string): Promise<number> {
+    const now = this.clock.now();
+    const people = await this.prisma.userRole.findMany({ where: { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, distinct: ["userId"], select: { userId: true } });
+    return people.length;
+  }
+
   /** Org members, one entry per person with all their active roles, paged by user id. */
   async listOrgMembers(orgId: string, page: PageQuery): Promise<{ items: { userId: string; roles: string[] }[]; nextCursor: string | null }> {
     const now = this.clock.now();

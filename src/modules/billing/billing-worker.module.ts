@@ -1,7 +1,14 @@
 import { Module } from "@nestjs/common";
 import { ClockModule } from "../../common/clock/clock";
+import { NotificationsWorkerModule } from "../notifications";
+import { WalletWorkerModule } from "../wallet";
 import { BILLING_CORE_EXPORTS, BILLING_CORE_PROVIDERS } from "./billing.module";
+import { EntitlementsModule } from "./entitlements.module";
 
-/** Worker process: the webhook processor and the dispatcher other modules register their handlers on. No HTTP surface. */
-@Module({ imports: [ClockModule], providers: BILLING_CORE_PROVIDERS, exports: BILLING_CORE_EXPORTS })
+/** Worker process: the webhook processor, the subscription handlers and maintenance job, and the dispatcher other modules register on. No HTTP surface. */
+@Module({
+  imports: [ClockModule, EntitlementsModule, WalletWorkerModule, NotificationsWorkerModule],
+  providers: BILLING_CORE_PROVIDERS,
+  exports: BILLING_CORE_EXPORTS,
+})
 export class BillingWorkerModule {}

@@ -12,6 +12,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
 import { REDIS } from "../../common/redis/redis.constants";
 import { AuditService } from "../audit";
+import { EntitlementsService } from "../billing";
 import { AccountService } from "../identity";
 import { MailService } from "../mail";
 import { MediaService } from "../media";
@@ -71,6 +72,7 @@ export class OrganizationsService {
     private readonly accounts: AccountService,
     private readonly profiles: ProfilesService,
     private readonly media: MediaService,
+    private readonly entitlements: EntitlementsService,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(REDIS) private readonly redis: Redis,
@@ -147,6 +149,9 @@ export class OrganizationsService {
     const email = input.email.trim().toLowerCase();
     const existingUserId = await this.accounts.findIdByEmail(email);
     if (existingUserId && (await this.roles.isOrgMember(org.id, existingUserId))) throw this.alreadyMember();
+    // Plan seat limit: people with an org role (owner included) plus pending invites, counting this one (a re-invite of the same address replaces its old invite).
+    const seats = await this.seatsUsed(org.id, email);
+    await this.entitlements.check({ ownerType: "ORG", ownerId: org.id }, "org_seats", seats + 1);
     const raw = randomBytes(32).toString("base64url");
     const expiresAt = new Date(this.clock.now().getTime() + INVITE_TTL_MS);
     const inviterName = await this.profiles.displayNameOf(actorId);
@@ -162,6 +167,13 @@ export class OrganizationsService {
 
     await this.mail.send("org_invite", email, { orgName: org.name, inviterName, acceptUrl: `${this.config.webBaseUrl}/org-invites/accept?token=${raw}` });
     return { id: invite.id, email, roleKey: invite.roleKey, expiresAt: expiresAt.toISOString() };
+  }
+
+  /** Seats in use: members holding any org role (owner included) plus pending, unexpired invites, optionally ignoring the invite to `exceptEmail`. */
+  async seatsUsed(orgId: string, exceptEmail?: string): Promise<number> {
+    const members = await this.roles.countOrgMembers(orgId);
+    const pending = await this.prisma.orgInvite.count({ where: { orgId, acceptedAt: null, expiresAt: { gt: this.clock.now() }, ...(exceptEmail ? { email: { not: exceptEmail } } : {}) } });
+    return members + pending;
   }
 
   async accept(userId: string, rawToken: string, meta: MutationMeta = {}): Promise<{ orgId: string; slug: string; roleKey: string }> {

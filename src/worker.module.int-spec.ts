@@ -13,6 +13,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "rbac.permissions_changed": true,
   "user.became_creator": true,
   "org.created": true,
+  "subscription.changed": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
 };

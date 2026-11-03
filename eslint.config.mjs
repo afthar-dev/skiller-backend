@@ -38,6 +38,11 @@ export default tseslint.config(
   },
   ...boundaryBlocks,
   {
+    // Permission declarations: each module defines its keys with definePermissions (rbac/permission.registry), and rbac/permissions.ts imports those files to register them.
+    files: ["src/modules/*/permissions.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
     files: ["src/common/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": ["error", { patterns: [{ group: ["**/modules/**"], message: "src/common must not depend on feature modules." }] }],

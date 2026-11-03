@@ -3459,7 +3459,10 @@
                             "welcome",
                             "media.ready",
                             "media.failed",
-                            "role.granted"
+                            "role.granted",
+                            "subscription.activated",
+                            "subscription.payment_failed",
+                            "subscription.expired"
                           ]
                         },
                         "inApp": {
@@ -3927,7 +3930,10 @@
                     "enum": [
                       "hold_days",
                       "max_upload_mb_course_lesson",
-                      "reel_max_seconds"
+                      "reel_max_seconds",
+                      "gst_bps",
+                      "tds_bps",
+                      "min_payout_paise"
                     ]
                   },
                   "value": {}
@@ -4181,6 +4187,861 @@
         "summary": "RazorpayX (payouts) webhook (HMAC-SHA256 signed)",
         "tags": [
           "Webhooks"
+        ]
+      }
+    },
+    "/v1/plans": {
+      "get": {
+        "operationId": "Plans_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Plans a customer can buy now (newest version per interval)",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/subscriptions/me": {
+      "get": {
+        "operationId": "Subscriptions_me",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My plan, status, period end, limits and usage",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/subscriptions/checkout": {
+      "post": {
+        "operationId": "Subscriptions_checkout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planVersionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "planVersionId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start paying for a plan: creates the Razorpay subscription",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/subscriptions/{id}/cancel": {
+      "post": {
+        "operationId": "Subscriptions_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel at the end of the paid period",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/subscriptions/{id}/change": {
+      "post": {
+        "operationId": "Subscriptions_change",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planVersionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "planVersionId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upgrade now (pay for the new plan) or schedule a downgrade for the period end",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/orgs/{slug}/subscription": {
+      "get": {
+        "operationId": "OrgSubscriptions_me",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `org.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The organization's plan, status, period end, limits and usage",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/orgs/{slug}/subscription/checkout": {
+      "post": {
+        "operationId": "OrgSubscriptions_checkout",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planVersionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "planVersionId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `org.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start paying for an organization plan",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/orgs/{slug}/subscription/{id}/cancel": {
+      "post": {
+        "operationId": "OrgSubscriptions_cancel",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `org.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Cancel at the end of the paid period",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/orgs/{slug}/subscription/{id}/change": {
+      "post": {
+        "operationId": "OrgSubscriptions_change",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "planVersionId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "planVersionId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `org.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upgrade now or schedule a downgrade for the period end",
+        "tags": [
+          "Billing"
+        ]
+      }
+    },
+    "/v1/admin/plans": {
+      "get": {
+        "operationId": "AdminBilling_list",
+        "parameters": [],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.plans.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "All plans with every version",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminBilling_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{1,40}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "CREATOR",
+                      "ORG"
+                    ]
+                  },
+                  "version": {
+                    "type": "object",
+                    "properties": {
+                      "pricePaise": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9]\\d{0,14})$"
+                      },
+                      "interval": {
+                        "type": "string",
+                        "enum": [
+                          "MONTH",
+                          "YEAR"
+                        ]
+                      },
+                      "commissionBps": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      },
+                      "limits": {
+                        "type": "object",
+                        "properties": {
+                          "max_published_courses": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000000,
+                            "nullable": true
+                          },
+                          "storage_gb": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000000,
+                            "nullable": true
+                          },
+                          "reels_per_day": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000000,
+                            "nullable": true
+                          },
+                          "analytics_level": {
+                            "type": "string",
+                            "enum": [
+                              "basic",
+                              "standard",
+                              "advanced"
+                            ]
+                          },
+                          "creator_coupons": {
+                            "type": "boolean"
+                          },
+                          "org_seats": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000000,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "max_published_courses",
+                          "storage_gb",
+                          "reels_per_day",
+                          "analytics_level",
+                          "creator_coupons",
+                          "org_seats"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "pricePaise",
+                      "interval",
+                      "commissionBps",
+                      "limits"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "key",
+                  "name",
+                  "audience",
+                  "version"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.plans.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a plan with its first version (step-up required)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/plans/{id}/versions": {
+      "post": {
+        "operationId": "AdminBilling_createVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pricePaise": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9]\\d{0,14})$"
+                  },
+                  "interval": {
+                    "type": "string",
+                    "enum": [
+                      "MONTH",
+                      "YEAR"
+                    ]
+                  },
+                  "commissionBps": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "limits": {
+                    "type": "object",
+                    "properties": {
+                      "max_published_courses": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000,
+                        "nullable": true
+                      },
+                      "storage_gb": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000,
+                        "nullable": true
+                      },
+                      "reels_per_day": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000,
+                        "nullable": true
+                      },
+                      "analytics_level": {
+                        "type": "string",
+                        "enum": [
+                          "basic",
+                          "standard",
+                          "advanced"
+                        ]
+                      },
+                      "creator_coupons": {
+                        "type": "boolean"
+                      },
+                      "org_seats": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000,
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "max_published_courses",
+                      "storage_gb",
+                      "reels_per_day",
+                      "analytics_level",
+                      "creator_coupons",
+                      "org_seats"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "pricePaise",
+                  "interval",
+                  "commissionBps",
+                  "limits"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.plans.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a plan version. Existing versions never change; subscribers stay on theirs (step-up required)",
+        "tags": [
+          "Admin"
         ]
       }
     }

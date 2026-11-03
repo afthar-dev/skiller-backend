@@ -1,2 +1,4 @@
-// Wallet permission keys (definePermissions) land here with the admin and payout endpoints in later Phase 2 tasks.
-export {};
+import { definePermissions } from "../rbac/permission.registry";
+
+export const PayoutPermissions = definePermissions("payout", { approve: "Approve payouts" });
+export const WalletPermissions = definePermissions("wallet", { view_any: "View any wallet" });

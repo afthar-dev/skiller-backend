@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { PermissionService } from "../../src/modules/rbac/permission.service";
+import { givePlan } from "../support/billing";
 import { AuthTestApp, createAuthTestApp, uniqueEmail } from "../support/auth-app";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
@@ -39,6 +40,8 @@ describe("organizations and invites", () => {
     const owner = await t.login();
     const res = await createOrg(owner);
     expect(res.status).toBe(201);
+    // Invites are limited by the plan seat limit; a Free org has no seats, so these tests run on Org Growth.
+    await givePlan(prisma, "ORG", res.body.id, "org_growth");
     return { owner, org: res.body as { id: string; slug: string } };
   }
 

@@ -13,6 +13,7 @@ import { REDIS } from "../../common/redis/redis.constants";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
+import { EntitlementsService } from "../billing";
 import { PermissionService } from "../rbac";
 import { ProfilesService } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
@@ -56,6 +57,7 @@ export class MediaService {
     private readonly profiles: ProfilesService,
     private readonly permissions: PermissionService,
     private readonly settings: SettingsService,
+    private readonly entitlements: EntitlementsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
     @InjectQueue(QueueNames.mediaTranscode) private readonly transcodeQueue: Queue,
@@ -71,6 +73,8 @@ export class MediaService {
     const maxBytes = await effectiveMaxBytes(this.settings, purpose);
     const rule = validateUpload(purpose, input.mime, input.size, { maxBytes });
     await this.enforceCaps(userId);
+    // Plan storage quota: everything the user has stored or is uploading (PENDING included, FAILED excluded) plus this file.
+    await this.entitlements.check({ ownerType: "USER", ownerId: userId }, "storage_gb", (await this.storageUsedBytes(userId)) + input.size);
     const id = uuidv7();
     const objectKey = sourceKeyOf(id);
     const mime = input.mime.toLowerCase();
@@ -98,6 +102,15 @@ export class MediaService {
       await this.prisma.mediaAsset.deleteMany({ where: { id } });
       throw err;
     }
+  }
+
+  /**
+   * Bytes counted against the owner's plan storage: declared sizes of every asset that is not FAILED. Course-lesson videos are
+   * uploaded (and owned) by the creator, so they count for the creator. Billing shows this through the UsageRegistry.
+   */
+  async storageUsedBytes(userId: string): Promise<number> {
+    const sum = await this.prisma.mediaAsset.aggregate({ where: { ownerId: userId, status: { in: ["PENDING", "UPLOADED", "PROCESSING", "READY"] } }, _sum: { declaredSize: true } });
+    return Number(sum._sum.declaredSize ?? 0n);
   }
 
   /**

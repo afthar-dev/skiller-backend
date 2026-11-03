@@ -100,6 +100,16 @@ export class FakeRazorpayClient implements RazorpayClient {
     return updated;
   }
 
+  async updateSubscription(subscriptionId: string, input: { planId: string; atCycleEnd: boolean }): Promise<RazorpaySubscription> {
+    this.record("updateSubscription", subscriptionId, input);
+    const sub = this.subscriptions.get(subscriptionId);
+    if (!sub) throw new Error(`fake razorpay: unknown subscription ${subscriptionId}`);
+    // At cycle end the subscription keeps its current plan until the renewal; a test then simulates that charge itself.
+    const updated = input.atCycleEnd ? sub : { ...sub, planId: input.planId };
+    this.subscriptions.set(subscriptionId, updated);
+    return updated;
+  }
+
   verifyPaymentSignature(input: { orderId: string; paymentId: string; signature: string }): boolean {
     return verifyPaymentSignature(this.secrets.keySecret, input);
   }

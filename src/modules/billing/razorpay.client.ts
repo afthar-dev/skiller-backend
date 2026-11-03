@@ -79,6 +79,8 @@ export interface RazorpayClient {
   createPlan(input: CreatePlanInput): Promise<RazorpayPlan>;
   createSubscription(input: CreateSubscriptionInput): Promise<RazorpaySubscription>;
   cancelSubscription(subscriptionId: string, atCycleEnd: boolean): Promise<RazorpaySubscription>;
+  /** Moves an existing subscription to another Razorpay plan; with `atCycleEnd` the switch happens at the next renewal (scheduled downgrade). */
+  updateSubscription(subscriptionId: string, input: { planId: string; atCycleEnd: boolean }): Promise<RazorpaySubscription>;
   /** HMAC-SHA256 hex of `orderId|paymentId` with the key secret, compared in constant time. */
   verifyPaymentSignature(input: { orderId: string; paymentId: string; signature: string }): boolean;
 }
@@ -139,7 +141,7 @@ export class HttpRazorpayClient implements RazorpayClient {
     this.authorization = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
   }
 
-  private async call(method: "GET" | "POST", path: string, body?: unknown): Promise<RawAmounts> {
+  private async call(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<RawAmounts> {
     const res = await this.fetchFn(`${this.baseUrl}${path}`, {
       method,
       headers: { Authorization: this.authorization, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
@@ -209,6 +211,11 @@ export class HttpRazorpayClient implements RazorpayClient {
 
   async cancelSubscription(subscriptionId: string, atCycleEnd: boolean): Promise<RazorpaySubscription> {
     const s = await this.call("POST", `/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { cancel_at_cycle_end: atCycleEnd ? 1 : 0 });
+    return { id: String(s.id), planId: String(s.plan_id), status: String(s.status), shortUrl: (s.short_url as string | null) ?? null };
+  }
+
+  async updateSubscription(subscriptionId: string, input: { planId: string; atCycleEnd: boolean }): Promise<RazorpaySubscription> {
+    const s = await this.call("PATCH", `/subscriptions/${encodeURIComponent(subscriptionId)}`, { plan_id: input.planId, schedule_change_at: input.atCycleEnd ? "cycle_end" : "now" });
     return { id: String(s.id), planId: String(s.plan_id), status: String(s.status), shortUrl: (s.short_url as string | null) ?? null };
   }
 

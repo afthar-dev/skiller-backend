@@ -2,3 +2,4 @@
 export { NotificationsService } from "./notifications.service";
 export type { NotificationView, NotifyInput } from "./notifications.service";
 export { NotificationsModule } from "./notifications.module";
+export { NotificationsWorkerModule } from "./notifications-worker.module";

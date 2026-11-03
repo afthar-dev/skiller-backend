@@ -37,12 +37,12 @@ model OutboxEvent {
   attempts    Int       @default(0)
 
   /// Set when delivery to the handlers was given up (all job attempts failed); lastError is the final error message.
-  deadAt      DateTime?
-  lastError   String?
+  deadAt    DateTime?
+  lastError String?
 
   /// Relay claim: set (with a per-cycle token) when a relay picks the row up; reclaimable if publishedAt stays null for 60 s.
-  claimedAt   DateTime?
-  claimToken  String?
+  claimedAt  DateTime?
+  claimToken String?
 
   @@index([publishedAt])
   @@index([deadAt])
@@ -537,4 +537,90 @@ model WebhookEvent {
   @@unique([provider, bodySha256])
   @@index([processedAt])
   @@map("webhook_events")
+}
+
+// Plans, versions and subscriptions. `subscriptions` is the only source of an owner's plan, trial and expiry (spec 11.2).
+// A price/limit/commission change is a NEW plan_versions row; existing subscribers stay on theirs. ownerId has no FK (users and
+// organizations are owned by other modules).
+
+enum PlanAudience {
+  CREATOR
+  ORG
+}
+
+enum PlanInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionOwnerType {
+  USER
+  ORG
+}
+
+/// INCOMPLETE: checkout started, first payment not yet confirmed (no entitlement).
+enum SubscriptionStatus {
+  INCOMPLETE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Plan {
+  id        String       @id @default(uuid(7))
+  key       String       @unique
+  name      String
+  audience  PlanAudience
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+
+  versions PlanVersion[]
+
+  @@map("plans")
+}
+
+model PlanVersion {
+  id             String       @id @default(uuid(7))
+  planId         String
+  pricePaise     BigInt
+  interval       PlanInterval
+  commissionBps  Int
+  /// Keys: max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats (null = unlimited).
+  limits         Json
+  /// Created lazily on the first checkout of a paid version.
+  razorpayPlanId String?      @unique
+  createdAt      DateTime     @default(now())
+
+  plan          Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions Subscription[]
+
+  @@index([planId, interval, createdAt])
+  @@map("plan_versions")
+}
+
+model Subscription {
+  id                     String                @id @default(uuid(7))
+  ownerType              SubscriptionOwnerType
+  ownerId                String
+  planVersionId          String
+  status                 SubscriptionStatus
+  trialEndsAt            DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean               @default(false)
+  razorpaySubscriptionId String?               @unique
+  /// PAST_DUE keeps access until this instant, then the maintenance job expires the row.
+  graceEndsAt            DateTime?
+  /// Downgrade booked for the end of the current period.
+  scheduledPlanVersionId String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  planVersion PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+
+  @@index([ownerType, ownerId, status])
+  @@index([status, graceEndsAt])
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
 }

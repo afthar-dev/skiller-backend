@@ -1,4 +1,5 @@
 import { Module, OnModuleInit, forwardRef } from "@nestjs/common";
+import { EntitlementsModule, UsageRegistry } from "../billing";
 import { UsersModule } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
 import { MediaController } from "./media.controller";
@@ -10,7 +11,7 @@ import { R2Client } from "./r2.client";
 /** API side of media: upload sessions and `attach`. The processors live in MediaWorkerModule (worker process only). */
 @Module({
   // users -> media (profile avatar/banner attach) and media -> users (isCreator): a module-level cycle only, no provider cycle.
-  imports: [forwardRef(() => UsersModule)],
+  imports: [forwardRef(() => UsersModule), EntitlementsModule],
   controllers: [MediaController],
   providers: [
     R2Client,
@@ -28,9 +29,12 @@ export class MediaModule implements OnModuleInit {
   constructor(
     private readonly policies: PlaybackPolicies,
     private readonly ownerOrAdmin: OwnerOrAdminPlaybackPolicy,
+    private readonly usage: UsageRegistry,
+    private readonly media: MediaService,
   ) {}
 
   onModuleInit() {
     this.policies.register(this.ownerOrAdmin);
+    this.usage.register("storage_gb", async (owner) => (owner.ownerType === "USER" ? this.media.storageUsedBytes(owner.ownerId) : null));
   }
 }
