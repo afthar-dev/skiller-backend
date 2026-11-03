@@ -25,7 +25,7 @@ export class SubscriptionHandlers implements OnModuleInit {
 
     // Every creator and organization starts on a Free subscription row.
     this.bus.on("user.became_creator", (e) => this.subscriptions.ensureFreeFor({ ownerType: "USER", ownerId: e.userId }));
-    this.bus.on("org.created", (e) => this.subscriptions.ensureFreeFor({ ownerType: "ORG", ownerId: e.orgId }));
+    this.bus.on("org.created", (e) => this.subscriptions.ensureFreeFor({ ownerType: "ORG", ownerId: e.orgId }, e.ownerId));
     this.bus.on("subscription.changed", (e, meta) => this.subscriptions.onChanged(e, meta.eventId));
   }
 }

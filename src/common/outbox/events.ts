@@ -19,6 +19,8 @@ export type DomainEvent =
       change: "activated" | "renewed" | "payment_failed" | "cancel_requested" | "cancelled" | "expired" | "plan_changed" | "downgrade_scheduled";
       /** Razorpay payment id when the change is a successful charge (the invoice job keys on it). */
       paymentId?: string;
+      /** Who to notify: the owner for USER subscriptions, the org owner/manager for ORG ones. */
+      notifyUserId?: string;
     };
 
 export type DomainEventType = DomainEvent["type"];

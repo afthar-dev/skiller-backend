@@ -130,7 +130,7 @@ describe("plans and entitlements", () => {
     const same = `same-${uid()}@example.com`;
     expect((await invite(same)).status).toBe(201);
     expect((await invite(same)).status).toBe(201); // re-inviting an address replaces its invite: still one seat
-    for (let i = 0; i < 8; i++) expect((await invite(`m${i}-${uid()}@example.com`)).status).toBe(201); // owner + 9 = 10 seats
+    for (let i = 0; i < 9; i++) expect((await invite(`m${i}-${uid()}@example.com`)).status).toBe(201); // 10 invitable seats; the owner is not one
     const over = await invite(`over-${uid()}@example.com`);
     expect(over.status).toBe(403);
     expect(over.body.error).toMatchObject({ code: "ENTITLEMENT_LIMIT_REACHED", details: { key: "org_seats", limit: 10 } });

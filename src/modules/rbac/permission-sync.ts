@@ -43,24 +43,38 @@ export async function syncPermissions(prisma: PrismaClient, registry: Permission
 }
 
 /**
- * Creates the default system roles that do not exist yet, with their default permissions. Existing roles are left alone so an
- * operator's edits to a system role survive a re-seed.
+ * Creates the default system roles that do not exist yet, with their default permissions. For roles that already exist it only
+ * ADDS default permissions they are missing (a release that adds keys reaches existing databases) and never revokes or edits
+ * anything an operator did. Holders of a changed role are passed to `invalidateUsers` so their cached permissions refresh.
  */
-export async function seedSystemRoles(prisma: PrismaClient): Promise<string[]> {
+export async function seedSystemRoles(prisma: PrismaClient, opts: { invalidateUsers?: (userIds: string[]) => Promise<void> } = {}): Promise<string[]> {
   const created: string[] = [];
+  const changedRoleIds: string[] = [];
   for (const def of SYSTEM_ROLES) {
     if (def.key === SUPER_ADMIN_ROLE_KEY) continue; // owned by syncPermissions
     const exists = await prisma.role.findUnique({ where: { key: def.key }, select: { id: true } });
-    if (exists) continue;
     const perms = await prisma.permission.findMany({ where: { key: { in: [...def.permissions] } }, select: { id: true, key: true } });
     if (perms.length !== def.permissions.length) {
       const have = new Set(perms.map((p) => p.key));
       throw new Error(`System role "${def.key}" references unknown permissions: ${def.permissions.filter((k) => !have.has(k)).join(", ")}`);
     }
+    if (exists) {
+      const held = new Set((await prisma.rolePermission.findMany({ where: { roleId: exists.id }, select: { permissionId: true } })).map((r) => r.permissionId));
+      const missing = perms.filter((p) => !held.has(p.id));
+      if (missing.length > 0) {
+        await prisma.rolePermission.createMany({ data: missing.map((p) => ({ roleId: exists.id, permissionId: p.id })), skipDuplicates: true });
+        changedRoleIds.push(exists.id);
+      }
+      continue;
+    }
     await prisma.role.create({
       data: { key: def.key, name: def.name, scope: def.scope, isSystem: true, rolePermissions: { create: perms.map((p) => ({ permissionId: p.id })) } },
     });
     created.push(def.key);
+  }
+  if (changedRoleIds.length > 0 && opts.invalidateUsers) {
+    const holders = await prisma.userRole.findMany({ where: { roleId: { in: changedRoleIds } }, select: { userId: true }, distinct: ["userId"] });
+    if (holders.length > 0) await opts.invalidateUsers(holders.map((h) => h.userId));
   }
   return created;
 }

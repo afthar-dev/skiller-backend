@@ -121,10 +121,13 @@ export class RolesService {
     return count > 0;
   }
 
-  /** People holding at least one active role in the org (the owner included). */
-  async countOrgMembers(orgId: string): Promise<number> {
+  /** People holding at least one active role in the org, optionally not counting one user (the owner). */
+  async countOrgMembers(orgId: string, exceptUserId?: string): Promise<number> {
     const now = this.clock.now();
-    const people = await this.prisma.userRole.findMany({ where: { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] }, distinct: ["userId"], select: { userId: true } });
+    const people = await this.prisma.userRole.groupBy({
+      by: ["userId"],
+      where: { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], ...(exceptUserId ? { userId: { not: exceptUserId } } : {}) },
+    });
     return people.length;
   }
 

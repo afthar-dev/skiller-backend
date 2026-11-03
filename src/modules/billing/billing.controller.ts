@@ -56,7 +56,7 @@ export class SubscriptionsController {
   @ApiOperation({ summary: "Start paying for a plan: creates the Razorpay subscription" })
   @ApiZodBody(planBody)
   async checkout(@CurrentUser() user: AuthUser, @Body() body: unknown) {
-    return this.subscriptions.checkout(await this.owner(user), planBody.parse(body).planVersionId);
+    return this.subscriptions.checkout(await this.owner(user), planBody.parse(body).planVersionId, user.id);
   }
 
   @AuthenticatedOnly()
@@ -73,7 +73,7 @@ export class SubscriptionsController {
   @ApiOperation({ summary: "Upgrade now (pay for the new plan) or schedule a downgrade for the period end" })
   @ApiZodBody(planBody)
   async change(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
-    return this.subscriptions.change(await this.owner(user), id, planBody.parse(body).planVersionId);
+    return this.subscriptions.change(await this.owner(user), id, planBody.parse(body).planVersionId, user.id);
   }
 }
 
@@ -104,8 +104,8 @@ export class OrgSubscriptionsController {
   @RequirePermission("org.manage", { orgParam: "slug" })
   @ApiOperation({ summary: "Start paying for an organization plan" })
   @ApiZodBody(planBody)
-  async checkout(@Param("slug") slug: string, @Body() body: unknown) {
-    return this.subscriptions.checkout(await this.owner(slug), planBody.parse(body).planVersionId);
+  async checkout(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {
+    return this.subscriptions.checkout(await this.owner(slug), planBody.parse(body).planVersionId, user.id);
   }
 
   @Post(":id/cancel")
@@ -121,7 +121,7 @@ export class OrgSubscriptionsController {
   @RequirePermission("org.manage", { orgParam: "slug" })
   @ApiOperation({ summary: "Upgrade now or schedule a downgrade for the period end" })
   @ApiZodBody(planBody)
-  async change(@Param("slug") slug: string, @Param("id") id: string, @Body() body: unknown) {
-    return this.subscriptions.change(await this.owner(slug), id, planBody.parse(body).planVersionId);
+  async change(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Param("id") id: string, @Body() body: unknown) {
+    return this.subscriptions.change(await this.owner(slug), id, planBody.parse(body).planVersionId, user.id);
   }
 }

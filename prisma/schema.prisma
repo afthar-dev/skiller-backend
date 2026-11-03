@@ -614,6 +614,8 @@ model Subscription {
   graceEndsAt            DateTime?
   /// Downgrade booked for the end of the current period.
   scheduledPlanVersionId String?
+  /// User who receives this subscription's notifications: the owner for USER subscriptions, the org owner/manager for ORG ones.
+  notifyUserId           String?
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 

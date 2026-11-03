@@ -22,7 +22,7 @@ export const SUBSCRIPTION_CHARGE_REF = "SUBSCRIPTION_CHARGE";
 /** PAST_DUE keeps the plan's access for this long (Review Focus 4). */
 export const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
 const ABANDONED_CHECKOUT_MS = 7 * 24 * 60 * 60 * 1000;
-const REUSE_CHECKOUT_MS = 24 * 60 * 60 * 1000;
+const REUSE_CHECKOUT_MS = 30 * 60 * 1000;
 const BATCH = 200;
 
 type VersionWithPlan = PlanVersion & { plan: Plan };
@@ -85,23 +85,23 @@ export class SubscriptionsService {
   // ── Free rows ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
   /** Idempotent (a partial unique index allows one gateway-less ACTIVE row per owner and the insert skips duplicates). */
-  async ensureFree(tx: Prisma.TransactionClient, owner: Owner): Promise<void> {
+  async ensureFree(tx: Prisma.TransactionClient, owner: Owner, notifyUserId?: string | null): Promise<void> {
     const version = await tx.planVersion.findFirst({ where: { plan: { key: FREE_PLAN_KEY } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { id: true } });
     if (!version) {
       this.logger.warn("no Free plan version in the catalog; run the seed");
       return;
     }
-    await tx.subscription.createMany({ data: [{ ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: version.id, status: "ACTIVE" }], skipDuplicates: true });
+    await tx.subscription.createMany({ data: [{ ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: version.id, status: "ACTIVE", notifyUserId: notifyUserId ?? (owner.ownerType === "USER" ? owner.ownerId : null) }], skipDuplicates: true });
   }
 
-  async ensureFreeFor(owner: Owner): Promise<void> {
-    await this.prisma.$transaction((tx) => this.ensureFree(tx, owner));
+  async ensureFreeFor(owner: Owner, notifyUserId?: string): Promise<void> {
+    await this.prisma.$transaction((tx) => this.ensureFree(tx, owner, notifyUserId));
     await this.entitlements.invalidate(owner);
   }
 
   // ── Customer actions ───────────────────────────────────────────────────────────────────────────────────────────────
 
-  async checkout(owner: Owner, planVersionId: string): Promise<CheckoutResult> {
+  async checkout(owner: Owner, planVersionId: string, actorId: string): Promise<CheckoutResult> {
     const target = await this.purchasable(owner, planVersionId);
     const current = await this.currentPaid(owner);
     if (current) {
@@ -110,7 +110,7 @@ export class SubscriptionsService {
         throw new AppError("SUBSCRIPTION_EXISTS", 409, "You already have a paid subscription; change it instead of starting a new one");
       }
     }
-    return this.startCheckout(owner, target);
+    return this.startCheckout(owner, target, actorId);
   }
 
   async cancel(owner: Owner, subscriptionId: string): Promise<MySubscriptionView> {
@@ -133,7 +133,7 @@ export class SubscriptionsService {
   }
 
   /** Upgrade: a new Razorpay subscription that takes over on its first charge. Downgrade: booked for the period end. */
-  async change(owner: Owner, subscriptionId: string, planVersionId: string): Promise<ChangeResult> {
+  async change(owner: Owner, subscriptionId: string, planVersionId: string, actorId: string): Promise<ChangeResult> {
     const row = await this.owned(owner, subscriptionId);
     const target = await this.purchasable(owner, planVersionId);
     const currentVersion = await this.prisma.planVersion.findUniqueOrThrow({ where: { id: row.planVersionId } });
@@ -145,7 +145,7 @@ export class SubscriptionsService {
     const upgrade = yearlyValue(target) > yearlyValue(currentVersion);
     if (upgrade || !row.razorpaySubscriptionId) {
       if (!upgrade) throw new AppError("SAME_PLAN", 409, "You are already on the Free plan");
-      return { effective: "ON_PAYMENT", ...(await this.startCheckout(owner, target)) };
+      return { effective: "ON_PAYMENT", ...(await this.startCheckout(owner, target, actorId)) };
     }
 
     // Downgrade: stays on the current plan (and its price) until the period ends.
@@ -227,22 +227,29 @@ export class SubscriptionsService {
       }
 
       let change: SubChange | null = null;
-      if (["INCOMPLETE", "ACTIVE", "PAST_DUE", "TRIALING"].includes(row.status)) {
-        const newEnd = periodEnd && (!row.currentPeriodEnd || periodEnd > row.currentPeriodEnd) ? periodEnd : row.currentPeriodEnd;
-        const newCycle = !!periodEnd && !!row.currentPeriodEnd && periodEnd > row.currentPeriodEnd;
+      const advances = !!periodEnd && (!row.currentPeriodEnd || periodEnd > row.currentPeriodEnd);
+      // Fresh = this event carries news (a payment we have not booked, or a later period). A replay or reordered event after a
+      // failure must not bring a PAST_DUE/CANCELLED/EXPIRED subscription back; only INCOMPLETE and already-live rows move on any event.
+      const fresh = postedNew || advances;
+      const live = row.status === "ACTIVE" || row.status === "TRIALING";
+      if (row.status === "INCOMPLETE" || live || fresh) {
+        const newEnd = advances ? periodEnd : row.currentPeriodEnd;
+        const newCycle = advances && !!row.currentPeriodEnd;
         const applyScheduled = newCycle && !!row.scheduledPlanVersionId && !row.cancelAtPeriodEnd;
+        const reviving = row.status === "CANCELLED" || row.status === "EXPIRED";
         const moved = await tx.subscription.updateMany({
           where: { id: row.id, status: row.status },
           data: {
             status: "ACTIVE",
             graceEndsAt: null,
             currentPeriodEnd: newEnd,
+            ...(reviving ? { cancelAtPeriodEnd: false } : {}),
             ...(applyScheduled ? { planVersionId: row.scheduledPlanVersionId!, scheduledPlanVersionId: null } : {}),
           },
         });
         if (moved.count === 1) {
-          if (row.status === "INCOMPLETE") {
-            // The new plan takes over: whatever the owner was on (Free, or a paid plan being upgraded from) ends now.
+          if (row.status === "INCOMPLETE" || reviving) {
+            // This plan takes over: whatever the owner was on (Free, or a paid plan being upgraded from) ends now.
             await tx.subscription.updateMany({
               where: { ownerType: row.ownerType, ownerId: row.ownerId, id: { not: row.id }, status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] } },
               data: { status: "EXPIRED", graceEndsAt: null },
@@ -252,8 +259,6 @@ export class SubscriptionsService {
             change = applyScheduled ? "plan_changed" : "renewed";
           }
         }
-      } else {
-        this.logger.warn(`charge ${paymentId ?? "(no payment)"} arrived for subscription ${row.id} in status ${row.status}; the money is booked, the status is unchanged`);
       }
       if (change) {
         const after = await tx.subscription.findUniqueOrThrow({ where: { id: row.id } });
@@ -396,30 +401,25 @@ export class SubscriptionsService {
     } as const;
     const note = (text as Record<string, { type: "subscription.activated" | "subscription.payment_failed" | "subscription.expired"; title: string; body: string }>)[e.change];
     if (!note) return;
-    const userId = e.ownerType === "USER" ? e.ownerId : await this.orgOwner(e.ownerId);
+    const userId = e.notifyUserId ?? (e.ownerType === "USER" ? e.ownerId : null);
     if (!userId) return;
     await this.notifications.notify(userId, { type: note.type, title: note.title, body: note.body, data: { subscriptionId: e.subscriptionId, planKey: e.planKey, ownerType: e.ownerType, ownerId: e.ownerId }, sourceEventId: eventId });
   }
 
   // ── internals ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  private async orgOwner(orgId: string): Promise<string | null> {
-    // The one place billing reads another module's table: it only needs the owner's id to address a notification.
-    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { ownerId: true } });
-    return org?.ownerId ?? null;
-  }
-
   /** Conditional EXPIRED transition; the owner falls back to Free (a Free row is ensured). Returns whether this call moved the row. */
   private async expireInTx(tx: Prisma.TransactionClient, row: Subscription, from: SubscriptionStatus, extra: Prisma.SubscriptionWhereInput): Promise<boolean> {
     const moved = await tx.subscription.updateMany({ where: { id: row.id, status: from, ...extra }, data: { status: "EXPIRED", graceEndsAt: null, scheduledPlanVersionId: null } });
     if (moved.count !== 1) return false;
-    await this.ensureFree(tx, { ownerType: row.ownerType, ownerId: row.ownerId });
+    await this.ensureFree(tx, { ownerType: row.ownerType, ownerId: row.ownerId }, row.notifyUserId);
     await this.emit(tx, await tx.subscription.findUniqueOrThrow({ where: { id: row.id } }), "expired", "EXPIRED");
     return true;
   }
 
   private async emit(tx: Prisma.TransactionClient, row: Subscription, change: SubChange, status: string, paymentId?: string): Promise<void> {
     const version = await tx.planVersion.findUniqueOrThrow({ where: { id: row.planVersionId }, include: { plan: { select: { key: true } } } });
+    const notifyUserId = row.notifyUserId ?? (row.ownerType === "USER" ? row.ownerId : null);
     await this.outbox.enqueue(tx, {
       type: "subscription.changed",
       subscriptionId: row.id,
@@ -430,6 +430,7 @@ export class SubscriptionsService {
       status,
       change,
       ...(paymentId ? { paymentId } : {}),
+      ...(notifyUserId ? { notifyUserId } : {}),
     });
   }
 
@@ -505,43 +506,64 @@ export class SubscriptionsService {
     return version;
   }
 
-  private async startCheckout(owner: Owner, target: VersionWithPlan): Promise<CheckoutResult> {
+  /**
+   * Serialised per owner (advisory lock held for the Razorpay call, a few hundred ms): a double click, or two tabs, get the same
+   * INCOMPLETE subscription back instead of two payable Razorpay subscriptions.
+   */
+  private async startCheckout(owner: Owner, target: VersionWithPlan, actorId: string): Promise<CheckoutResult> {
     if (target.pricePaise <= 0n) throw new AppError("PLAN_NOT_PURCHASABLE", 422, "This plan is free; there is nothing to pay for");
     const keyId = this.config.razorpay.keyId;
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sub-checkout:${owner.ownerType}:${owner.ownerId}`}))`;
+        const reusable = await tx.subscription.findFirst({
+          where: { ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id, status: "INCOMPLETE", razorpaySubscriptionId: { not: null }, createdAt: { gt: new Date(this.clock.now().getTime() - REUSE_CHECKOUT_MS) } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (reusable) return { subscriptionId: reusable.id, razorpaySubscriptionId: reusable.razorpaySubscriptionId!, keyId };
 
-    // A second click on the same checkout within a day gets the same Razorpay subscription back instead of opening another one.
-    const reusable = await this.prisma.subscription.findFirst({
-      where: { ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id, status: "INCOMPLETE", razorpaySubscriptionId: { not: null }, createdAt: { gt: new Date(this.clock.now().getTime() - REUSE_CHECKOUT_MS) } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (reusable) return { subscriptionId: reusable.id, razorpaySubscriptionId: reusable.razorpaySubscriptionId!, keyId };
-
-    const razorpayPlanId = await this.ensureRazorpayPlan(target);
-    const id = uuidv7();
-    const created = await this.razorpay.createSubscription({
-      planId: razorpayPlanId,
-      totalCount: target.interval === "YEAR" ? 10 : 120,
-      notes: { subscriptionId: id, ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id },
-    });
-    await this.prisma.subscription.create({
-      data: { id, ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id, status: "INCOMPLETE", razorpaySubscriptionId: created.id },
-    });
-    return { subscriptionId: id, razorpaySubscriptionId: created.id, keyId };
+        const razorpayPlanId = await this.ensureRazorpayPlan(target);
+        const id = uuidv7();
+        const created = await this.razorpay.createSubscription({
+          planId: razorpayPlanId,
+          totalCount: target.interval === "YEAR" ? 10 : 120,
+          notes: { subscriptionId: id, ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id },
+        });
+        await tx.subscription.create({
+          data: { id, ownerType: owner.ownerType, ownerId: owner.ownerId, planVersionId: target.id, status: "INCOMPLETE", razorpaySubscriptionId: created.id, notifyUserId: actorId },
+        });
+        return { subscriptionId: id, razorpaySubscriptionId: created.id, keyId };
+      },
+      { timeout: 30_000, maxWait: 15_000 },
+    );
   }
 
-  /** Created on the first checkout of a paid version and cached on the row. Losing a creation race leaves one unused Razorpay plan. */
+  /**
+   * Created on the first checkout of a paid version and cached on the row. Razorpay has no idempotency key for plans, so the
+   * read-create-store runs under a per-version advisory lock (held for one HTTP call): concurrent first checkouts create one plan.
+   * The conditional store is a backstop; if it ever loses, the stored plan wins and the orphan is logged.
+   */
   private async ensureRazorpayPlan(version: VersionWithPlan): Promise<string> {
     if (version.razorpayPlanId) return version.razorpayPlanId;
-    const created = await this.razorpay.createPlan({
-      period: version.interval === "YEAR" ? "yearly" : "monthly",
-      interval: 1,
-      name: `${version.plan.name} (${version.interval === "YEAR" ? "yearly" : "monthly"})`,
-      amountPaise: version.pricePaise,
-      notes: { planVersionId: version.id, planKey: version.plan.key },
-    });
-    const claimed = await this.prisma.planVersion.updateMany({ where: { id: version.id, razorpayPlanId: null }, data: { razorpayPlanId: created.id } });
-    if (claimed.count === 1) return created.id;
-    const stored = await this.prisma.planVersion.findUniqueOrThrow({ where: { id: version.id }, select: { razorpayPlanId: true } });
-    return stored.razorpayPlanId ?? created.id;
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rzp-plan:${version.id}`}))`;
+        const stored = await tx.planVersion.findUniqueOrThrow({ where: { id: version.id }, select: { razorpayPlanId: true } });
+        if (stored.razorpayPlanId) return stored.razorpayPlanId;
+        const created = await this.razorpay.createPlan({
+          period: version.interval === "YEAR" ? "yearly" : "monthly",
+          interval: 1,
+          name: `${version.plan.name} (${version.interval === "YEAR" ? "yearly" : "monthly"})`,
+          amountPaise: version.pricePaise,
+          notes: { planVersionId: version.id, planKey: version.plan.key },
+        });
+        const claimed = await tx.planVersion.updateMany({ where: { id: version.id, razorpayPlanId: null }, data: { razorpayPlanId: created.id } });
+        if (claimed.count === 1) return created.id;
+        const winner = await tx.planVersion.findUniqueOrThrow({ where: { id: version.id }, select: { razorpayPlanId: true } });
+        this.logger.warn(`razorpay plan ${created.id} for version ${version.id} is an orphan; ${winner.razorpayPlanId} was stored first`);
+        return winner.razorpayPlanId ?? created.id;
+      },
+      { timeout: 30_000, maxWait: 15_000 },
+    );
   }
 }

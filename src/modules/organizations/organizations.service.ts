@@ -149,8 +149,8 @@ export class OrganizationsService {
     const email = input.email.trim().toLowerCase();
     const existingUserId = await this.accounts.findIdByEmail(email);
     if (existingUserId && (await this.roles.isOrgMember(org.id, existingUserId))) throw this.alreadyMember();
-    // Plan seat limit: people with an org role (owner included) plus pending invites, counting this one (a re-invite of the same address replaces its old invite).
-    const seats = await this.seatsUsed(org.id, email);
+    // Plan seat limit: invited members (people with an org role, not counting the owner) plus pending invites, counting this one (a re-invite of the same address replaces its old invite).
+    const seats = await this.seatsUsed(org.id, email, org.ownerId);
     await this.entitlements.check({ ownerType: "ORG", ownerId: org.id }, "org_seats", seats + 1);
     const raw = randomBytes(32).toString("base64url");
     const expiresAt = new Date(this.clock.now().getTime() + INVITE_TTL_MS);
@@ -169,9 +169,10 @@ export class OrganizationsService {
     return { id: invite.id, email, roleKey: invite.roleKey, expiresAt: expiresAt.toISOString() };
   }
 
-  /** Seats in use: members holding any org role (owner included) plus pending, unexpired invites, optionally ignoring the invite to `exceptEmail`. */
-  async seatsUsed(orgId: string, exceptEmail?: string): Promise<number> {
-    const members = await this.roles.countOrgMembers(orgId);
+  /** Seats in use: members holding any org role except the owner (who is not a seat) plus pending, unexpired invites, optionally ignoring the invite to `exceptEmail`. */
+  async seatsUsed(orgId: string, exceptEmail?: string, ownerId?: string): Promise<number> {
+    const owner = ownerId ?? (await this.prisma.organization.findUnique({ where: { id: orgId }, select: { ownerId: true } }))?.ownerId;
+    const members = await this.roles.countOrgMembers(orgId, owner);
     const pending = await this.prisma.orgInvite.count({ where: { orgId, acceptedAt: null, expiresAt: { gt: this.clock.now() }, ...(exceptEmail ? { email: { not: exceptEmail } } : {}) } });
     return members + pending;
   }

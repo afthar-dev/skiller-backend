@@ -58,7 +58,7 @@ export class EntitlementsService {
   /** Same as planFor plus the subscription the plan comes from (for "my subscription" views). */
   async resolve(owner: Owner): Promise<ResolvedPlan> {
     // Epoch first, then the DB: a change committed after this read bumps the epoch past it.
-    const epoch = Number(await this.redis.get(epochKey(owner))) || 0;
+    const epoch = Number(await this.redis.get(epochKey(owner)).catch(() => 0)) || 0;
     const key = cacheKey(owner, epoch);
     const cached = await this.redis.get(key).catch(() => null);
     if (cached) {

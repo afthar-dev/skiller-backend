@@ -11,6 +11,11 @@ export const PERMISSION_CACHE_TTL_SEC = 10 * 60;
 const epochKey = (userId: string) => `perm:epoch:${userId}`;
 const cacheKey = (userId: string, epoch: number) => `perm:${userId}:${epoch}`;
 
+/** Bumps each user's permission-cache epoch (also used by the seed script, which has a Redis client but no Nest container). */
+export async function bumpPermissionEpochs(redis: Pick<Redis, "incr">, userIds: string[]): Promise<void> {
+  for (const userId of new Set(userIds)) await redis.incr(epochKey(userId));
+}
+
 export interface EffectivePermissions {
   /** Keys from grants with no org (apply everywhere). */
   platform: Set<string>;
@@ -92,9 +97,7 @@ export class PermissionService {
 
   /** Bumps each user epoch. Extra bumps are harmless (one cache miss), so this is safe to repeat or run from an outbox handler. */
   async invalidateUsers(userIds: string[]): Promise<void> {
-    for (const userId of new Set(userIds)) {
-      await this.redis.incr(epochKey(userId));
-    }
+    await bumpPermissionEpochs(this.redis, userIds);
   }
 
   /** Drops the cached permissions of everyone currently holding the role. */
