@@ -106,6 +106,7 @@ export class OrganizationsService {
           if (input.logoAssetId) await this.media.attach(tx, input.logoAssetId, userId, "AVATAR");
           const created = await tx.organization.create({ data: { slug, name: input.name, about: input.about ?? null, logoAssetId: input.logoAssetId ?? null, ownerId: userId } });
           await this.roles.grantSystem(userId, "org_owner", tx, created.id);
+          await this.outbox.enqueue(tx, { type: "org.created", orgId: created.id, ownerId: userId });
           await this.outbox.enqueue(tx, { type: "rbac.permissions_changed", userIds: [userId] });
           await this.audit.record(tx, { actorId: userId, action: "org.create", targetType: "organization", targetId: created.id, before: null, after: toView(created), ...meta });
           return created;

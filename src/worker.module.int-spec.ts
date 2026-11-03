@@ -10,8 +10,9 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "media.failed": true,
   "role.granted": true,
   "rbac.permissions_changed": true,
-  // Reserved: delivered, no consumer yet (Phase 2 subscribes to create the wallet + Free plan / invite mail is sent directly).
-  "user.became_creator": false,
+  "user.became_creator": true,
+  "org.created": true,
+  // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
 };
 

@@ -434,3 +434,76 @@ model NotificationPreference {
   @@id([userId, type])
   @@map("notification_preferences")
 }
+
+// ─── wallet ──────────────────────────────────────────────────────────────
+
+enum LedgerOwnerType {
+  USER
+  ORG
+  PLATFORM
+}
+
+enum LedgerAccountKind {
+  AVAILABLE
+  PENDING
+  PAYOUT_LOCKED
+  GATEWAY_CLEARING
+  PLATFORM_REVENUE
+  TAX_PAYABLE
+  REFUNDS
+}
+
+model LedgerAccount {
+  id        String            @id @default(uuid(7))
+  ownerType LedgerOwnerType
+  /// Null for PLATFORM accounts. Uniqueness uses NULLS NOT DISTINCT (hand-edited in the migration), so one platform account per kind.
+  ownerId   String?
+  kind      LedgerAccountKind
+  currency  String            @default("INR")
+  closedAt  DateTime?
+  createdAt DateTime          @default(now())
+
+  lines   LedgerLine[]
+  balance AccountBalance?
+
+  @@unique([ownerType, ownerId, kind], map: "ledger_accounts_owner_kind_key")
+  @@map("ledger_accounts")
+}
+
+model JournalEntry {
+  id          String   @id @default(uuid(7))
+  refType     String
+  refId       String
+  description String
+  createdAt   DateTime @default(now())
+
+  lines LedgerLine[]
+
+  @@unique([refType, refId, description])
+  @@map("journal_entries")
+}
+
+model LedgerLine {
+  id          String @id @default(uuid(7))
+  entryId     String
+  accountId   String
+  /// Signed paise: positive credits the account, negative debits it. Every entry's lines sum to zero.
+  amountPaise BigInt
+
+  entry   JournalEntry  @relation(fields: [entryId], references: [id])
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@index([entryId])
+  @@index([accountId])
+  @@map("ledger_lines")
+}
+
+model AccountBalance {
+  accountId    String   @id
+  balancePaise BigInt   @default(0)
+  updatedAt    DateTime @updatedAt
+
+  account LedgerAccount @relation(fields: [accountId], references: [id])
+
+  @@map("account_balances")
+}

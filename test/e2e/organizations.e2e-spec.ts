@@ -57,6 +57,10 @@ describe("organizations and invites", () => {
       expect(await perms.has(owner.userId, "org.manage", org.id)).toBe(true);
       expect(await perms.has(owner.userId, "org.manage", "some-other-org")).toBe(false);
       expect(await perms.has(owner.userId, "org.manage")).toBe(false);
+      // The wallet module creates the org's ledger accounts from this event; it is enqueued in the creating transaction.
+      const events = await prisma.outboxEvent.findMany({ where: { type: "org.created", payload: { path: ["orgId"], equals: org.id } } });
+      expect(events).toHaveLength(1);
+      expect(events[0].payload).toEqual({ orgId: org.id, ownerId: owner.userId });
     });
 
     it("requires auth, a valid slug, and a unique slug", async () => {
