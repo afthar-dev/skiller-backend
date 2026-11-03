@@ -6,11 +6,16 @@ const base = {
   testEnvironment: "node",
 };
 
+const containers = {
+  globalSetup: "<rootDir>/test/setup/global-setup.ts",
+  globalTeardown: "<rootDir>/test/setup/global-teardown.ts",
+};
+
 module.exports = {
   testTimeout: 120000,
   projects: [
     { ...base, displayName: "unit", testMatch: ["<rootDir>/src/**/*.spec.ts", "<rootDir>/edge/**/*.spec.ts"] },
-    { ...base, displayName: "integration", testMatch: ["<rootDir>/src/**/*.int-spec.ts"] },
-    { ...base, displayName: "e2e", testMatch: ["<rootDir>/test/e2e/**/*.e2e-spec.ts"] },
+    { ...base, displayName: "integration", testMatch: ["<rootDir>/src/**/*.int-spec.ts"], ...containers },
+    { ...base, displayName: "e2e", testMatch: ["<rootDir>/test/e2e/**/*.e2e-spec.ts"], ...containers },
   ],
 };
