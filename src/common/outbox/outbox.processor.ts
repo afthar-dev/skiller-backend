@@ -30,6 +30,6 @@ export class OutboxProcessor implements JobProcessor, OnModuleInit {
 
   async process(job: Job<OutboxJobData>) {
     const { type, payload } = job.data;
-    await this.bus.dispatch({ type, ...payload } as DomainEvent);
+    await this.bus.dispatch({ type, ...payload } as DomainEvent, job.data.id);
   }
 }

@@ -394,3 +394,35 @@ model MediaAsset {
   @@index([ownerId, status])
   @@map("media_assets")
 }
+
+// ─── notifications ───────────────────────────────────────────────────────
+
+// sourceEventId = outbox event id that produced the row; (userId, sourceEventId) is unique so a redelivered event cannot notify twice
+// (NULLs are distinct in Postgres, so rows created outside a handler are unconstrained).
+model Notification {
+  id            String    @id @default(uuid(7))
+  userId        String
+  type          String
+  title         String
+  body          String
+  link          String?
+  data          Json?
+  sourceEventId String?
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, sourceEventId])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, id])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  userId String
+  type   String
+  inApp  Boolean
+  email  Boolean
+
+  @@id([userId, type])
+  @@map("notification_preferences")
+}

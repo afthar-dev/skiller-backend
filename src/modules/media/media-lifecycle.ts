@@ -57,7 +57,7 @@ export class MediaLifecycle {
       });
       if (flipped.count === 0) return false;
       const asset = await tx.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
-      await this.outbox.enqueue(tx, { type: "media.failed", assetId, ownerId: asset.ownerId, reason });
+      await this.outbox.enqueue(tx, { type: "media.failed", assetId, ownerId: asset.ownerId, reason, ...(asset.filename ? { fileName: asset.filename } : {}) });
       return true;
     });
   }

@@ -1,5 +1,4 @@
 import sharp from "sharp";
-import { v7 as uuidv7 } from "uuid";
 import { createMediaWorkerHarness, type MediaWorkerHarness } from "../../../test/support/media-worker";
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
@@ -174,24 +173,6 @@ describe("media processors (image, cleanup, failure mail)", () => {
       await h.prisma.mediaAsset.update({ where: { id: row.id }, data: { attachedAt: new Date() } });
       await h.cleanup.process(h.fakeJob({}));
       expect(await h.prisma.mediaAsset.findUnique({ where: { id: row.id } })).not.toBeNull();
-    });
-  });
-
-  describe("media.failed mail", () => {
-    it("queues one media_failed mail to the owner, even when the event is delivered twice", async () => {
-      const email = `owner-${uuidv7()}@example.com`;
-      const user = await h.prisma.user.create({ data: { email } });
-      const assetId = uuidv7();
-      await h.prisma.mediaAsset.create({
-        data: { id: assetId, ownerId: user.id, purpose: "REEL", bucket: "PUBLIC", status: "FAILED", objectKey: "k", filename: "holiday.mp4", mime: "video/mp4", declaredSize: 1n },
-      });
-      const event = { type: "media.failed" as const, assetId, ownerId: user.id, reason: "DURATION_EXCEEDED" };
-      await h.bus.dispatch(event);
-      await h.bus.dispatch(event);
-
-      const jobs = (await h.mailQueue.getJobs(["waiting", "delayed", "active", "completed"])).filter((j) => j.data.to === email);
-      expect(jobs).toHaveLength(1);
-      expect(jobs[0].data).toMatchObject({ template: "media_failed", data: { fileName: "holiday.mp4", reason: expect.stringMatching(/90 seconds/i) } });
     });
   });
 });

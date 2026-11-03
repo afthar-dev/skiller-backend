@@ -1,7 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { DomainEvent, DomainEventType, EventOf } from "./events";
 
-type Handler<T extends DomainEventType> = (e: EventOf<T>) => Promise<void>;
+/** Delivery metadata. `eventId` is the outbox event id: stable across redeliveries, so handlers derive dedupe keys from it. */
+export interface EventMeta {
+  eventId: string;
+}
+
+type Handler<T extends DomainEventType> = (e: EventOf<T>, meta: EventMeta) => Promise<void>;
 
 // Process-local registry. Any module (including worker-side ones) calls `on` in onModuleInit;
 // the outbox processor calls `dispatch` for each delivered event. Handlers must be idempotent:
@@ -16,9 +22,11 @@ export class EventBus {
     this.handlers.set(type, list);
   }
 
-  async dispatch(event: DomainEvent): Promise<void> {
+  /** Without an explicit `eventId` (direct dispatch in tests) the id is a content hash, so re-dispatching the same event is still a redelivery. */
+  async dispatch(event: DomainEvent, eventId?: string): Promise<void> {
+    const meta: EventMeta = { eventId: eventId ?? createHash("sha256").update(JSON.stringify(event)).digest("hex").slice(0, 32) };
     for (const handler of this.handlers.get(event.type) ?? []) {
-      await (handler as (e: DomainEvent) => Promise<void>)(event);
+      await (handler as (e: DomainEvent, m: EventMeta) => Promise<void>)(event, meta);
     }
   }
 }

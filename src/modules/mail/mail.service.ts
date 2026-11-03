@@ -5,20 +5,25 @@ import { QueueNames } from "../../common/queue/queue.constants";
 import type { MailJobData } from "./mail.processor";
 import type { MailCategory, MailData, MailTemplate } from "./mail.types";
 
+export interface MailSendOptions {
+  category?: MailCategory;
+  /**
+   * Stable key for one logical mail (e.g. derived from an outbox event id). It becomes the BullMQ jobId, so a duplicate add is a
+   * no-op while the job exists, and through the job id Resend's Idempotency-Key, so a later retry cannot double-send either.
+   * Must not contain ":" (BullMQ restriction).
+   */
+  idempotencyKey?: string;
+}
+
 @Injectable()
 export class MailService {
   constructor(@InjectQueue(QueueNames.mail) private readonly queue: Queue) {}
 
   /** Enqueues only; the worker renders and calls Resend. */
-  async send<T extends MailTemplate>(
-    template: T,
-    to: string,
-    data: MailData[T],
-    opts: { category: MailCategory } = { category: "transactional" },
-  ): Promise<void> {
-    const job: MailJobData = { template, to, data, category: opts.category } as MailJobData;
+  async send<T extends MailTemplate>(template: T, to: string, data: MailData[T], opts: MailSendOptions = {}): Promise<void> {
+    const job: MailJobData = { template, to, data, category: opts.category ?? "transactional" } as MailJobData;
     // The OTP code is plaintext in the job data: drop the job as soon as it is done (or shortly after failing).
     const retention = template === "otp" ? { removeOnComplete: true, removeOnFail: { age: 3600 } } : {};
-    await this.queue.add("send", job, retention);
+    await this.queue.add("send", job, { ...retention, ...(opts.idempotencyKey ? { jobId: `mail-${opts.idempotencyKey}` } : {}) });
   }
 }
