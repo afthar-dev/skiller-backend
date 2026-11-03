@@ -1,4 +1,5 @@
-import { fromApi, gstSplit, splitBps, toApi } from "./money";
+import { AppError } from "../../common/errors/app-error";
+import { commissionSplit, fromApi, fromGatewayAmount, gstSplit, splitBps, toApi } from "./money";
 
 describe("splitBps", () => {
   it("10% of 100000 paise is 10000", () => {
@@ -63,5 +64,40 @@ describe("toApi / fromApi", () => {
   it("rejects negatives unless allowed", () => {
     expect(() => fromApi("-5")).toThrow(RangeError);
     expect(fromApi("-5", { allowNegative: true })).toBe(-5n);
+  });
+});
+
+describe("commissionSplit (rounds the fee DOWN: the seller never loses a paisa to rounding)", () => {
+  it("floors the fee", () => {
+    expect(commissionSplit(1005n, 1000)).toEqual({ fee: 100n, seller: 905n }); // 100.5 -> 100
+    expect(commissionSplit(100000n, 1000)).toEqual({ fee: 10000n, seller: 90000n });
+    expect(commissionSplit(9n, 1000)).toEqual({ fee: 0n, seller: 9n });
+    expect(commissionSplit(0n, 1000)).toEqual({ fee: 0n, seller: 0n });
+  });
+  it("fee + seller equals the net and fee never exceeds the exact share", () => {
+    for (const net of [1n, 5n, 15n, 1005n, 99999n, 123456789012345678n]) {
+      for (const bps of [0, 1, 500, 700, 1000, 3333, 10000]) {
+        const { fee, seller } = commissionSplit(net, bps);
+        expect(fee + seller).toBe(net);
+        expect(fee * 10000n <= net * BigInt(bps)).toBe(true);
+      }
+    }
+  });
+  it("rejects negative nets and invalid bps", () => {
+    expect(() => commissionSplit(-1n, 1000)).toThrow(RangeError);
+    expect(() => commissionSplit(1n, 10001)).toThrow(RangeError);
+  });
+});
+
+describe("fromGatewayAmount", () => {
+  it("accepts non-negative safe integers as numbers or digit strings", () => {
+    expect(fromGatewayAmount(0)).toBe(0n);
+    expect(fromGatewayAmount(123400)).toBe(123400n);
+    expect(fromGatewayAmount("123400")).toBe(123400n);
+    expect(fromGatewayAmount(Number.MAX_SAFE_INTEGER)).toBe(BigInt(Number.MAX_SAFE_INTEGER));
+  });
+  it.each([1.5, -1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "1.5", "-1", "", "abc", "1e3", " 5", null, undefined, {}, [], true, 5n, "9007199254740992"])("rejects %p with GATEWAY_AMOUNT_INVALID", (v) => {
+    expect(() => fromGatewayAmount(v)).toThrow(AppError);
+    expect(() => fromGatewayAmount(v)).toThrow(expect.objectContaining({ code: "GATEWAY_AMOUNT_INVALID" }));
   });
 });

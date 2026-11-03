@@ -1,4 +1,4 @@
-import type { Paise } from "./money";
+import { fromGatewayAmount, type Paise } from "./money";
 import { verifyPaymentSignature } from "./signature";
 
 /** DI token. Everything outside this file depends on the interface; tests inject FakeRazorpayClient. */
@@ -103,11 +103,7 @@ interface RawAmounts {
   [key: string]: unknown;
 }
 
-const num = (v: unknown): bigint => {
-  if (typeof v === "number" && Number.isSafeInteger(v)) return BigInt(v);
-  if (typeof v === "string" && /^\d+$/.test(v)) return BigInt(v);
-  throw new Error(`unexpected amount from Razorpay: ${String(v)}`);
-};
+const num = fromGatewayAmount;
 
 const notesOf = (v: unknown): RazorpayNotes => {
   // Razorpay returns [] for "no notes" instead of {}.

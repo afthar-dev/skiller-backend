@@ -131,6 +131,36 @@ describe("POST /v1/webhooks/razorpay and /razorpayx", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it("replaying a captured signed body under a fresh, unsigned event id is a duplicate: one row, handlers run once", async () => {
+    const type = typeName();
+    const handler = jest.fn(async () => undefined);
+    dispatcher.on(type, handler);
+    const hook = fake.webhook(type, { payment: { entity: { id: "pay_replay" } } });
+    expect((await post("/v1/webhooks/razorpay", hook)).status).toBe(200);
+    const replay = { ...hook, headers: { ...hook.headers, "x-razorpay-event-id": `evt_forged_${randomUUID()}` } };
+    const res = await post("/v1/webhooks/razorpay", replay);
+    expect(res.status).toBe(200);
+    expect(await prisma.webhookEvent.count({ where: { type } })).toBe(1);
+    await until(async () => (await prisma.webhookEvent.findFirstOrThrow({ where: { type } })).processedAt);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(await prisma.webhookEvent.count({ where: { eventId: replay.headers["x-razorpay-event-id"] } })).toBe(0);
+  });
+
+  it("malformed JSON with a valid signature is 400 WEBHOOK_PAYLOAD_INVALID; unsigned malformed JSON is still signature-first", async () => {
+    const crypto = await import("node:crypto");
+    const hook = fake.webhook(typeName(), {});
+    const body = "{not json";
+    const signed = { body, headers: { ...hook.headers, "x-razorpay-signature": crypto.createHmac("sha256", "razorpay-webhook-secret-for-tests").update(body).digest("hex") } };
+    const ok = await post("/v1/webhooks/razorpay", signed);
+    expect(ok.status).toBe(400);
+    expect(ok.body.error.code).toBe("WEBHOOK_PAYLOAD_INVALID");
+    const unsigned = await post("/v1/webhooks/razorpay", { body, headers: { ...hook.headers, "x-razorpay-signature": "0".repeat(64) } });
+    expect(unsigned.status).toBe(400);
+    expect(unsigned.body.error.code).toBe("WEBHOOK_SIGNATURE_INVALID");
+    expect(await prisma.webhookEvent.count({ where: { eventId: hook.headers["x-razorpay-event-id"] } })).toBe(0);
+  });
+
   it("the same event id on the two providers is two events", async () => {
     const eventId = `evt_shared_${randomUUID()}`;
     expect((await post("/v1/webhooks/razorpay", fake.webhook(typeName(), {}, { eventId }))).status).toBe(200);

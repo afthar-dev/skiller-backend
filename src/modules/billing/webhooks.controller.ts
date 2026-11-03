@@ -3,6 +3,7 @@ import type { RawBodyRequest } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Prisma, type WebhookProvider } from "@prisma/client";
 import type { Queue } from "bullmq";
+import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { Public } from "../../common/auth/public.decorator";
 import { APP_CONFIG } from "../../common/config/config.module";
@@ -71,12 +72,15 @@ export class WebhooksController {
     const type = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as { event?: unknown }).event : undefined;
     if (typeof type !== "string" || type.length === 0) throw new AppError("WEBHOOK_PAYLOAD_INVALID", 400, "Webhook body has no event type");
 
+    // The signature covers the body only, not the event-id header: dedupe on the body hash too, so replaying a captured
+    // body under a fresh header cannot run the handlers again. A genuine Razorpay retry has an identical body.
+    const bodySha256 = createHash("sha256").update(raw).digest("hex");
     let row: { id: string; processedAt: Date | null };
     try {
-      row = await this.prisma.webhookEvent.create({ data: { provider, eventId, type, payload: payload as Prisma.InputJsonObject }, select: { id: true, processedAt: true } });
+      row = await this.prisma.webhookEvent.create({ data: { provider, eventId, bodySha256, type, payload: payload as Prisma.InputJsonObject }, select: { id: true, processedAt: true } });
     } catch (err) {
       if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
-      row = await this.prisma.webhookEvent.findUniqueOrThrow({ where: { provider_eventId: { provider, eventId } }, select: { id: true, processedAt: true } });
+      row = await this.prisma.webhookEvent.findFirstOrThrow({ where: { provider, OR: [{ eventId }, { bodySha256 }] }, select: { id: true, processedAt: true } });
     }
 
     // jobId = row id makes enqueueing idempotent. Re-adding for an unprocessed duplicate repairs the case where the first

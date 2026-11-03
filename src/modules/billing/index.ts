@@ -1,5 +1,5 @@
 // Public surface of the billing module. Other modules import only from here.
-export { fromApi, gstSplit, splitBps, toApi } from "./money";
+export { commissionSplit, fromApi, fromGatewayAmount, gstSplit, splitBps, toApi } from "./money";
 export type { Paise } from "./money";
 export { RAZORPAY_CLIENT, RazorpayApiError } from "./razorpay.client";
 export type {

@@ -1,3 +1,5 @@
+import { AppError } from "../../common/errors/app-error";
+
 /** Money is integer paise held as bigint. No floats anywhere: rates are integer basis points (1 bps = 0.01%). */
 export type Paise = bigint;
 
@@ -44,4 +46,27 @@ export function fromApi(s: string, opts: { allowNegative?: boolean } = {}): Pais
   const pattern = opts.allowNegative ? /^(0|-?[1-9]\d*)$/ : /^(0|[1-9]\d*)$/;
   if (!pattern.test(s)) throw new RangeError(opts.allowNegative ? "amount must be an integer number of paise" : "amount must be a non-negative integer number of paise");
   return BigInt(s);
+}
+
+/** Marketplace commission: the fee is rounded DOWN, so any remainder stays with the seller (plan decision 4). */
+export function commissionSplit(net: Paise, bps: number): { fee: Paise; seller: Paise } {
+  assertPaise(net, "net");
+  assertBps(bps, "bps", 10_000);
+  const fee = (net * BigInt(bps)) / BPS_DENOMINATOR;
+  return { fee, seller: net - fee };
+}
+
+/** Amount from a gateway payload or API response: an integer number or digit string, 0 <= v <= MAX_SAFE_INTEGER. Anything else throws. */
+export function fromGatewayAmount(v: unknown): Paise {
+  const invalid = () => new AppError("GATEWAY_AMOUNT_INVALID", 502, "Payment gateway sent an invalid amount");
+  if (typeof v === "number") {
+    if (!Number.isSafeInteger(v) || v < 0) throw invalid();
+    return BigInt(v);
+  }
+  if (typeof v === "string" && /^(0|[1-9]\d*)$/.test(v)) {
+    const p = BigInt(v);
+    if (p > BigInt(Number.MAX_SAFE_INTEGER)) throw invalid();
+    return p;
+  }
+  throw invalid();
 }

@@ -35,7 +35,7 @@ describe("WebhookProcessor", () => {
   afterAll(() => close());
 
   const make = (type: string, payload: object = { event: type }) =>
-    prisma.webhookEvent.create({ data: { provider: "RAZORPAY", eventId: `evt_${randomUUID()}`, type, payload } });
+    prisma.webhookEvent.create({ data: { provider: "RAZORPAY", eventId: `evt_${randomUUID()}`, bodySha256: randomUUID(), type, payload } });
   const job = (id: string) => ({ data: { webhookEventId: id } }) as Job<WebhookJobData>;
 
   it("runs on the billing queue with the outbox retry schedule", () => {

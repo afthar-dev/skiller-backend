@@ -45,13 +45,11 @@ export class LedgerService {
     if (sum !== 0n) throw new AppError("LEDGER_UNBALANCED", 500, `Ledger entry does not sum to zero (off by ${sum} paise)`, { refType, refId, description });
 
     const accountIds = [...new Set(lines.map((l) => l.accountId))].sort();
-    const accounts = await tx.ledgerAccount.findMany({ where: { id: { in: accountIds } }, select: { id: true, closedAt: true } });
+    const accounts = await tx.ledgerAccount.findMany({ where: { id: { in: accountIds } }, select: { id: true } });
     if (accounts.length !== accountIds.length) {
       const known = new Set(accounts.map((a) => a.id));
       throw new AppError("LEDGER_ACCOUNT_NOT_FOUND", 500, "Ledger entry references an unknown account", { accountIds: accountIds.filter((id) => !known.has(id)) });
     }
-    const closed = accounts.filter((a) => a.closedAt !== null).map((a) => a.id);
-    if (closed.length > 0) throw new AppError("LEDGER_ACCOUNT_CLOSED", 409, "Ledger entry references a closed account", { accountIds: closed });
 
     const inserted = await tx.$queryRaw<{ id: string }[]>`INSERT INTO journal_entries ("id", "refType", "refId", "description")
       VALUES (${uuidv7()}, ${refType}, ${refId}, ${description})
@@ -59,6 +57,12 @@ export class LedgerService {
       RETURNING "id"`;
     if (inserted.length === 0) {
       const existing = await tx.journalEntry.findUniqueOrThrow({ where: { refType_refId_description: { refType, refId, description } }, select: { id: true } });
+      // Same key must mean the same movement: a different set of lines is a caller bug that would otherwise silently drop money.
+      const stored = await tx.ledgerLine.findMany({ where: { entryId: existing.id }, select: { accountId: true, amountPaise: true } });
+      const canon = (ls: LedgerLineInput[]) => ls.map((x) => `${x.accountId}:${x.amountPaise}`).sort().join("|");
+      if (canon(stored) !== canon(lines)) {
+        throw new AppError("LEDGER_DUPLICATE_MISMATCH", 409, "Ledger entry key was already posted with different lines", { refType, refId, description });
+      }
       return { entryId: existing.id, duplicate: true };
     }
     const entryId = inserted[0].id;
@@ -68,6 +72,10 @@ export class LedgerService {
       SELECT id, 0, ${new Date()} FROM unnest(${accountIds}::text[]) AS t(id) ORDER BY id
       ON CONFLICT DO NOTHING`;
     await tx.$queryRaw`SELECT "accountId" FROM account_balances WHERE "accountId" = ANY(${accountIds}::text[]) ORDER BY "accountId" FOR UPDATE`;
+    // Checked under the balance locks, so an account close that locks the balance row first cannot interleave. The entry
+    // row inserted above is rolled back with the caller's transaction when this throws.
+    const closed = await tx.ledgerAccount.findMany({ where: { id: { in: accountIds }, closedAt: { not: null } }, select: { id: true } });
+    if (closed.length > 0) throw new AppError("LEDGER_ACCOUNT_CLOSED", 409, "Ledger entry references a closed account", { accountIds: closed.map((a) => a.id) });
 
     await tx.ledgerLine.createMany({ data: lines.map((l) => ({ entryId, accountId: l.accountId, amountPaise: l.amountPaise })) });
 

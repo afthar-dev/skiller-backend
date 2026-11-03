@@ -105,6 +105,18 @@ describe("Ledger and accounts", () => {
       expect(await ledger.balance(b)).toBe(1400n);
     });
 
+    it("reusing a key with different lines is LEDGER_DUPLICATE_MISMATCH (409), not a silent no-op; line order does not matter", async () => {
+      const [a, b, c] = await newAccounts(3);
+      const r = ref();
+      await post([{ accountId: a, amountPaise: -700n }, { accountId: b, amountPaise: 700n }], r);
+      // same lines in another order: still a plain duplicate
+      expect((await post([{ accountId: b, amountPaise: 700n }, { accountId: a, amountPaise: -700n }], r)).duplicate).toBe(true);
+      await expect(post([{ accountId: a, amountPaise: -300n }, { accountId: b, amountPaise: 300n }], r)).rejects.toMatchObject({ code: "LEDGER_DUPLICATE_MISMATCH", status: 409 });
+      await expect(post([{ accountId: a, amountPaise: -700n }, { accountId: c, amountPaise: 700n }], r)).rejects.toMatchObject({ code: "LEDGER_DUPLICATE_MISMATCH" });
+      await expect(post([{ accountId: a, amountPaise: -700n }, { accountId: b, amountPaise: 600n }, { accountId: c, amountPaise: 100n }], r)).rejects.toMatchObject({ code: "LEDGER_DUPLICATE_MISMATCH" });
+      expect(await ledger.balance(b)).toBe(700n);
+    });
+
     it("concurrent posts of the same key apply exactly once", async () => {
       const [a, b] = await newAccounts(2);
       const r = ref();

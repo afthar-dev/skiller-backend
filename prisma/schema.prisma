@@ -519,6 +519,9 @@ model WebhookEvent {
   id          String          @id @default(uuid(7))
   provider    WebhookProvider
   eventId     String
+  /// sha256 (hex) of the raw signed body. The signature covers the body but not the event-id header, so a captured body
+  /// replayed under a fresh header must still be recognised as a duplicate.
+  bodySha256  String
   type        String
   payload     Json
   receivedAt  DateTime        @default(now())
@@ -527,6 +530,7 @@ model WebhookEvent {
   lastError   String?
 
   @@unique([provider, eventId])
+  @@unique([provider, bodySha256])
   @@index([processedAt])
   @@map("webhook_events")
 }

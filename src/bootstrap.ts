@@ -1,6 +1,7 @@
 import { INestApplication } from "@nestjs/common";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import { captureRawBody } from "./common/http/raw-body-capture";
 import { APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 
@@ -11,6 +12,7 @@ export function configureApp<T extends INestApplication>(app: T): T {
   if (config.trustProxy > 0) app.getHttpAdapter().getInstance().set("trust proxy", config.trustProxy);
   app.setGlobalPrefix("v1");
   app.use(helmet());
+  app.use(captureRawBody(["/v1/webhooks/razorpay", "/v1/webhooks/razorpayx"]));
   app.use(cookieParser());
   app.enableCors({ origin: config.corsOrigins, credentials: true });
   app.enableShutdownHooks();
