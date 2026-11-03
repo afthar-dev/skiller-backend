@@ -1,5 +1,6 @@
 import { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { REDIS } from "../../src/common/redis/redis.constants";
 import { createTestApp } from "../setup/app";
 
 describe("health", () => {
@@ -24,5 +25,23 @@ describe("health", () => {
     expect(res.body).toMatchObject({ error: { code: "NOT_FOUND" }, requestId: "abc12345-test" });
   });
 
-  it.todo("GET /v1/ready checks DB and Redis (Task 3)");
+  it("GET /v1/ready returns 200 when DB and Redis are up", async () => {
+    const res = await request(app.getHttpServer()).get("/v1/ready");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "ready", checks: { database: true, redis: true } });
+  });
+
+  it("GET /v1/ready returns 503 NOT_READY when Redis check fails", async () => {
+    const broken = await createTestApp((b) =>
+      b.overrideProvider(REDIS).useValue({ ping: () => Promise.reject(new Error("down")), quit: () => Promise.resolve("OK") }),
+    );
+    try {
+      const res = await request(broken.getHttpServer()).get("/v1/ready");
+      expect(res.status).toBe(503);
+      expect(res.body.error.code).toBe("NOT_READY");
+      expect(res.body.error.details.checks).toEqual({ database: true, redis: false });
+    } finally {
+      await broken.close();
+    }
+  });
 });
