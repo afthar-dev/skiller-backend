@@ -2,7 +2,6 @@ import { Global, Module } from "@nestjs/common";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
-import { MEMBER_ROLE_GRANTER, NoopMemberRoleGranter } from "./member-role-granter";
 import { MeController } from "./me.controller";
 import { OtpService } from "./otp.service";
 import { SessionService } from "./session.service";
@@ -24,8 +23,7 @@ import { UserStatusCache } from "./user-status.cache";
     StepUpGuard,
     AuthService,
     AuthGuard,
-    { provide: MEMBER_ROLE_GRANTER, useClass: NoopMemberRoleGranter },
   ],
-  exports: [AuthGuard, OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard, MEMBER_ROLE_GRANTER],
+  exports: [AuthGuard, OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard],
 })
 export class IdentityModule {}

@@ -9,13 +9,14 @@ import { OutboxModule } from "./common/outbox/outbox.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { QueueModule } from "./common/queue/queue.module";
 import { RedisModule } from "./common/redis/redis.module";
+import { AuditModule } from "./modules/audit/audit.module";
 import { IdentityModule } from "./modules/identity/identity.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, RbacModule],
+  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },
