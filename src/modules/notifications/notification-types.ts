@@ -14,6 +14,8 @@ export const NOTIFICATION_TYPES = {
   "order.sale": { transactional: false },
   "order.fulfilment_failed": { transactional: true },
   "earnings.available": { transactional: false },
+  "refund.processed": { transactional: true },
+  "refund.rejected": { transactional: true },
   "finance.alert": { transactional: false },
 } as const;
 

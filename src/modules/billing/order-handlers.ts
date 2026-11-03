@@ -50,7 +50,7 @@ export class OrderHandlers implements OnModuleInit {
       await this.alerts.raise({
         kind: "FULFILMENT_FAILED",
         orderId: e.orderId,
-        message: `Order ${e.orderId} is paid but could not be delivered (${e.error}). Refund it.`,
+        message: `Order ${e.orderId} is paid but could not be delivered (${e.error}). An automatic refund has been started; check it completes.`,
         dedupeKey: `fulfilment-failed:${e.orderId}`,
         data: { error: e.error },
       });

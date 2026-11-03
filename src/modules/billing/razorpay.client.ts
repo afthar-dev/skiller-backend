@@ -75,7 +75,8 @@ export interface RazorpaySubscription {
 export interface RazorpayClient {
   createOrder(input: { amountPaise: Paise; receipt: string; notes?: RazorpayNotes }): Promise<RazorpayOrder>;
   fetchPayment(paymentId: string): Promise<RazorpayPayment>;
-  createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes }): Promise<RazorpayRefund>;
+  /** `idempotencyKey` makes a repeated call (a retry after a timeout) return the first refund instead of refunding twice. */
+  createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund>;
   createPlan(input: CreatePlanInput): Promise<RazorpayPlan>;
   createSubscription(input: CreateSubscriptionInput): Promise<RazorpaySubscription>;
   cancelSubscription(subscriptionId: string, atCycleEnd: boolean): Promise<RazorpaySubscription>;
@@ -141,10 +142,10 @@ export class HttpRazorpayClient implements RazorpayClient {
     this.authorization = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
   }
 
-  private async call(method: "GET" | "POST" | "PATCH", path: string, body?: unknown): Promise<RawAmounts> {
+  private async call(method: "GET" | "POST" | "PATCH", path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<RawAmounts> {
     const res = await this.fetchFn(`${this.baseUrl}${path}`, {
       method,
-      headers: { Authorization: this.authorization, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Authorization: this.authorization, ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...extraHeaders },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(this.timeoutMs),
     });
@@ -182,8 +183,8 @@ export class HttpRazorpayClient implements RazorpayClient {
     };
   }
 
-  async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes }): Promise<RazorpayRefund> {
-    const r = await this.call("POST", `/payments/${encodeURIComponent(paymentId)}/refund`, { amount: toApiAmount(input.amountPaise), notes: input.notes ?? {} });
+  async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund> {
+    const r = await this.call("POST", `/payments/${encodeURIComponent(paymentId)}/refund`, { amount: toApiAmount(input.amountPaise), notes: input.notes ?? {} }, input.idempotencyKey ? { "X-Refund-Idempotency": input.idempotencyKey } : {});
     return { id: String(r.id), paymentId: String(r.payment_id), amountPaise: num(r.amount), status: String(r.status), notes: notesOf(r.notes) };
   }
 

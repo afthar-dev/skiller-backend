@@ -20,6 +20,7 @@ import { FulfilmentService } from "./fulfilment.service";
 import { InvoicesService } from "./invoices.service";
 import { OrdersService } from "./orders.service";
 import { PlansService } from "./plans.service";
+import { RefundRequestsService } from "./refund-requests.service";
 import { RAZORPAY_CLIENT, type RazorpayClient } from "./razorpay.client";
 import { SubscriptionsService } from "./subscriptions.service";
 import type { Owner } from "./entitlements.service";
@@ -212,5 +213,24 @@ export class InvoicesController {
   @ApiErrorResponse(409, "The PDF is not ready yet.")
   download(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.invoices.downloadUrl(user.id, id);
+  }
+}
+
+const refundRequestBody = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
+
+@ApiTags("Orders")
+@Controller("orders")
+export class OrderRefundsController {
+  constructor(private readonly refunds: RefundRequestsService) {}
+
+  @AuthenticatedOnly()
+  @Idempotent()
+  @Post(":id/refund-requests")
+  @HttpCode(201)
+  @ApiOperation({ summary: "Ask for a full refund of my paid order (requires Idempotency-Key). Finance approves or rejects it." })
+  @ApiZodBody(refundRequestBody)
+  @ApiErrorResponse(422, "REFUND_NOT_ELIGIBLE: the order is not paid, is outside the refund window, or already has a refund.")
+  request(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.refunds.request(user.id, id, refundRequestBody.parse(body).reason);
   }
 }

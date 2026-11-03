@@ -68,10 +68,15 @@ export class FakeRazorpayClient implements RazorpayClient {
     return p;
   }
 
-  async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes }): Promise<RazorpayRefund> {
+  private readonly refundsByKey = new Map<string, RazorpayRefund>();
+
+  async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund> {
     this.record("createRefund", paymentId, input);
+    const repeated = input.idempotencyKey ? this.refundsByKey.get(input.idempotencyKey) : undefined;
+    if (repeated) return repeated;
     const refund: RazorpayRefund = { id: id("rfnd"), paymentId, amountPaise: input.amountPaise, status: "processed", notes: input.notes ?? {} };
     this.refunds.push(refund);
+    if (input.idempotencyKey) this.refundsByKey.set(input.idempotencyKey, refund);
     const p = this.payments.get(paymentId);
     if (p) this.payments.set(paymentId, { ...p, amountRefundedPaise: p.amountRefundedPaise + input.amountPaise, status: p.amountRefundedPaise + input.amountPaise >= p.amountPaise ? "refunded" : p.status });
     return refund;

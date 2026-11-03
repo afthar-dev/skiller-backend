@@ -7,8 +7,8 @@ import { OrganizationsModule } from "../organizations";
 import { ObjectStorageModule } from "../media";
 import { UsersModule } from "../users";
 import { WalletModule } from "../wallet";
-import { AdminBillingController } from "./admin-billing.controller";
-import { CheckoutController, InvoicesController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
+import { AdminBillingController, AdminRefundsController } from "./admin-billing.controller";
+import { CheckoutController, InvoicesController, OrderRefundsController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
 import { CheckoutService } from "./checkout.service";
 import { CouponsService } from "./coupons.service";
 import { EntitlementsModule } from "./entitlements.module";
@@ -23,6 +23,11 @@ import { OrderHandlers } from "./order-handlers";
 import { OrderMaintenanceProcessor } from "./order-maintenance.processor";
 import { OrdersService } from "./orders.service";
 import { PlansService } from "./plans.service";
+import { DefaultRefundEligibility, RefundEligibilityRegistry } from "./refund-eligibility";
+import { RefundHandlers } from "./refund-handlers";
+import { RefundRequestsService } from "./refund-requests.service";
+import { RefundsProcessor } from "./refunds.processor";
+import { RefundsService } from "./refunds.service";
 import { HttpRazorpayClient, RAZORPAY_CLIENT } from "./razorpay.client";
 import { SellableRegistry } from "./sellable.registry";
 import { SubscriptionHandlers } from "./subscription-handlers";
@@ -56,15 +61,20 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   InvoiceIssuer,
   InvoiceHandlers,
   InvoicesProcessor,
+  DefaultRefundEligibility,
+  RefundEligibilityRegistry,
+  RefundsService,
+  RefundHandlers,
+  RefundsProcessor,
 ];
 
-export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor];
+export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor, RefundEligibilityRegistry, RefundsProcessor];
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
-  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, InvoicesController, AdminBillingController],
-  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService, InvoicesService],
+  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, AdminBillingController, AdminRefundsController],
+  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
 })
 export class BillingModule {}

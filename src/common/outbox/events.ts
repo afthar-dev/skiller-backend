@@ -56,7 +56,19 @@ export type DomainEvent =
       itemTitle: string;
       /** The seller share moved, paise as a decimal string. */
       amountPaise: string;
-    };
+    }
+  | {
+      type: "order.refunded";
+      orderId: string;
+      refundId: string;
+      buyerId: string;
+      sellerOwnerType: "USER" | "ORG";
+      sellerOwnerId: string;
+      itemType: string;
+      itemId: string;
+      itemTitle: string;
+      amountPaise: string;
+    };;
 
 export type DomainEventType = DomainEvent["type"];
 export type EventOf<T extends DomainEventType> = Extract<DomainEvent, { type: T }>;

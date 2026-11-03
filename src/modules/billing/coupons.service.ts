@@ -106,6 +106,14 @@ export class CouponsService {
     await db.couponRedemption.updateMany({ where: { orderId: { in: orderIds }, status: "RESERVED" }, data: { status: "RELEASED" } });
   }
 
+  /** A refunded order gives its coupon use back (the redemption was REDEEMED when the order was paid). */
+  async releaseRefunded(tx: Prisma.TransactionClient, orderId: string): Promise<void> {
+    const redemption = await tx.couponRedemption.findUnique({ where: { orderId }, select: { couponId: true } });
+    if (!redemption) return;
+    await tx.$queryRaw`SELECT "id" FROM "coupons" WHERE "id" = ${redemption.couponId} FOR UPDATE`;
+    await tx.couponRedemption.updateMany({ where: { orderId, status: "REDEEMED" }, data: { status: "RELEASED" } });
+  }
+
   /**
    * Whether the buyer may use the coupon on this item now, and the discount it gives. Reserved uses count, so run it in the
    * transaction that holds the coupon lock (lockByCode) and reserves the use; the paid order later flips the reservation to REDEEMED.

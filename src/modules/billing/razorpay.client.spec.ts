@@ -103,6 +103,15 @@ describe("HttpRazorpayClient (stubbed fetch)", () => {
     expect(seen[0].body).toEqual({ amount: 2500, notes: { why: "x" } });
   });
 
+  it("createRefund sends the idempotency key as X-Refund-Idempotency; the fake returns the first refund for a repeated key", async () => {
+    const { seen, client } = stub([{ body: { id: "rfnd_1", payment_id: "pay_1", amount: 100, status: "processed", notes: {} } }]);
+    await client.createRefund("pay_1", { amountPaise: 100n, idempotencyKey: "refund-1" });
+    expect(seen[0].headers["X-Refund-Idempotency"]).toBe("refund-1");
+    const fake = new FakeRazorpayClient({ keySecret: "k", webhookSecret: "whsec" });
+    const twice = [await fake.createRefund("pay_1", { amountPaise: 100n, idempotencyKey: "k" }), await fake.createRefund("pay_1", { amountPaise: 100n, idempotencyKey: "k" })];
+    expect(twice[1].id).toBe(twice[0].id);
+  });
+
   it("createPlan, createSubscription and cancelSubscription use the documented bodies", async () => {
     const { seen, client } = stub([
       { body: { id: "plan_1", period: "monthly", interval: 1, item: { name: "Pro", amount: 99900 } } },
