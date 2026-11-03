@@ -21,7 +21,7 @@ const BASE: JobsOptions = {
 };
 
 /**
- * Domain events are the platform's source of truth for side effects, so they are retried for hours (about 2.4 h in total)
+ * Domain events (and payment webhooks, on the billing queue) are the platform's source of truth for side effects, so they are retried for hours (about 2.4 h in total)
  * and a job that still fails is kept (removeOnFail false) and flagged dead on its outbox row instead of vanishing.
  */
 export const OUTBOX_JOB_OPTIONS: JobsOptions = {
@@ -31,4 +31,4 @@ export const OUTBOX_JOB_OPTIONS: JobsOptions = {
   removeOnFail: false,
 };
 
-export const jobOptionsFor = (name: QueueName): JobsOptions => (name === QueueNames.outbox ? OUTBOX_JOB_OPTIONS : BASE);
+export const jobOptionsFor = (name: QueueName): JobsOptions => (name === QueueNames.outbox || name === QueueNames.billing ? OUTBOX_JOB_OPTIONS : BASE);

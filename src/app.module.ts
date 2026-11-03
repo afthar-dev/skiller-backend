@@ -20,6 +20,7 @@ import { AdminModule } from "./modules/admin/admin.module";
 import { UsersModule } from "./modules/users/users.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { MediaModule } from "./modules/media/media.module";
+import { BillingModule } from "./modules/billing";
 import { WalletModule } from "./modules/wallet";
 import { HealthController } from "./health.controller";
 
@@ -27,7 +28,7 @@ import { HealthController } from "./health.controller";
   imports: [
     ConfigModule,
     LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }),
-    ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule, AdminModule, WalletModule],
+    ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule, AdminModule, WalletModule, BillingModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },

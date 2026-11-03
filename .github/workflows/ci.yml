@@ -129,6 +129,11 @@ jobs:
         -e RESEND_API_KEY=re_smoke
         -e RESEND_FROM_ADDRESS=no-reply@skiller.test
         -e RESEND_WEBHOOK_SECRET=whsec_dGVzdHNlY3JldA==
+        -e RAZORPAY_KEY_ID=rzp_test_smoke
+        -e RAZORPAY_KEY_SECRET=smoke
+        -e RAZORPAY_WEBHOOK_SECRET=smoke
+        -e RAZORPAYX_ACCOUNT_NUMBER=2323230000000001
+        -e RAZORPAYX_WEBHOOK_SECRET=smoke
         -e SUPER_ADMIN_EMAIL=admin@skiller.test
     steps:
       - uses: actions/checkout@v4

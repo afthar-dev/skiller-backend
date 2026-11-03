@@ -4,6 +4,8 @@ export const QueueNames = {
   mediaTranscode: "media-transcode",
   mediaLight: "media-light",
   maintenance: "maintenance",
+  // Razorpay / RazorpayX webhook processing (and later money jobs): its own queue so slow or retrying payment work never shares concurrency with domain events.
+  billing: "billing",
 } as const;
 
 export type QueueName = (typeof QueueNames)[keyof typeof QueueNames];

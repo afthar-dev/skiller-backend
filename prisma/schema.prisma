@@ -507,3 +507,26 @@ model AccountBalance {
 
   @@map("account_balances")
 }
+
+// ─── billing ─────────────────────────────────────────────────────────────
+
+enum WebhookProvider {
+  RAZORPAY
+  RAZORPAYX
+}
+
+model WebhookEvent {
+  id          String          @id @default(uuid(7))
+  provider    WebhookProvider
+  eventId     String
+  type        String
+  payload     Json
+  receivedAt  DateTime        @default(now())
+  processedAt DateTime?
+  attempts    Int             @default(0)
+  lastError   String?
+
+  @@unique([provider, eventId])
+  @@index([processedAt])
+  @@map("webhook_events")
+}

@@ -42,6 +42,9 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `R2_PLAYBACK_BASE_URL` | yes | Base URL of the edge playback gate. |
 | `R2_ENDPOINT` | no | S3 endpoint override (MinIO locally). |
 | `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `RESEND_WEBHOOK_SECRET` | yes | Transactional mail and its delivery webhook (`POST /v1/webhooks/resend`). |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | yes | Razorpay API credentials (orders, refunds, subscriptions). Use test-mode keys outside production. |
+| `RAZORPAY_WEBHOOK_SECRET` | yes | Secret of the Razorpay dashboard webhook; verifies `X-Razorpay-Signature` on `POST /v1/webhooks/razorpay`. |
+| `RAZORPAYX_ACCOUNT_NUMBER`, `RAZORPAYX_WEBHOOK_SECRET` | yes | RazorpayX payout account number, and the secret verifying `POST /v1/webhooks/razorpayx`. |
 | `SUPER_ADMIN_EMAIL` | yes | Gets the `super_admin` role at seed time. |
 | `TRUST_PROXY` | no | Reverse-proxy hops in front of the API (default `0`). |
 | `SENTRY_DSN` | no | Enables Sentry. Only server errors (status >= 500) are reported. |
@@ -94,7 +97,7 @@ Orphaned permissions (keys in the database no longer declared in code) are repor
 - **`TRUST_PROXY`** = number of reverse-proxy hops in front of the API (0 = none). Per-IP rate limits and stored session/OTP IPs use `req.ip`; set this to the real hop count in production (e.g. 1 behind a single load balancer or CDN).
 - **Logging**: Pino, JSON in production and pretty in development. `req.headers.authorization`, `req.headers.cookie`, `res.headers["set-cookie"]` and any `code`, `token`, `refreshToken`, `password` field one level deep are redacted. Every request log carries `requestId` (also returned as the `x-request-id` header and in error bodies).
 - **Sentry**: set `SENTRY_DSN` on both API and worker. Client errors (status < 500) are never reported; a worker job that has used all its attempts is reported.
-- **Queues** (one BullMQ Worker each, because BullMQ cannot filter by job name): `outbox` (relay + event dispatch), `mail`, `maintenance` (hourly media cleanup), `media-transcode` (concurrency 1: ffmpeg saturates the machine, scale by running more worker processes), `media-light` (images + files, concurrency 4).
+- **Queues** (one BullMQ Worker each, because BullMQ cannot filter by job name): `outbox` (relay + event dispatch), `mail`, `maintenance` (hourly media cleanup), `media-transcode` (concurrency 1: ffmpeg saturates the machine, scale by running more worker processes), `media-light` (images + files, concurrency 4), `billing` (Razorpay/RazorpayX webhook processing; same retry schedule as `outbox`, a failed job is kept for replay).
 - **Outbox delivery** retries a failing event 15 times (1 s doubling, capped at 30 min, about 2.4 h). A still-failing event gets `outbox_events.deadAt` + `lastError`, is reported to Sentry, and is listed by `GET /v1/admin/outbox/dead` (`audit.view`). The failed BullMQ job is kept in Redis (queue `outbox`, `removeOnFail: false`); once the cause is fixed, replay it (for example `queue.retryJobs({ state: "failed" })` on the `outbox` queue) and clear `deadAt` on its row. Handlers are idempotent, so replays are safe.
 
 ## Notes for the frontend

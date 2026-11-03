@@ -4119,6 +4119,70 @@
           "Admin"
         ]
       }
+    },
+    "/v1/webhooks/razorpay": {
+      "post": {
+        "operationId": "Webhooks_razorpay",
+        "parameters": [],
+        "responses": {
+          "400": {
+            "description": "Invalid signature, missing event id, or malformed payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Razorpay webhook (HMAC-SHA256 signed)",
+        "tags": [
+          "Webhooks"
+        ]
+      }
+    },
+    "/v1/webhooks/razorpayx": {
+      "post": {
+        "operationId": "Webhooks_razorpayx",
+        "parameters": [],
+        "responses": {
+          "400": {
+            "description": "Invalid signature, missing event id, or malformed payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "RazorpayX (payouts) webhook (HMAC-SHA256 signed)",
+        "tags": [
+          "Webhooks"
+        ]
+      }
     }
   },
   "info": {

@@ -25,6 +25,13 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1),
   RESEND_FROM_ADDRESS: z.string().min(1),
   RESEND_WEBHOOK_SECRET: z.string().min(1),
+  RAZORPAY_KEY_ID: z.string().min(1),
+  RAZORPAY_KEY_SECRET: z.string().min(1),
+  // Verifies X-Razorpay-Signature on POST /v1/webhooks/razorpay (set on the Razorpay dashboard webhook, not the API key secret).
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
+  // RazorpayX (payouts): the current account number the payouts debit, and its own webhook secret.
+  RAZORPAYX_ACCOUNT_NUMBER: z.string().min(1),
+  RAZORPAYX_WEBHOOK_SECRET: z.string().min(1),
   SENTRY_DSN: z.string().url().optional(),
   // Number of reverse-proxy hops in front of the API whose X-Forwarded-For is trusted (0 = none).
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
@@ -67,6 +74,8 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
       endpoint: e.R2_ENDPOINT ?? `https://${e.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     },
     resend: { apiKey: e.RESEND_API_KEY, fromAddress: e.RESEND_FROM_ADDRESS, webhookSecret: e.RESEND_WEBHOOK_SECRET },
+    razorpay: { keyId: e.RAZORPAY_KEY_ID, keySecret: e.RAZORPAY_KEY_SECRET, webhookSecret: e.RAZORPAY_WEBHOOK_SECRET },
+    razorpayx: { accountNumber: e.RAZORPAYX_ACCOUNT_NUMBER, webhookSecret: e.RAZORPAYX_WEBHOOK_SECRET },
     trustProxy: e.TRUST_PROXY,
     sentryDsn: e.SENTRY_DSN,
     superAdminEmail: e.SUPER_ADMIN_EMAIL.toLowerCase(),

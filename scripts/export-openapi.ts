@@ -24,6 +24,11 @@ const defaults: Record<string, string> = {
   RESEND_API_KEY: "re_openapi",
   RESEND_FROM_ADDRESS: "Skiller <no-reply@skiller.test>",
   RESEND_WEBHOOK_SECRET: "whsec_dGVzdHNlY3JldA==",
+  RAZORPAY_KEY_ID: "rzp_openapi",
+  RAZORPAY_KEY_SECRET: "openapi",
+  RAZORPAY_WEBHOOK_SECRET: "openapi",
+  RAZORPAYX_ACCOUNT_NUMBER: "2323230000000001",
+  RAZORPAYX_WEBHOOK_SECRET: "openapi",
   SUPER_ADMIN_EMAIL: "admin@skiller.test",
 };
 for (const [key, value] of Object.entries(defaults)) process.env[key] ??= value;

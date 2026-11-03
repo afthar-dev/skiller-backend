@@ -21,6 +21,11 @@ const validEnv: NodeJS.ProcessEnv = {
   RESEND_API_KEY: "re_test",
   RESEND_FROM_ADDRESS: "Skiller <no-reply@skiller.in>",
   RESEND_WEBHOOK_SECRET: "whsec_test",
+  RAZORPAY_KEY_ID: "rzp_test_key",
+  RAZORPAY_KEY_SECRET: "key_secret",
+  RAZORPAY_WEBHOOK_SECRET: "webhook_secret",
+  RAZORPAYX_ACCOUNT_NUMBER: "2323230000000001",
+  RAZORPAYX_WEBHOOK_SECRET: "webhookx_secret",
   SUPER_ADMIN_EMAIL: "admin@skiller.in",
   WEB_BASE_URL: "https://app.skiller.in/",
 };
@@ -46,6 +51,17 @@ describe("loadConfig", () => {
     delete missing.WEB_BASE_URL;
     expect(() => loadConfig(missing)).toThrow(/WEB_BASE_URL/);
     expect(() => loadConfig({ ...validEnv, WEB_BASE_URL: "not a url" })).toThrow(/WEB_BASE_URL/);
+  });
+
+  it("requires the Razorpay and RazorpayX settings and exposes them grouped", () => {
+    const config = loadConfig(validEnv);
+    expect(config.razorpay).toEqual({ keyId: "rzp_test_key", keySecret: "key_secret", webhookSecret: "webhook_secret" });
+    expect(config.razorpayx).toEqual({ accountNumber: "2323230000000001", webhookSecret: "webhookx_secret" });
+    for (const key of ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "RAZORPAYX_ACCOUNT_NUMBER", "RAZORPAYX_WEBHOOK_SECRET"]) {
+      const env = { ...validEnv };
+      delete env[key];
+      expect(() => loadConfig(env)).toThrow(new RegExp(key));
+    }
   });
 
   it("rejects short jwt secret", () => {
