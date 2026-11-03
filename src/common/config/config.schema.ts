@@ -24,6 +24,8 @@ const envSchema = z.object({
   RESEND_FROM_ADDRESS: z.string().min(1),
   RESEND_WEBHOOK_SECRET: z.string().min(1),
   SENTRY_DSN: z.string().url().optional(),
+  // Number of reverse-proxy hops in front of the API whose X-Forwarded-For is trusted (0 = none).
+  TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
   SUPER_ADMIN_EMAIL: z.string().email(),
 });
 
@@ -62,6 +64,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
       endpoint: e.R2_ENDPOINT ?? `https://${e.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     },
     resend: { apiKey: e.RESEND_API_KEY, fromAddress: e.RESEND_FROM_ADDRESS, webhookSecret: e.RESEND_WEBHOOK_SECRET },
+    trustProxy: e.TRUST_PROXY,
     sentryDsn: e.SENTRY_DSN,
     superAdminEmail: e.SUPER_ADMIN_EMAIL.toLowerCase(),
   };

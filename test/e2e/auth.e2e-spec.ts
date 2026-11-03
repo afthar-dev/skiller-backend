@@ -1,4 +1,6 @@
 import request from "supertest";
+import { QueueNames, queueToken } from "../../src/common/queue/queue.constants";
+import type { Queue } from "bullmq";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { UserStatusCache } from "../../src/modules/identity/user-status.cache";
 import { AuthTestApp, createAuthTestApp, readRefreshCookie, uniqueEmail, uniqueIp } from "../support/auth-app";
@@ -231,5 +233,28 @@ describe("auth", () => {
       expect((await http().get("/v1/me").set(auth(token))).status).toBe(401);
     }
     expect(await t.app.get(PrismaService).session.count({ where: { userId: a.userId, revokedAt: null } })).toBe(1);
+  });
+
+  it("TRUST_PROXY=1: different X-Forwarded-For IPs get separate per-IP buckets", async () => {
+    const a = uniqueIp();
+    const b = uniqueIp();
+    for (let i = 0; i < 20; i++) {
+      await http().post("/v1/auth/otp/request").set("X-Forwarded-For", a).send({ email: uniqueEmail("px") }).expect(202);
+    }
+    expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", a).send({ email: uniqueEmail("px") })).status).toBe(429);
+    expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", b).send({ email: uniqueEmail("px") })).status).toBe(202);
+  });
+
+  it("OTP mail jobs are removed from the queue once completed (no plaintext code retained)", async () => {
+    const email = uniqueEmail("retain");
+    await t.requestOtp(email);
+    await t.codeFor(email);
+    const queue = t.app.get<Queue>(queueToken(QueueNames.mail));
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline && (await queue.getJobs(["waiting", "active", "delayed"])).length > 0) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const jobs = await queue.getJobs(["completed", "failed", "waiting", "active", "delayed"]);
+    expect(jobs.filter((j) => (j.data as { to: string }).to === email.toLowerCase())).toHaveLength(0);
   });
 });

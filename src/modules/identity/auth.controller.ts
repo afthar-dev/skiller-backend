@@ -85,7 +85,6 @@ export class AuthController {
 
   @Post("step-up/request")
   @HttpCode(202)
-  @RateLimit({ key: (req) => `stepup:ip:${req.ip}`, limit: 20, windowSec: WINDOW_15_MIN })
   async requestStepUp(@CurrentUser() user: AuthUser, @Req() req: Request) {
     return this.auth.requestStepUp(user.id, req.ip ?? "unknown");
   }

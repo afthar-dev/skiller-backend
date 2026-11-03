@@ -141,4 +141,25 @@ describe("step-up verification", () => {
     expect((await http().post("/v1/auth/step-up/verify").send({})).status).toBe(401);
     expect((await http().get("/v1/test-step-up")).status).toBe(401);
   });
+
+  it("step-up request is limited per user: the 6th within 15 minutes is RATE_LIMITED even from different IPs", async () => {
+    const me = await t.login();
+    for (let i = 0; i < 5; i++) {
+      await http().post("/v1/auth/step-up/request").set(auth(me.accessToken)).set("X-Forwarded-For", uniqueIp()).expect(202);
+    }
+    const res = await http().post("/v1/auth/step-up/request").set(auth(me.accessToken)).set("X-Forwarded-For", uniqueIp());
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe("RATE_LIMITED");
+    expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
+    // another user is unaffected
+    const other = await t.login();
+    await http().post("/v1/auth/step-up/request").set(auth(other.accessToken)).set("X-Forwarded-For", uniqueIp()).expect(202);
+  });
+
+  it("unauthenticated traffic does not consume the step-up IP bucket", async () => {
+    const ip = uniqueIp();
+    for (let i = 0; i < 25; i++) await http().post("/v1/auth/step-up/request").set("X-Forwarded-For", ip).expect(401);
+    const me = await t.login();
+    await http().post("/v1/auth/step-up/request").set(auth(me.accessToken)).set("X-Forwarded-For", ip).expect(202);
+  });
 });

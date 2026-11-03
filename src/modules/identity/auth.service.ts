@@ -1,4 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { Redis } from "ioredis";
+import { consumeRateLimit } from "../../common/redis/rate-limiter";
+import { REDIS } from "../../common/redis/redis.constants";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { OutboxService } from "../../common/outbox/outbox.service";
@@ -28,6 +31,7 @@ export class AuthService {
     private readonly outbox: OutboxService,
     @Inject(MEMBER_ROLE_GRANTER) private readonly roles: MemberRoleGranter,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   async verifyLogin(challengeId: string, code: string, meta: SessionMeta): Promise<LoginResult> {
@@ -63,6 +67,9 @@ export class AuthService {
   }
 
   async requestStepUp(userId: string, ip: string): Promise<{ challengeId: string }> {
+    // Limits run here (after AuthGuard) so unauthenticated traffic cannot consume them and no guard ordering is relied on.
+    await consumeRateLimit(this.redis, `stepup:user:${userId}`, 5, 15 * 60);
+    await consumeRateLimit(this.redis, `stepup:ip:${ip}`, 20, 15 * 60);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
     if (!user) throw new AppError("AUTH_TOKEN_INVALID", 401, "Invalid access token");
     const { challengeId } = await this.otp.request({ email: user.email, purpose: "STEP_UP", ip, userId });

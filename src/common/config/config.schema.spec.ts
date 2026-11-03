@@ -25,6 +25,12 @@ const validEnv: NodeJS.ProcessEnv = {
 };
 
 describe("loadConfig", () => {
+  it("TRUST_PROXY defaults to 0 and parses a hop count", () => {
+    expect(loadConfig(validEnv).trustProxy).toBe(0);
+    expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);
+    expect(() => loadConfig({ ...validEnv, TRUST_PROXY: "-1" })).toThrow(ConfigError);
+  });
+
   it("loads valid env", () => {
     const config = loadConfig(validEnv);
     expect(config.corsOrigins).toEqual(["http://localhost:5173", "https://app.skiller.in"]);

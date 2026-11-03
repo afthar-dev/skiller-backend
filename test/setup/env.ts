@@ -22,6 +22,7 @@ export function applyTestEnv(overrides: Record<string, string> = {}) {
     RESEND_API_KEY: "re_test",
     RESEND_FROM_ADDRESS: "Skiller <no-reply@skiller.test>",
     RESEND_WEBHOOK_SECRET: "whsec_dGVzdHNlY3JldA==",
+    TRUST_PROXY: "1",
     SUPER_ADMIN_EMAIL: "admin@skiller.test",
     ...overrides,
   });

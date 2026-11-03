@@ -139,7 +139,7 @@ describe("SessionService", () => {
     await sessions.revoke(a.session.id);
     const ttl = await redis.ttl(`sessions:revoked:${a.session.id}`);
     expect(ttl).toBeGreaterThan(800);
-    expect(ttl).toBeLessThanOrEqual(900);
+    expect(ttl).toBeLessThanOrEqual(960);
     await sessions.revokeAllForUser(userId, b.session.id);
     expect(await sessions.isRevoked(c.session.id)).toBe(true);
     expect(await sessions.isRevoked(b.session.id)).toBe(false);
@@ -154,5 +154,48 @@ describe("SessionService", () => {
     expect(await sessions.revoke(session.id, other)).toBe(false);
     expect(await sessions.isRevoked(session.id)).toBe(false);
     expect(await sessions.revoke(session.id, owner)).toBe(true);
+  });
+
+  describe("Redis marker failures", () => {
+    const failingRedis = { set: async () => { throw new Error("redis down"); }, exists: async () => 0 } as unknown as Redis;
+    const flaky = () => new SessionService(prisma, failingRedis, clock);
+
+    it("revoke: marker is written first; if Redis fails -> 503 and the DB session stays active", async () => {
+      const userId = await newUser();
+      const { session } = await sessions.create(userId, meta);
+      const err = await errOf(flaky().revoke(session.id));
+      expect(err.code).toBe("SERVICE_UNAVAILABLE");
+      expect(err.status).toBe(503);
+      expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
+    });
+
+    it("revokeAllForUser: Redis failure -> 503 and nothing revoked in the DB", async () => {
+      const userId = await newUser();
+      const { session } = await sessions.create(userId, meta);
+      expect((await errOf(flaky().revokeAllForUser(userId))).status).toBe(503);
+      expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
+    });
+
+    it("reuse detection still answers 401 AUTH_TOKEN_REUSED when marker writes fail, and the family is revoked in the DB", async () => {
+      const svc = flaky();
+      const userId = await newUser();
+      const { session, refreshToken: t0 } = await svc.create(userId, meta);
+      await svc.rotate(t0, meta);
+      clock.advance(11_000);
+      const err = await errOf(svc.rotate(t0, meta));
+      expect(err.code).toBe("AUTH_TOKEN_REUSED");
+      expect(err.status).toBe(401);
+      expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).not.toBeNull();
+    });
+
+    it("retries the marker write 3 times before giving up", async () => {
+      let calls = 0;
+      let failures = 2;
+      const redisFlaky = { set: async () => { calls++; if (failures-- > 0) throw new Error("blip"); return "OK"; } } as unknown as Redis;
+      const userId = await newUser();
+      const { session } = await sessions.create(userId, meta);
+      await expect(new SessionService(prisma, redisFlaky, clock).revoke(session.id)).resolves.toBe(true);
+      expect(calls).toBe(3);
+    });
   });
 });

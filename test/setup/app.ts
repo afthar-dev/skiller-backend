@@ -1,6 +1,5 @@
 import { INestApplication, ModuleMetadata } from "@nestjs/common";
 import { Test, TestingModuleBuilder } from "@nestjs/testing";
-import type { Express } from "express";
 import { applyTestEnv } from "./env";
 
 // Keeps DATABASE_URL / REDIS_URL from global setup; everything else from the test env.
@@ -16,8 +15,6 @@ export async function createTestApp(
   if (customize) builder = customize(builder);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
-  // Lets tests choose a client IP per request via X-Forwarded-For (per-IP rate limits would otherwise be shared).
-  (app.getHttpAdapter().getInstance() as Express).set("trust proxy", true);
   configureApp(app);
   await app.init();
   return app;

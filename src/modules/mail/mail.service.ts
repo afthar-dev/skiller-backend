@@ -17,6 +17,8 @@ export class MailService {
     opts: { category: MailCategory } = { category: "transactional" },
   ): Promise<void> {
     const job: MailJobData = { template, to, data, category: opts.category } as MailJobData;
-    await this.queue.add("send", job);
+    // The OTP code is plaintext in the job data: drop the job as soon as it is done (or shortly after failing).
+    const retention = template === "otp" ? { removeOnComplete: true, removeOnFail: { age: 3600 } } : {};
+    await this.queue.add("send", job, retention);
   }
 }

@@ -1,5 +1,5 @@
 import { INestApplication, ModuleMetadata } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import request from "supertest";
 import { CLOCK } from "../../src/common/clock/clock";
 import { QueueWorkerRunner } from "../../src/common/queue/queue-worker.runner";
@@ -8,9 +8,11 @@ import { createTestApp } from "../setup/app";
 import { FakeClock } from "./fake-clock";
 
 export const uniqueEmail = (prefix = "user") => `${prefix}-${randomUUID()}@example.com`;
-let ipSeq = 0;
-/** Unique client IP per call so per-IP rate limits do not couple tests together. */
-export const uniqueIp = () => `10.${(ipSeq >> 16) & 255}.${(ipSeq >> 8) & 255}.${ipSeq++ & 255}`;
+/** Unique client IP per call (random: jest gives each suite its own module state, but Redis is shared across suites). */
+export const uniqueIp = () => {
+  const b = randomBytes(3);
+  return `10.${b[0]}.${b[1]}.${b[2]}`;
+};
 
 export interface Cookie {
   value: string;
