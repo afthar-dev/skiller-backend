@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import type { Request } from "express";
 import type { Redis } from "ioredis";
 import { AppError } from "../errors/app-error";
 import { RATE_LIMIT_KEY, RateLimitOptions } from "./rate-limit.decorator";
@@ -37,13 +38,18 @@ export class RateLimitGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const options = this.reflector.getAllAndOverride<RateLimitOptions | undefined>(RATE_LIMIT_KEY, [
+    const options = this.reflector.getAllAndOverride<RateLimitOptions[] | undefined>(RATE_LIMIT_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!options) return true;
+    if (!options || options.length === 0) return true;
 
     const req = context.switchToHttp().getRequest();
+    for (const option of options) await this.consume(req, option);
+    return true;
+  }
+
+  private async consume(req: Request, options: RateLimitOptions): Promise<void> {
     const key = `rl:${options.key(req)}`;
     const member = `${Date.now()}-${process.pid}-${seq++}-${Math.random().toString(36).slice(2, 8)}`;
     const [allowed, retryMs] = (await this.redis.eval(
@@ -55,7 +61,7 @@ export class RateLimitGuard implements CanActivate {
       member,
     )) as [number, number];
 
-    if (allowed === 1) return true;
+    if (allowed === 1) return;
     const retryAfterSec = Math.min(options.windowSec, Math.max(1, Math.ceil(retryMs / 1000)));
     throw new AppError("RATE_LIMITED", 429, "Too many requests", { retryAfterSec });
   }

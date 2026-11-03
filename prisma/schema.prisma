@@ -71,6 +71,8 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
+  sessions Session[]
+
   @@map("users")
 }
 
@@ -88,4 +90,25 @@ model OtpChallenge {
 
   @@index([email, purpose])
   @@map("otp_challenges")
+}
+
+model Session {
+  id           String    @id @default(uuid(7))
+  userId       String
+  familyId     String
+  refreshHash  String    @unique
+  previousHash String?   @unique
+  rotatedAt    DateTime?
+  userAgent    String
+  ip           String
+  lastUsedAt   DateTime
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("sessions")
 }

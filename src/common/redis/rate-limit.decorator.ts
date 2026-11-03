@@ -9,4 +9,5 @@ export interface RateLimitOptions {
 
 export const RATE_LIMIT_KEY = "skiller:rate-limit";
 
-export const RateLimit = (options: RateLimitOptions) => SetMetadata(RATE_LIMIT_KEY, options);
+/** One or more independent limits; the request is rejected if any of them is exhausted. */
+export const RateLimit = (...options: RateLimitOptions[]) => SetMetadata(RATE_LIMIT_KEY, options);

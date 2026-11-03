@@ -1,0 +1,40 @@
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import type { Request } from "express";
+import type { AuthUser } from "../../common/auth/auth-user";
+import { IS_PUBLIC_KEY } from "../../common/auth/public.decorator";
+import { AppError } from "../../common/errors/app-error";
+import { SessionService } from "./session.service";
+import { TokenService } from "./token.service";
+import { UserStatusCache } from "./user-status.cache";
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly tokens: TokenService,
+    private readonly sessions: SessionService,
+    private readonly statuses: UserStatusCache,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
+    if (isPublic) return true;
+
+    const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
+    const header = req.headers.authorization;
+    const match = typeof header === "string" ? /^Bearer\s+(\S+)$/i.exec(header) : null;
+    if (!match) throw new AppError("AUTH_REQUIRED", 401, "Authentication required");
+
+    const { sub, sid } = this.tokens.verifyAccess(match[1]);
+
+    if (await this.sessions.isRevoked(sid)) throw new AppError("AUTH_SESSION_REVOKED", 401, "Session has been revoked");
+
+    const status = await this.statuses.get(sub);
+    if (!status) throw new AppError("AUTH_TOKEN_INVALID", 401, "Invalid access token");
+    if (status !== "ACTIVE") throw new AppError("AUTH_ACCOUNT_SUSPENDED", 403, "Account is suspended");
+
+    req.user = { id: sub, sessionId: sid };
+    return true;
+  }
+}

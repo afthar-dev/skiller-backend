@@ -2,6 +2,7 @@ import { Controller, HttpCode, Inject, Post, Req } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
 import { Webhook } from "svix";
+import { Public } from "../../common/auth/public.decorator";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { AppError } from "../../common/errors/app-error";
@@ -17,6 +18,7 @@ const SUPPRESSING: Record<string, "bounced" | "complained"> = {
   "email.complained": "complained",
 };
 
+@Public()
 @Controller("webhooks")
 export class ResendWebhookController {
   constructor(
