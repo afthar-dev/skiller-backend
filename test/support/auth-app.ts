@@ -1,5 +1,6 @@
 import { INestApplication, ModuleMetadata } from "@nestjs/common";
 import { randomBytes, randomUUID } from "node:crypto";
+import { TestingModuleBuilder } from "@nestjs/testing";
 import request from "supertest";
 import { CLOCK } from "../../src/common/clock/clock";
 import { QueueWorkerRunner } from "../../src/common/queue/queue-worker.runner";
@@ -39,11 +40,17 @@ export interface AuthTestApp {
 }
 
 /** Full AppModule with a controllable clock, a fake Resend client and an in-process queue worker so OTP mails are delivered. */
-export async function createAuthTestApp(extra: Omit<ModuleMetadata, "imports"> = {}): Promise<AuthTestApp> {
+export async function createAuthTestApp(
+  extra: Omit<ModuleMetadata, "imports"> = {},
+  customize?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
+): Promise<AuthTestApp> {
   const clock = new FakeClock();
   const mail = new FakeResendClient();
   const app = await createTestApp(
-    (b) => b.overrideProvider(CLOCK).useValue(clock).overrideProvider(RESEND_CLIENT).useValue(mail),
+    (b) => {
+      const base = b.overrideProvider(CLOCK).useValue(clock).overrideProvider(RESEND_CLIENT).useValue(mail);
+      return customize ? customize(base) : base;
+    },
     extra,
   );
   const runner = app.get(QueueWorkerRunner);
