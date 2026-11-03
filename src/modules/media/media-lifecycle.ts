@@ -1,8 +1,17 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import type { Job } from "bullmq";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { toApiPurpose } from "./media.rules";
+
+/** A failure retrying cannot fix (corrupt file, too long, ...): the asset is marked FAILED right away with this reason. */
+export class PermanentMediaFailure extends Error {
+  constructor(public readonly reason: string) {
+    super(reason);
+    this.name = "PermanentMediaFailure";
+  }
+}
 
 export interface ReadyData {
   durationSec?: number | null;
@@ -50,5 +59,18 @@ export class MediaLifecycle {
       await this.outbox.enqueue(tx, { type: "media.failed", assetId, ownerId: asset.ownerId, reason });
       return true;
     });
+  }
+
+  /**
+   * Common error path of the processors. Permanent failures finish the asset immediately and swallow the error (no retry);
+   * anything else is rethrown so BullMQ retries, and only the final attempt marks the asset FAILED.
+   */
+  async handleJobError(job: Pick<Job, "attemptsMade" | "opts">, assetId: string, err: unknown): Promise<void> {
+    if (err instanceof PermanentMediaFailure) {
+      await this.markFailed(assetId, err.reason);
+      return;
+    }
+    if (job.attemptsMade + 1 >= (job.opts?.attempts ?? 1)) await this.markFailed(assetId, "PROCESSING_ERROR");
+    throw err;
   }
 }

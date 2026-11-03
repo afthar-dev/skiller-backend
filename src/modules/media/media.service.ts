@@ -12,13 +12,8 @@ import { InjectQueue } from "../../common/queue/queue.decorators";
 import { PermissionService } from "../rbac/permission.service";
 import { ProfilesService } from "../users/profiles.service";
 import { MediaLifecycle } from "./media-lifecycle";
-import { MEDIA_RULES, PART_SIZE, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { IMAGE_JOB, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, TRANSCODE_JOB, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { R2Client, isNoSuchUpload } from "./r2.client";
-
-export const TRANSCODE_JOB = "media.transcode";
-export const IMAGE_JOB = "media.image";
-/** Two attempts: the second one covers a transient storage / ffmpeg failure; the final failure marks the asset FAILED. */
-export const MEDIA_JOB_ATTEMPTS = 2;
 
 export interface MediaAssetDto {
   id: string;

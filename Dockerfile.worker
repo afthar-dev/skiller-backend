@@ -1,0 +1,27 @@
+# Background worker: BullMQ processors incl. the ffmpeg HLS transcoder. Build: docker build -f Dockerfile.worker -t skiller-worker .
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
+COPY package.json pnpm-lock.yaml ./
+# --ignore-scripts: ffmpeg-static (a dev dependency for tests) would otherwise download a binary; the image uses apt's ffmpeg.
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY prisma ./prisma
+RUN pnpm exec prisma generate
+COPY tsconfig.json tsconfig.build.json nest-cli.json ./
+COPY src ./src
+RUN pnpm build
+
+FROM node:24-bookworm-slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV NODE_ENV=production \
+    FFMPEG_PATH=ffmpeg \
+    FFPROBE_PATH=ffprobe
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/prisma ./prisma
+USER node
+CMD ["node", "dist/worker.js"]

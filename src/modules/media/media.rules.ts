@@ -6,6 +6,11 @@ const MB = 1024 * 1024;
 export const PART_SIZE = 10 * MB;
 export const PRESIGN_TTL_SEC = 3600;
 
+export const TRANSCODE_JOB = "media.transcode";
+export const IMAGE_JOB = "media.image";
+/** Two attempts: the second covers a transient storage / ffmpeg failure; the final failure marks the asset FAILED. */
+export const MEDIA_JOB_ATTEMPTS = 2;
+
 export type MediaKind = "image" | "video" | "file";
 
 export interface MediaRule {
