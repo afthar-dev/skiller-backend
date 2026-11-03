@@ -84,12 +84,6 @@ describe("playback gate", () => {
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(SEGMENT);
     });
 
-    it("supports byte ranges on segments", async () => {
-      const res = await get(withT(`/${prefix(ASSET)}/hls/360p/seg000.ts`), { headers: { Range: "bytes=2-5" } });
-      expect(res.status).toBe(206);
-      expect(res.headers.get("content-range")).toBe("bytes 2-5/10");
-      expect(new Uint8Array(await res.arrayBuffer())).toEqual(SEGMENT.slice(2, 6));
-    });
 
     it("serves the poster", async () => {
       const res = await get(withT(`/${prefix(ASSET)}/poster.jpg`));
@@ -106,6 +100,55 @@ describe("playback gate", () => {
     it("404s a valid token for a missing object", async () => {
       const res = await get(withT(`/${prefix(ASSET)}/hls/360p/seg999.ts`));
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe("layout / extension allow-list (valid token)", () => {
+    it.each([
+      ["a literal '..' inside a name", `/${prefix(ASSET)}/hls/a..b.m3u8`],
+      ["a literal % inside a name", `/${prefix(ASSET)}/hls/a%b.m3u8`],
+      ["source.mp4 under the asset prefix", `/${prefix(ASSET)}/source.mp4`],
+      ["json under hls", `/${prefix(ASSET)}/hls/360p/x.json`],
+      ["segment outside hls/", `/${prefix(ASSET)}/foo.ts`],
+      ["playlist outside hls/", `/${prefix(ASSET)}/foo.m3u8`],
+      ["poster.png", `/${prefix(ASSET)}/poster.png`],
+      ["incoming source", `/incoming/${ASSET}/source.mp4`],
+    ])("403: %s", async (_n, p) => {
+      expect((await get(withT(p))).status).toBe(403);
+    });
+
+    it.each(["hls/x.m4s", "hls/x.mp4", "hls/360p/x.m4s", "hls/360p/x.mp4", "hls/360p/seg000.ts", "hls/index.m3u8", "poster.jpg"])("serves %s", async (rel) => {
+      const key = `${prefix(ASSET)}/${rel}`;
+      await env.PRIVATE_BUCKET.put(key, rel.endsWith("m3u8") ? MASTER : SEGMENT);
+      expect((await get(withT(`/${key}`))).status).toBe(200);
+    });
+  });
+
+  describe("byte ranges (segment is 10 bytes)", () => {
+    const seg = `/${prefix(ASSET)}/hls/360p/seg000.ts`;
+    const ranged = (range: string) => get(withT(seg), { headers: { Range: range } });
+    const partial = async (range: string, start: number, end: number) => {
+      const res = await ranged(range);
+      expect(res.status).toBe(206);
+      expect(res.headers.get("content-range")).toBe(`bytes ${start}-${end}/10`);
+      expect(res.headers.get("content-length")).toBe(String(end - start + 1));
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(SEGMENT.slice(start, end + 1));
+    };
+    it("a-b", () => partial("bytes=2-5", 2, 5));
+    it("a-b clamps the end to the object", () => partial("bytes=7-99", 7, 9));
+    it("open-ended a-", () => partial("bytes=4-", 4, 9));
+    it("suffix -n", () => partial("bytes=-3", 7, 9));
+    it("suffix larger than the object returns all of it", () => partial("bytes=-99", 0, 9));
+    it.each(["bytes=10-", "bytes=10-12", "bytes=-0"])("416 for %s", async (range) => {
+      const res = await ranged(range);
+      expect(res.status).toBe(416);
+      expect(res.headers.get("content-range")).toBe("bytes */10");
+    });
+    it.each(["bytes=abc", "bytes=5-2", "items=1-2", "bytes=1-2,4-5", "bytes=-"])("ignores malformed %s and serves 200 in full", async (range) => {
+      const res = await ranged(range);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-length")).toBe("10");
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(SEGMENT);
     });
   });
 

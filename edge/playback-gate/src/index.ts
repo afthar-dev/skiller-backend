@@ -48,15 +48,18 @@ function fail(request: Request, env: Env, status: number, code: string): Respons
   return new Response(JSON.stringify({ error: { code } }), { status, headers });
 }
 
-/** Single `bytes=` range only; anything else is ignored and the full object is returned. */
-function parseRange(header: string | null): R2Range | undefined {
+/** Single `bytes=` range. undefined = absent/malformed (serve everything); "unsatisfiable" = 416; else inclusive byte bounds. */
+function resolveRange(header: string | null, size: number): { start: number; end: number } | "unsatisfiable" | undefined {
   const m = header && /^bytes=(\d*)-(\d*)$/.exec(header.trim());
   if (!m || (m[1] === "" && m[2] === "")) return undefined;
-  if (m[1] === "") return { suffix: Number(m[2]) };
-  const offset = Number(m[1]);
-  if (m[2] === "") return { offset };
-  const end = Number(m[2]);
-  return end >= offset ? { offset, length: end - offset + 1 } : undefined;
+  if (m[1] === "") {
+    const n = Number(m[2]);
+    return n === 0 || size === 0 ? "unsatisfiable" : { start: Math.max(0, size - n), end: size - 1 };
+  }
+  const start = Number(m[1]);
+  if (m[2] !== "" && Number(m[2]) < start) return undefined;
+  if (start >= size) return "unsatisfiable";
+  return { start, end: m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1) };
 }
 
 async function handle(request: Request, env: Env): Promise<Response> {
@@ -85,20 +88,25 @@ async function handle(request: Request, env: Env): Promise<Response> {
     return new Response(rewritePlaylist(await object.text(), token), { status: 200, headers });
   }
 
-  const range = parseRange(request.headers.get("Range"));
-  const object = await env.PRIVATE_BUCKET.get(key, range ? { range } : undefined);
+  const head = await env.PRIVATE_BUCKET.head(key);
+  if (!head) return fail(request, env, 404, "NOT_FOUND");
+  const range = resolveRange(request.headers.get("Range"), head.size);
+  if (range === "unsatisfiable") {
+    const res = fail(request, env, 416, "RANGE_NOT_SATISFIABLE");
+    res.headers.set("Content-Range", `bytes */${head.size}`);
+    return res;
+  }
+  const object = await env.PRIVATE_BUCKET.get(key, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined);
   if (!object) return fail(request, env, 404, "NOT_FOUND");
   headers.set("Cache-Control", SEGMENT_CACHE);
   headers.set("Accept-Ranges", "bytes");
   headers.set("ETag", object.httpEtag);
   let status = 200;
   let length = object.size;
-  if (range && object.range) {
-    const r = object.range as { offset?: number; length?: number };
-    const offset = r.offset ?? 0;
-    length = r.length ?? object.size - offset;
+  if (range) {
     status = 206;
-    headers.set("Content-Range", `bytes ${offset}-${offset + length - 1}/${object.size}`);
+    length = range.end - range.start + 1;
+    headers.set("Content-Range", `bytes ${range.start}-${range.end}/${object.size}`);
   }
   headers.set("Content-Length", String(length));
   return new Response(object.body, { status, headers });

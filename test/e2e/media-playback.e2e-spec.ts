@@ -117,6 +117,10 @@ describe("signed private playback", () => {
       expect(res.status).toBe(422);
       expect(res.body.error.code).toBe("MEDIA_NOT_PLAYABLE");
     }
+    const publicLesson = await lesson(owner, { bucket: "PUBLIC" });
+    const res2 = await playback(owner, publicLesson.id);
+    expect(res2.status).toBe(422);
+    expect(res2.body.error.code).toBe("MEDIA_NOT_PLAYABLE");
     expect((await playback(owner, uuidv7())).status).toBe(404);
     expect((await playback(owner, "not-a-uuid")).status).toBe(400);
   });
