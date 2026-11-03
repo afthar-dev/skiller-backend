@@ -105,6 +105,21 @@ describe("admin shell", () => {
       expect((await http().post(`/v1/admin/users/${randomUUID()}/suspend`).set(auth(admin)).send({ reason: "r" })).status).toBe(404);
     });
 
+    it("a non-super_admin cannot unsuspend a super_admin (ROLE_ESCALATION_DENIED); a super_admin can", async () => {
+      const other = await t.login();
+      expect((await http().post(`/v1/admin/users/${other.userId}/roles`).set(auth(admin)).send({ roleKey: "super_admin" })).status).toBe(201);
+      expect((await http().post(`/v1/admin/users/${other.userId}/suspend`).set(auth(admin)).send({ reason: "audit" })).status).toBe(200);
+
+      const moderator = await staffWith(["user.suspend", "user.view"]);
+      const denied = await http().post(`/v1/admin/users/${other.userId}/unsuspend`).set(auth(moderator));
+      expect(denied.status).toBe(403);
+      expect(denied.body.error.code).toBe("ROLE_ESCALATION_DENIED");
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: other.userId } })).status).toBe("SUSPENDED");
+      expect(await audit("user.unsuspend", other.userId)).toHaveLength(0);
+
+      expect((await http().post(`/v1/admin/users/${other.userId}/unsuspend`).set(auth(admin))).status).toBe(200);
+    });
+
     it("Redis outage while revoking: 503, the suspension stays committed and the user is still blocked; a retry completes it", async () => {
       const victim = await t.login();
       const redis = t.app.get<Redis>(REDIS);
@@ -362,6 +377,38 @@ describe("admin shell", () => {
       expect((await http().put("/v1/admin/flags").set(auth(admin)).send({ key: "ok_flag", enabled: true, rules: { percent: 101 } })).status).toBe(400);
       const plain = await t.login();
       expect((await http().get("/v1/admin/flags").set(auth(plain))).status).toBe(403);
+    });
+  });
+
+  describe("dead outbox events", () => {
+    it("lists events whose delivery was given up (audit.view), newest first and paginated; others get 403", async () => {
+      const marker = uid();
+      const make = (n: number) =>
+        prisma.outboxEvent.create({ data: { type: "user.registered", payload: { userId: randomUUID(), email: `dead-${marker}-${n}@example.com` }, publishedAt: new Date(), attempts: 1, deadAt: new Date(), lastError: `boom ${marker} ${n}` } });
+      const rows = [await make(1), await make(2), await make(3)];
+      const alive = await prisma.outboxEvent.create({ data: { type: "user.registered", payload: { userId: randomUUID(), email: `alive-${marker}@example.com` }, publishedAt: new Date() } });
+
+      const support = await staffWith(["audit.view"], false);
+      const first = await http().get("/v1/admin/outbox/dead?limit=2").set(auth(support));
+      expect(first.status).toBe(200);
+      expect(first.body.items).toHaveLength(2);
+      expect(first.body.nextCursor).toBeTruthy();
+      expect(first.body.items[0]).toEqual(expect.objectContaining({ id: expect.any(String), type: "user.registered", lastError: expect.stringContaining("boom"), deadAt: expect.any(String), createdAt: expect.any(String) }));
+
+      const all: { id: string }[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: request.Response = await http().get(`/v1/admin/outbox/dead?limit=100${cursor ? `&cursor=${cursor}` : ""}`).set(auth(support));
+        all.push(...page.body.items);
+        cursor = page.body.nextCursor;
+      } while (cursor);
+      const ids = all.map((i) => i.id);
+      for (const r of rows) expect(ids).toContain(r.id);
+      expect(ids).not.toContain(alive.id);
+      expect(ids.indexOf(rows[2].id)).toBeLessThan(ids.indexOf(rows[0].id));
+
+      const plain = await t.login();
+      expect((await http().get("/v1/admin/outbox/dead").set(auth(plain))).status).toBe(403);
     });
   });
 

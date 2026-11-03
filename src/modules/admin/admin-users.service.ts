@@ -130,6 +130,9 @@ export class AdminUsersService {
 
   async unsuspend(actorId: string, targetId: string, meta: MutationMeta = {}) {
     if (actorId === targetId) throw new AppError("ADMIN_SELF_ACTION", 403, "You cannot change your own account status");
+    if ((await this.roles.platformRoleKeys(targetId)).includes(SUPER_ADMIN_ROLE_KEY) && !(await this.roles.platformRoleKeys(actorId)).includes(SUPER_ADMIN_ROLE_KEY)) {
+      throw new AppError("ROLE_ESCALATION_DENIED", 403, "Only a super admin can unsuspend a super admin");
+    }
     const previous = await this.prisma.$transaction(async (tx) => {
       // changeStatus locks the row and throws USER_DELETED for a deleted account (the throw rolls back), so no unlocked pre-read.
       const from = await this.accounts.changeStatus(tx, targetId, "ACTIVE");
