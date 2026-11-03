@@ -1,0 +1,16 @@
+name = "skiller-playback-gate"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Production route: the host of the API's R2_PLAYBACK_BASE_URL.
+# routes = [{ pattern = "play.skiller.in/*", zone_name = "skiller.in" }]
+
+[vars]
+# Comma-separated; keep equal to the API's CORS_ORIGINS.
+ALLOWED_ORIGINS = "http://localhost:5173,https://app.skiller.in"
+
+[[r2_buckets]]
+binding = "PRIVATE_BUCKET"
+bucket_name = "skiller-private"
+
+# Secret (not in this file): `wrangler secret put PLAYBACK_SECRET`, same value as the API's PLAYBACK_SECRET.

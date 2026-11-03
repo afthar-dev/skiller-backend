@@ -1,0 +1,69 @@
+{
+  "secret": "test-playback-secret-0123456789abcdef",
+  "nowSec": 2000000000,
+  "valid": [
+    {
+      "name": "fresh token",
+      "claims": {
+        "u": "0192f3a0-0000-7000-8000-0000000000b1",
+        "a": "0192f3a0-0000-7000-8000-00000000000a",
+        "exp": 2000000600
+      },
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzn8"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "tampered payload (exp extended)",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwOTk5OX0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzn8"
+    },
+    {
+      "name": "tampered signature",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzAA"
+    },
+    {
+      "name": "expired",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MTk5OTk5OTk5OX0.HdDWQjnmQyxauWHBRPo8KR7FDKBglTV9YiLkrX4O68Y"
+    },
+    {
+      "name": "expires exactly now",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDAwMH0.TYNsW8dNdO6MSfd4xf63z86sJ0y-EubpMvALv4gey2I"
+    },
+    {
+      "name": "signed with another secret",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.zcyG5F6ApTLK9kxeYBOn0nWARQHMyQZzueZsiL4dTxs"
+    },
+    {
+      "name": "missing signature",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0"
+    },
+    {
+      "name": "empty",
+      "token": ""
+    },
+    {
+      "name": "three parts",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzn8.x"
+    },
+    {
+      "name": "payload not json",
+      "token": "bm9wZQ.WzJeMC7FFhcYP3iDX8SGjJsE4stGo_0ihjSCoVMzjNA"
+    },
+    {
+      "name": "claims missing exp",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSJ9.cgHQgI5cHC94p6V-JGZiValZpfAAY-HLV4OAHAiTte8"
+    },
+    {
+      "name": "claims wrong types",
+      "token": "eyJ1IjoxLCJhIjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiZXhwIjoiMjAwMDAwMDYwMCJ9.dAI-L5LL_PZYXpLBiBinP0B39SOvp5QC6sWsA7OYQ8s"
+    },
+    {
+      "name": "oversized (over 512 chars)",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMCwicGFkIjoieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4In0.Y-kI9Rcgi1yrl_5y0dnwbCp_JNS2av0qr3ShXPuUwfY"
+    },
+    {
+      "name": "standard base64 padding chars",
+      "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzn8=="
+    }
+  ]
+}

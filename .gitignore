@@ -6,3 +6,5 @@ coverage/
 .superpowers/
 *.log
 test/fixtures/*.mp4
+edge/**/node_modules/
+edge/**/.wrangler/

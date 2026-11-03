@@ -13,6 +13,7 @@
     "test:int": "jest --selectProjects integration --runInBand",
     "test:e2e": "jest --selectProjects e2e --runInBand",
     "test:all": "jest --runInBand",
+    "test:edge": "pnpm --dir edge/playback-gate test",
     "db:migrate:new": "prisma migrate dev --skip-seed --name",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",

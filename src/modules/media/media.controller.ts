@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
+import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { RequirePermission } from "../rbac/require-permission.decorator";
 import { API_PURPOSES, toPurpose } from "./media.rules";
 import { MediaService } from "./media.service";
+import { PlaybackService } from "./playback.service";
 
 const createSchema = z
   .object({
@@ -28,7 +30,10 @@ const idParam = z.string().uuid();
 
 @Controller("media")
 export class MediaController {
-  constructor(private readonly media: MediaService) {}
+  constructor(
+    private readonly media: MediaService,
+    private readonly playback: PlaybackService,
+  ) {}
 
   /** Starts an upload session: returns presigned URLs the client PUTs the bytes to (one per 10 MB part). */
   @Post("uploads")
@@ -43,6 +48,13 @@ export class MediaController {
   @RequirePermission("media.upload")
   complete(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.media.complete(user.id, idParam.parse(id), completeSchema.parse(body ?? {}).parts);
+  }
+
+  /** Signed HLS manifest URL (10-minute token) for a private lesson video. Access is decided by the registered playback policies. */
+  @Get(":id/playback")
+  @AuthenticatedOnly()
+  playbackGrant(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.playback.grant(user.id, idParam.parse(id));
   }
 
   /** Poll target for the frontend: status plus public URLs once READY. */
