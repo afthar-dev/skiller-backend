@@ -1,5 +1,4 @@
 import { Global, Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
@@ -24,9 +23,9 @@ import { UserStatusCache } from "./user-status.cache";
     StepUpService,
     StepUpGuard,
     AuthService,
+    AuthGuard,
     { provide: MEMBER_ROLE_GRANTER, useClass: NoopMemberRoleGranter },
-    { provide: APP_GUARD, useClass: AuthGuard },
   ],
-  exports: [OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard, MEMBER_ROLE_GRANTER],
+  exports: [AuthGuard, OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard, MEMBER_ROLE_GRANTER],
 })
 export class IdentityModule {}

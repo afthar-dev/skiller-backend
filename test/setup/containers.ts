@@ -14,7 +14,10 @@ export async function startContainers(): Promise<TestContainers> {
     new RedisContainer("redis:7-alpine").start(),
   ]);
   const databaseUrl = pg.getConnectionUri();
-  execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: databaseUrl }, stdio: "ignore" });
+  const env = { ...process.env, DATABASE_URL: databaseUrl, SUPER_ADMIN_EMAIL: "admin@skiller.test" };
+  execSync("npx prisma migrate deploy", { env, stdio: "ignore" });
+  // Permissions, system roles (member, support, ...) and the bootstrap super admin: sign-up needs the `member` role to exist.
+  execSync("npx prisma db seed", { env, stdio: "inherit" });
   return {
     databaseUrl,
     redisUrl: redis.getConnectionUrl(),

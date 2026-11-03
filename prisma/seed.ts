@@ -1,0 +1,31 @@
+import { PrismaClient } from "@prisma/client";
+import { z } from "zod";
+import { permissionRegistry } from "../src/modules/rbac/permission.registry";
+import { bootstrapSuperAdmin, seedSystemRoles, syncPermissions } from "../src/modules/rbac/permission-sync";
+import "../src/modules/rbac/permissions";
+
+/** Idempotent: permissions, system roles and the SUPER_ADMIN_EMAIL user with the super_admin role. */
+export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
+  const sync = await syncPermissions(prisma, permissionRegistry);
+  const roles = await seedSystemRoles(prisma);
+  await bootstrapSuperAdmin(prisma, superAdminEmail);
+  return { ...sync, roles };
+}
+
+async function main() {
+  const superAdminEmail = z.string().email().parse(process.env.SUPER_ADMIN_EMAIL);
+  const prisma = new PrismaClient();
+  try {
+    const result = await runSeed(prisma, superAdminEmail);
+    console.log(`seed: ${result.inserted.length} permission(s) inserted, ${result.orphans.length} orphan(s), roles created: ${result.roles.join(", ") || "none"}`);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

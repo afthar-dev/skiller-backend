@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Req, Res 
 import type { CookieOptions, Request, Response } from "express";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
+import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { APP_CONFIG } from "../../common/config/config.module";
@@ -76,6 +77,7 @@ export class AuthController {
     }
   }
 
+  @AuthenticatedOnly()
   @Post("logout")
   @HttpCode(204)
   async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
@@ -83,12 +85,14 @@ export class AuthController {
     this.clearRefreshCookie(res);
   }
 
+  @AuthenticatedOnly()
   @Post("step-up/request")
   @HttpCode(202)
   async requestStepUp(@CurrentUser() user: AuthUser, @Req() req: Request) {
     return this.auth.requestStepUp(user.id, req.ip ?? "unknown");
   }
 
+  @AuthenticatedOnly()
   @Post("step-up/verify")
   @HttpCode(204)
   async verifyStepUp(@CurrentUser() user: AuthUser, @Body() body: unknown) {
@@ -96,6 +100,7 @@ export class AuthController {
     await this.auth.verifyStepUp(user.id, user.sessionId, challengeId, code);
   }
 
+  @AuthenticatedOnly()
   @Get("sessions")
   async listSessions(@CurrentUser() user: AuthUser) {
     const rows = await this.sessions.list(user.id);
@@ -112,12 +117,14 @@ export class AuthController {
     };
   }
 
+  @AuthenticatedOnly()
   @Post("sessions/revoke-others")
   @HttpCode(204)
   async revokeOthers(@CurrentUser() user: AuthUser) {
     await this.sessions.revokeAllForUser(user.id, user.sessionId);
   }
 
+  @AuthenticatedOnly()
   @Delete("sessions/:id")
   @HttpCode(204)
   async revokeSession(@CurrentUser() user: AuthUser, @Param("id") id: string, @Res({ passthrough: true }) res: Response) {

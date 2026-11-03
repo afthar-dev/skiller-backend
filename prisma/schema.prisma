@@ -72,6 +72,7 @@ model User {
   updatedAt       DateTime   @updatedAt
 
   sessions Session[]
+  roles    UserRole[]
 
   @@map("users")
 }
@@ -111,4 +112,68 @@ model Session {
   @@index([userId])
   @@index([familyId])
   @@map("sessions")
+}
+
+// ─── rbac ────────────────────────────────────────────────────────────────
+
+enum RoleScope {
+  PLATFORM
+  ORG
+}
+
+model Permission {
+  id          String   @id @default(uuid(7))
+  key         String   @unique
+  description String
+  module      String
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id          String    @id @default(uuid(7))
+  key         String    @unique
+  name        String
+  scope       RoleScope
+  isSystem    Boolean   @default(false)
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// orgId is NULL for platform-wide grants. The unique index is recreated as NULLS NOT DISTINCT in the migration
+// (Postgres 15+), so a platform grant cannot be duplicated either.
+model UserRole {
+  id          String    @id @default(uuid(7))
+  userId      String
+  roleId      String
+  orgId       String?
+  grantedById String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, orgId])
+  @@index([roleId])
+  @@map("user_roles")
 }

@@ -1,11 +1,13 @@
 import { Controller, Get } from "@nestjs/common";
 import request from "supertest";
+import { AuthenticatedOnly } from "../../src/common/auth/authenticated-only.decorator";
 import { RequireStepUp } from "../../src/modules/identity/require-step-up.decorator";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
 
 @Controller("test-step-up")
 class ProtectedTestController {
   @Get()
+  @AuthenticatedOnly()
   @RequireStepUp()
   protectedRoute() {
     return { ok: true };

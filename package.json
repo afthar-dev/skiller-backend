@@ -14,7 +14,12 @@
     "test:e2e": "jest --selectProjects e2e --runInBand",
     "test:all": "jest --runInBand",
     "db:migrate:new": "prisma migrate dev --skip-seed --name",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:seed": "prisma db seed",
+    "db:sync-permissions": "ts-node scripts/sync-permissions.ts"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "engines": {
     "node": ">=22"
