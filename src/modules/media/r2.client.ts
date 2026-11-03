@@ -1,5 +1,6 @@
 import {
   AbortMultipartUploadCommand,
+  CopyObjectCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
@@ -25,6 +26,10 @@ const isMissing = (err: unknown) => {
   const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
   return e?.name === "NotFound" || e?.name === "NoSuchKey" || e?.$metadata?.httpStatusCode === 404;
 };
+// Parts carry no content type of their own (the final object gets the one given at CreateMultipartUpload).
+const PART_SIGNED_HEADERS = new Set(["content-length"]);
+const SIGNED_HEADERS = new Set(["content-length", "content-type"]);
+
 export const isNoSuchUpload = (err: unknown) => (err as { name?: string })?.name === "NoSuchUpload";
 
 /** Thin S3 wrapper (Cloudflare R2 in production, MinIO in tests). */
@@ -56,17 +61,25 @@ export class R2Client implements OnApplicationShutdown {
     return res.UploadId;
   }
 
-  /** One presigned UploadPart URL per part (numbered from 1), valid for 1 h. */
-  presignParts(bucket: MediaBucket, key: string, uploadId: string, partCount: number): Promise<string[]> {
+  /** One presigned UploadPart URL per part (numbered from 1). Each URL signs that part's exact Content-Length. */
+  presignParts(bucket: MediaBucket, key: string, uploadId: string, partSizes: number[]): Promise<string[]> {
     return Promise.all(
-      Array.from({ length: partCount }, (_, i) =>
-        getSignedUrl(this.s3, new UploadPartCommand({ Bucket: this.buckets[bucket], Key: key, UploadId: uploadId, PartNumber: i + 1 }), { expiresIn: PRESIGN_TTL_SEC }),
+      partSizes.map((size, i) =>
+        getSignedUrl(this.s3, new UploadPartCommand({ Bucket: this.buckets[bucket], Key: key, UploadId: uploadId, PartNumber: i + 1, ContentLength: size }), {
+          expiresIn: PRESIGN_TTL_SEC,
+          signableHeaders: PART_SIGNED_HEADERS,
+        }),
       ),
     );
   }
 
-  presignPut(bucket: MediaBucket, key: string): Promise<string> {
-    return getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.buckets[bucket], Key: key }), { expiresIn: PRESIGN_TTL_SEC });
+  /** Single PUT that only accepts exactly contentLength bytes of contentType (both are part of the signature). */
+  presignPut(bucket: MediaBucket, key: string, opts: { contentLength: number; contentType: string }): Promise<string> {
+    return getSignedUrl(
+      this.s3,
+      new PutObjectCommand({ Bucket: this.buckets[bucket], Key: key, ContentLength: opts.contentLength, ContentType: opts.contentType }),
+      { expiresIn: PRESIGN_TTL_SEC, signableHeaders: SIGNED_HEADERS },
+    );
   }
 
   async completeMultipart(bucket: MediaBucket, key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void> {
@@ -87,10 +100,10 @@ export class R2Client implements OnApplicationShutdown {
   }
 
   /** `null` when the object does not exist. */
-  async head(bucket: MediaBucket, key: string): Promise<{ size: number } | null> {
+  async head(bucket: MediaBucket, key: string): Promise<{ size: number; etag: string | undefined } | null> {
     try {
       const res = await this.s3.send(new HeadObjectCommand({ Bucket: this.buckets[bucket], Key: key }));
-      return { size: Number(res.ContentLength ?? 0) };
+      return { size: Number(res.ContentLength ?? 0), etag: res.ETag };
     } catch (err) {
       if (isMissing(err)) return null;
       throw err;
@@ -128,14 +141,28 @@ export class R2Client implements OnApplicationShutdown {
     return keys;
   }
 
-  async getObject(bucket: MediaBucket, key: string): Promise<Readable> {
-    const res = await this.s3.send(new GetObjectCommand({ Bucket: this.buckets[bucket], Key: key }));
+  /** ifMatch makes the read fail with PreconditionFailed when the object was replaced since its ETag was recorded. */
+  async getObject(bucket: MediaBucket, key: string, opts: { ifMatch?: string; range?: string } = {}): Promise<Readable> {
+    const res = await this.s3.send(new GetObjectCommand({ Bucket: this.buckets[bucket], Key: key, IfMatch: opts.ifMatch, Range: opts.range }));
     return res.Body as Readable;
   }
 
   /** Streams to disk: sources can be several GB. */
-  async downloadTo(bucket: MediaBucket, key: string, path: string): Promise<void> {
-    await pipeline(await this.getObject(bucket, key), createWriteStream(path));
+  async downloadTo(bucket: MediaBucket, key: string, path: string, opts: { ifMatch?: string } = {}): Promise<void> {
+    await pipeline(await this.getObject(bucket, key, opts), createWriteStream(path));
+  }
+
+  /** First length bytes (for magic-number checks). */
+  async readHead(bucket: MediaBucket, key: string, length: number, opts: { ifMatch?: string } = {}): Promise<Buffer> {
+    const stream = await this.getObject(bucket, key, { ...opts, range: `bytes=0-${length - 1}` });
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(Buffer.from(c as Buffer));
+    return Buffer.concat(chunks);
+  }
+
+  async copy(bucket: MediaBucket, fromKey: string, toKey: string): Promise<void> {
+    const source = encodeURIComponent(`${this.buckets[bucket]}/${fromKey}`).replace(/%2F/g, "/");
+    await this.s3.send(new CopyObjectCommand({ Bucket: this.buckets[bucket], Key: toKey, CopySource: source }));
   }
 
   async putObject(bucket: MediaBucket, key: string, body: Buffer | Uint8Array | string, contentType: string): Promise<void> {

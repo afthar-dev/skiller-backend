@@ -383,11 +383,14 @@ model MediaAsset {
   renditions    Json?
   posterKey     String?
   failureReason String?
+  sourceEtag    String?
   attachedAt    DateTime?
+  detachedAt    DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
   @@index([ownerId, createdAt])
   @@index([attachedAt, createdAt])
+  @@index([ownerId, status])
   @@map("media_assets")
 }

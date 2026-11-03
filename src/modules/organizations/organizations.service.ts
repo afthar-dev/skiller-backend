@@ -128,7 +128,10 @@ export class OrganizationsService {
     if (patch.logoAssetId !== undefined) data.logoAssetId = patch.logoAssetId;
     const updated = await this.prisma.$transaction(async (tx) => {
       // Logos are uploaded with purpose "avatar" by whoever manages the org; the uploader owns the asset.
-      if (patch.logoAssetId) await this.media.attach(tx, patch.logoAssetId, actorId, "AVATAR");
+      if (patch.logoAssetId !== undefined && patch.logoAssetId !== current.logoAssetId) {
+        if (patch.logoAssetId) await this.media.attach(tx, patch.logoAssetId, actorId, "AVATAR");
+        if (current.logoAssetId) await this.media.detach(tx, current.logoAssetId);
+      }
       const row = await tx.organization.update({ where: { id: current.id }, data });
       await this.audit.record(tx, { actorId, action: "org.update", targetType: "organization", targetId: current.id, before: toView(current), after: toView(row), ...meta });
       return row;

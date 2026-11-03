@@ -10,6 +10,12 @@ export const ffmpegPath = () => process.env.FFMPEG_PATH || "ffmpeg";
 export const ffprobePath = () => process.env.FFPROBE_PATH || "ffprobe";
 
 export const SEGMENT_SECONDS = 6;
+export const PROBE_TIMEOUT_MS = 30_000;
+export const TRANSCODE_TIMEOUT_MS = 30 * 60_000;
+
+/** Inputs are untrusted: only plain local files may be opened (no http/tcp/concat/subfile/... from inside a crafted container). */
+const INPUT_GUARD = ["-protocol_whitelist", "file"];
+const EXEC = { maxBuffer: 16 * 1024 * 1024, killSignal: "SIGKILL" as const };
 
 export type RungName = "240p" | "480p" | "720p" | "1080p";
 
@@ -38,12 +44,27 @@ export function ladderFor(sourceHeight: number): Rung[] {
 export const ladderBasis = (d: { width: number; height: number }) => Math.min(d.width, d.height);
 
 export interface ProbeResult {
+  /** ffprobe's container name, e.g. "mov,mp4,m4a,3gp,3g2,mj2" or "matroska,webm". */
+  formatName: string;
   durationSec: number;
   width: number;
   height: number;
   hasVideo: boolean;
   hasAudio: boolean;
 }
+
+/** The tool ran past its time limit and was killed. */
+export class MediaTimeoutError extends Error {
+  constructor(public readonly tool: "ffmpeg" | "ffprobe") {
+    super(`${tool} timed out`);
+    this.name = "MediaTimeoutError";
+  }
+}
+
+const timedOut = (err: unknown) => {
+  const e = err as { killed?: boolean; signal?: string };
+  return e.killed === true && e.signal === "SIGKILL";
+};
 
 export class MediaToolError extends Error {
   constructor(
@@ -65,14 +86,19 @@ interface ProbeStream {
 }
 
 /** `cwd` lets callers probe an HLS playlist by relative name (the HLS demuxer cannot resolve segments next to a Windows absolute path). */
-export async function probe(path: string, cwd?: string): Promise<ProbeResult> {
+export async function probe(path: string, cwd?: string, opts: { timeoutMs?: number } = {}): Promise<ProbeResult> {
   let stdout: string;
   try {
-    ({ stdout } = await run(ffprobePath(), ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", path], { maxBuffer: 16 * 1024 * 1024, cwd }));
+    ({ stdout } = await run(ffprobePath(), ["-v", "error", ...INPUT_GUARD, "-print_format", "json", "-show_format", "-show_streams", path], {
+      ...EXEC,
+      cwd,
+      timeout: opts.timeoutMs ?? PROBE_TIMEOUT_MS,
+    }));
   } catch (err) {
+    if (timedOut(err)) throw new MediaTimeoutError("ffprobe");
     throw new MediaToolError(`ffprobe failed: ${(err as Error).message.split("\n")[0]}`, "ffprobe");
   }
-  const json = JSON.parse(stdout) as { streams?: ProbeStream[]; format?: { duration?: string } };
+  const json = JSON.parse(stdout) as { streams?: ProbeStream[]; format?: { duration?: string; format_name?: string } };
   const streams = json.streams ?? [];
   const video = streams.find((s) => s.codec_type === "video" && s.width && s.height);
   const hasAudio = streams.some((s) => s.codec_type === "audio");
@@ -80,8 +106,10 @@ export async function probe(path: string, cwd?: string): Promise<ProbeResult> {
   // Phone footage is often stored landscape with a rotation flag; ffmpeg auto-rotates, so report the displayed size.
   const rotation = Math.abs(Number(video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? video?.tags?.rotate ?? 0)) % 180;
   const [width, height] = video ? (rotation === 90 ? [video.height!, video.width!] : [video.width!, video.height!]) : [0, 0];
-  const duration = Number(json.format?.duration ?? video?.duration ?? streams.find((s) => s.duration)?.duration ?? 0);
-  return { durationSec: Number.isFinite(duration) ? duration : 0, width, height, hasVideo: Boolean(video), hasAudio };
+  // Container headers can understate what the streams really hold, so the longest claim wins.
+  const claims = [json.format?.duration, ...streams.map((s) => s.duration)].map(Number).filter((n) => Number.isFinite(n));
+  const duration = claims.length > 0 ? Math.max(...claims) : 0;
+  return { formatName: json.format?.format_name ?? "", durationSec: duration, width, height, hasVideo: Boolean(video), hasAudio };
 }
 
 export interface TranscodedRendition {
@@ -106,7 +134,12 @@ export function buildMasterPlaylist(renditions: Pick<TranscodedRendition, "name"
  * H.264 + AAC HLS (VOD, 6 s segments), one variant per rung under `outDir/<name>/` and a master playlist at
  * `outDir/index.m3u8`. Portrait sources are scaled on their width, so the rung is the short side.
  */
-export async function transcodeToHls(input: string, outDir: string, ladder: Rung[]): Promise<TranscodedRendition[]> {
+export async function transcodeToHls(
+  input: string,
+  outDir: string,
+  ladder: Rung[],
+  opts: { timeoutMs?: number; maxDurationSec?: number } = {},
+): Promise<TranscodedRendition[]> {
   const source = await probe(input);
   if (!source.hasVideo) throw new MediaToolError("no video stream", "ffprobe");
   const portrait = source.height > source.width;
@@ -117,7 +150,9 @@ export async function transcodeToHls(input: string, outDir: string, ladder: Rung
     const dir = join(outDir, rung.name);
     await mkdir(dir, { recursive: true });
     const args = [
-      "-y", "-loglevel", "error", "-i", input,
+      "-y", "-loglevel", "error", ...INPUT_GUARD, "-i", input,
+      // Output cap: whatever the container claimed, a reel's renditions can never run longer than the limit.
+      ...(opts.maxDurationSec !== undefined ? ["-t", String(opts.maxDurationSec)] : []),
       "-map", "0:v:0", "-map", "0:a:0?",
       "-vf", portrait ? `scale=${rung.height}:-2` : `scale=-2:${rung.height}`,
       "-c:v", "libx264", "-preset", "veryfast", "-profile:v", "main", "-pix_fmt", "yuv420p",
@@ -129,8 +164,9 @@ export async function transcodeToHls(input: string, outDir: string, ladder: Rung
       "-hls_segment_filename", "seg%03d.ts", "index.m3u8",
     ];
     try {
-      await run(ffmpegPath(), args, { cwd: dir, maxBuffer: 16 * 1024 * 1024 });
+      await run(ffmpegPath(), args, { ...EXEC, cwd: dir, timeout: opts.timeoutMs ?? TRANSCODE_TIMEOUT_MS });
     } catch (err) {
+      if (timedOut(err)) throw new MediaTimeoutError("ffmpeg");
       throw new MediaToolError(`ffmpeg failed (${rung.name}): ${(err as Error).message.slice(0, 500)}`, "ffmpeg");
     }
     const dims = await probe("index.m3u8", dir);
@@ -141,13 +177,15 @@ export async function transcodeToHls(input: string, outDir: string, ladder: Rung
 }
 
 /** One JPEG frame, taken at `atSec` (clamped into the clip). */
-export async function extractPoster(input: string, output: string, atSec: number, durationSec: number): Promise<void> {
+export async function extractPoster(input: string, output: string, atSec: number, durationSec: number, opts: { timeoutMs?: number } = {}): Promise<void> {
   const at = Math.max(0, Math.min(atSec, durationSec / 2));
   try {
-    await run(ffmpegPath(), ["-y", "-loglevel", "error", "-ss", at.toFixed(2), "-i", input, "-frames:v", "1", "-vf", "scale='min(1280,iw)':-2", "-q:v", "3", output], {
-      maxBuffer: 16 * 1024 * 1024,
+    await run(ffmpegPath(), ["-y", "-loglevel", "error", ...INPUT_GUARD, "-ss", at.toFixed(2), "-i", input, "-frames:v", "1", "-vf", "scale='min(1280,iw)':-2", "-q:v", "3", output], {
+      ...EXEC,
+      timeout: opts.timeoutMs ?? PROBE_TIMEOUT_MS * 2,
     });
   } catch (err) {
+    if (timedOut(err)) throw new MediaTimeoutError("ffmpeg");
     throw new MediaToolError(`ffmpeg poster failed: ${(err as Error).message.slice(0, 500)}`, "ffmpeg");
   }
 }

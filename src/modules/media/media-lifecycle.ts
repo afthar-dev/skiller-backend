@@ -19,6 +19,7 @@ export interface ReadyData {
   height?: number | null;
   renditions?: Prisma.InputJsonValue;
   posterKey?: string | null;
+  objectKey?: string;
 }
 
 /**

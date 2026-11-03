@@ -6,17 +6,17 @@ import type { JobProcessor } from "../../common/queue/job-processor";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { MediaLifecycle, PermanentMediaFailure } from "./media-lifecycle";
-import { IMAGE_JOB, assetPrefix } from "./media.rules";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { IMAGE_FORMAT_FOR_MIME, IMAGE_JOB, SOURCE_BUCKET, assetPrefix, sourcePrefixOf } from "./media.rules";
+import { fetchSource } from "./source-fetch";
 import { R2Client } from "./r2.client";
 
 export const IMAGE_SIZES = [256, 1024] as const;
 const WEBP_QUALITY = 82;
 
-async function toBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Buffer));
-  return Buffer.concat(chunks);
-}
+const INPUT_OPTIONS = { failOn: "error" as const, limitInputPixels: 100_000_000 };
 
 @Injectable()
 export class ImageProcessor implements JobProcessor, OnModuleInit {
@@ -43,14 +43,19 @@ export class ImageProcessor implements JobProcessor, OnModuleInit {
     if (!asset || !["UPLOADED", "PROCESSING"].includes(asset.status)) return;
     await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PROCESSING" } });
 
+    const dir = await mkdtemp(join(tmpdir(), "skiller-media-"));
     try {
-      const source = await toBuffer(await this.r2.getObject(asset.bucket, asset.objectKey));
+      // Streamed to disk, size and ETag verified first: the worker never buffers an unbounded upload.
+      const source = join(dir, "source");
+      await fetchSource(this.r2, asset, source);
       let meta: Awaited<ReturnType<ReturnType<typeof sharp>["metadata"]>>;
       try {
-        meta = await sharp(source).metadata();
+        meta = await sharp(source, INPUT_OPTIONS).metadata();
       } catch {
         throw new PermanentMediaFailure("INVALID_IMAGE");
       }
+      // Only real jpeg/png/webp, and it must be what the client declared (no SVG/GIF/TIFF/HEIF slipped in as image/jpeg).
+      if (meta.format !== IMAGE_FORMAT_FOR_MIME[asset.mime]) throw new PermanentMediaFailure("MEDIA_TYPE_MISMATCH");
       // EXIF orientations 5-8 swap the displayed width and height.
       const swapped = (meta.orientation ?? 1) >= 5;
       const width = (swapped ? meta.height : meta.width) ?? 0;
@@ -60,7 +65,7 @@ export class ImageProcessor implements JobProcessor, OnModuleInit {
       const prefix = assetPrefix(asset);
       const renditions: Record<string, string> = {};
       for (const size of IMAGE_SIZES) {
-        let pipeline = sharp(source).rotate();
+        let pipeline = sharp(source, INPUT_OPTIONS).rotate();
         if (asset.purpose === "AVATAR") {
           const side = Math.min(size, width, height);
           pipeline = pipeline.resize(side, side, { fit: "cover", position: "centre" });
@@ -77,10 +82,14 @@ export class ImageProcessor implements JobProcessor, OnModuleInit {
         await this.r2.putObject(asset.bucket, key, out, "image/webp");
         renditions[String(size)] = key;
       }
-      await this.lifecycle.markReady(assetId, { width, height, renditions });
+      const ready = await this.lifecycle.markReady(assetId, { width, height, renditions });
+      // Drops the original (with its EXIF/GPS); only the re-encoded variants remain.
+      if (ready) await this.r2.deletePrefix(SOURCE_BUCKET, sourcePrefixOf(assetId));
     } catch (err) {
       this.logger.warn(`asset ${assetId}: ${(err as Error).message}`);
       await this.lifecycle.handleJobError(job, assetId, err);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   }
 }

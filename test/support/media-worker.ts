@@ -19,12 +19,13 @@ export async function createMediaWorkerHarness() {
     import("../../src/modules/mail/mail.module"),
     import("../../src/modules/media/media-worker.module"),
   ]);
-  const [{ QueueWorkerRunner }, { PrismaService }, { R2Client }, { TranscodeProcessor }, { ImageProcessor }, { MediaCleanupProcessor }, { EventBus }, { QueueNames, queueToken }] = await Promise.all([
+  const [{ QueueWorkerRunner }, { PrismaService }, { R2Client }, { TranscodeProcessor }, { ImageProcessor }, { FileProcessor }, { MediaCleanupProcessor }, { EventBus }, { QueueNames, queueToken }] = await Promise.all([
     import("../../src/common/queue/queue-worker.runner"),
     import("../../src/common/prisma/prisma.service"),
     import("../../src/modules/media/r2.client"),
     import("../../src/modules/media/transcode.processor"),
     import("../../src/modules/media/image.processor"),
+    import("../../src/modules/media/file.processor"),
     import("../../src/modules/media/media-cleanup.processor"),
     import("../../src/common/outbox/event-bus"),
     import("../../src/common/queue/queue.constants"),
@@ -50,13 +51,18 @@ export async function createMediaWorkerHarness() {
     ageHours?: number;
     attached?: boolean;
     uploadId?: string;
+    declaredSize?: number;
+    detachedHoursAgo?: number;
   }) {
     const id = uuidv7();
     const ownerId = opts.ownerId ?? uuidv7();
     const bucket = opts.purpose === "COURSE_LESSON" || opts.purpose === "COURSE_RESOURCE" ? "PRIVATE" : "PUBLIC";
     const prefix = `${opts.purpose.toLowerCase()}/${ownerId}/${id}`;
+    const sourceKey = `incoming/${id}/source`;
     const body = typeof opts.source === "string" ? readFileSync(fixturePath(opts.source)) : opts.source;
-    if (body) await r2.putObject(bucket, `${prefix}/source`, body, opts.mime ?? "application/octet-stream");
+    // Sources always wait in the private bucket, whatever the purpose; the ETag is what `complete` records.
+    if (body) await r2.putObject("PRIVATE", sourceKey, body, opts.mime ?? "application/octet-stream");
+    const sourceEtag = body ? (await r2.head("PRIVATE", sourceKey))?.etag : undefined;
     const created = new Date(Date.now() - (opts.ageHours ?? 0) * 3600_000);
     const row = await prisma.mediaAsset.create({
       data: {
@@ -65,16 +71,18 @@ export async function createMediaWorkerHarness() {
         purpose: opts.purpose,
         bucket,
         status: opts.status ?? "PROCESSING",
-        objectKey: `${prefix}/source`,
+        objectKey: sourceKey,
+        sourceEtag,
+        detachedAt: opts.detachedHoursAgo !== undefined ? new Date(Date.now() - opts.detachedHoursAgo * 3600_000) : null,
         filename: "clip.mp4",
         mime: opts.mime ?? "video/mp4",
-        declaredSize: BigInt(body?.length ?? 1),
+        declaredSize: BigInt(opts.declaredSize ?? body?.length ?? 1),
         uploadId: opts.uploadId,
         attachedAt: opts.attached ? new Date() : null,
         createdAt: created,
       },
     });
-    return { row, prefix, bucket } as const;
+    return { row, prefix, bucket, sourceKey } as const;
   }
 
   const events = async (assetId: string, type: string) =>
@@ -86,6 +94,7 @@ export async function createMediaWorkerHarness() {
     r2,
     transcode: moduleRef.get(TranscodeProcessor),
     image: moduleRef.get(ImageProcessor),
+    file: moduleRef.get(FileProcessor),
     cleanup: moduleRef.get(MediaCleanupProcessor),
     bus: moduleRef.get(EventBus),
     runner: moduleRef.get(QueueWorkerRunner),

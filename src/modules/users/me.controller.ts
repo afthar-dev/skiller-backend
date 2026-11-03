@@ -112,9 +112,15 @@ export class MeController {
   updateProfile(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     const patch = profilePatch.parse(body);
     // Attaching happens in the profile update's own transaction: a media asset that is not usable rejects the whole PATCH.
-    return this.profiles.update(auth.id, patch, async (tx) => {
-      if (patch.avatarAssetId) await this.media.attach(tx, patch.avatarAssetId, auth.id, "AVATAR");
-      if (patch.bannerAssetId) await this.media.attach(tx, patch.bannerAssetId, auth.id, "BANNER");
+    return this.profiles.update(auth.id, patch, async (tx, current) => {
+      // Attach the new asset and release the one it replaces (or the one being cleared) in the same transaction.
+      const swap = async (next: string | null | undefined, old: string | null, purpose: "AVATAR" | "BANNER") => {
+        if (next === undefined || next === old) return;
+        if (next) await this.media.attach(tx, next, auth.id, purpose);
+        if (old) await this.media.detach(tx, old);
+      };
+      await swap(patch.avatarAssetId, current.avatarAssetId, "AVATAR");
+      await swap(patch.bannerAssetId, current.bannerAssetId, "BANNER");
     });
   }
 

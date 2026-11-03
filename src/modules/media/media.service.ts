@@ -6,13 +6,16 @@ import { CLOCK, type Clock } from "../../common/clock/clock";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { AppError } from "../../common/errors/app-error";
+import type { Redis } from "ioredis";
+import { consumeRateLimit } from "../../common/redis/rate-limiter";
+import { REDIS } from "../../common/redis/redis.constants";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
 import { PermissionService } from "../rbac/permission.service";
 import { ProfilesService } from "../users/profiles.service";
 import { MediaLifecycle } from "./media-lifecycle";
-import { IMAGE_JOB, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, TRANSCODE_JOB, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { R2Client, isNoSuchUpload } from "./r2.client";
 
 export interface MediaAssetDto {
@@ -53,28 +56,33 @@ export class MediaService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
     @InjectQueue(QueueNames.media) private readonly queue: Queue,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  async createUpload(userId: string, input: CreateUploadInput): Promise<{ assetId: string; partSize: number; partUrls: string[] }> {
+  async createUpload(userId: string, input: CreateUploadInput): Promise<{ assetId: string; partSize: number; partUrls: string[]; putHeaders?: Record<string, string> }> {
     const { purpose } = input;
     if (requiresCreator(purpose) && !(await this.profiles.isCreator(userId))) {
       throw new AppError("CREATOR_REQUIRED", 403, "Only creators can upload this kind of media");
     }
     const rule = validateUpload(purpose, input.mime, input.size);
+    await this.enforceCaps(userId);
     const id = uuidv7();
-    const objectKey = `${assetPrefix({ purpose, ownerId: userId, id })}/source`;
+    const objectKey = sourceKeyOf(id);
+    const mime = input.mime.toLowerCase();
 
     await this.prisma.mediaAsset.create({
       data: { id, ownerId: userId, purpose, bucket: rule.bucket, objectKey, filename: input.filename.slice(0, 255), mime: input.mime.toLowerCase(), declaredSize: BigInt(input.size) },
     });
     try {
       if (rule.kind === "image") {
-        // Images are capped at 10 MB = one part: a single presigned PUT, no multipart upload.
-        return { assetId: id, partSize: PART_SIZE, partUrls: [await this.r2.presignPut(rule.bucket, objectKey)] };
+        // Images are capped at 10 MB = one part: a single presigned PUT, no multipart upload. The URL only accepts
+        // exactly the declared length and content type.
+        const url = await this.r2.presignPut(SOURCE_BUCKET, objectKey, { contentLength: input.size, contentType: mime });
+        return { assetId: id, partSize: PART_SIZE, partUrls: [url], putHeaders: { "Content-Type": mime } };
       }
-      const uploadId = await this.r2.createMultipart(rule.bucket, objectKey, input.mime.toLowerCase());
+      const uploadId = await this.r2.createMultipart(SOURCE_BUCKET, objectKey, mime);
       await this.prisma.mediaAsset.update({ where: { id }, data: { uploadId } });
-      const partUrls = await this.r2.presignParts(rule.bucket, objectKey, uploadId, Math.ceil(input.size / PART_SIZE));
+      const partUrls = await this.r2.presignParts(SOURCE_BUCKET, objectKey, uploadId, partSizes(input.size));
       return { assetId: id, partSize: PART_SIZE, partUrls };
     } catch (err) {
       await this.prisma.mediaAsset.deleteMany({ where: { id } });
@@ -103,19 +111,15 @@ export class MediaService {
     }
 
     const kind = MEDIA_RULES[asset.purpose].kind;
-    if (kind === "file") {
-      // Nothing to process: documents are usable as soon as the bytes are in place.
-      await this.lifecycle.markReady(assetId);
-    } else {
-      try {
-        await this.queue.add(kind === "image" ? IMAGE_JOB : TRANSCODE_JOB, { assetId }, { jobId: assetId, attempts: MEDIA_JOB_ATTEMPTS, backoff: { type: "fixed", delay: 5000 } });
-      } catch (err) {
-        await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PENDING" } });
-        throw err;
-      }
-      // The worker may already be past this point (it moves the asset itself); the guard keeps this from going backwards.
-      await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PROCESSING" } });
+    const job = kind === "image" ? IMAGE_JOB : kind === "video" ? TRANSCODE_JOB : FILE_JOB;
+    try {
+      await this.queue.add(job, { assetId }, { jobId: assetId, attempts: MEDIA_JOB_ATTEMPTS, backoff: { type: "fixed", delay: 5000 } });
+    } catch (err) {
+      await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PENDING" } });
+      throw err;
     }
+    // The worker may already be past this point (it moves the asset itself); the guard keeps this from going backwards.
+    await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PROCESSING" } });
     return this.dto(await this.owned(userId, assetId));
   }
 
@@ -132,11 +136,32 @@ export class MediaService {
    */
   async attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
     const usable = { id: assetId, ownerId, purpose, status: "READY" as const };
-    const flipped = await tx.mediaAsset.updateMany({ where: { ...usable, attachedAt: null }, data: { attachedAt: this.clock.now() } });
+    const flipped = await tx.mediaAsset.updateMany({ where: { ...usable, attachedAt: null }, data: { attachedAt: this.clock.now(), detachedAt: null } });
     if (flipped.count === 1) return;
     // Already attached is fine (re-saving the same avatar); anything else is not usable.
     if ((await tx.mediaAsset.count({ where: usable })) === 0) {
       throw new AppError("MEDIA_NOT_USABLE", 422, "This media cannot be used here: it must be your own, fully processed upload of the right type");
+    }
+  }
+
+  /**
+   * Releases an asset that a profile / org no longer references. It stays for 24 h (caches, in-flight pages), then the
+   * cleanup job deletes it. Call it in the same transaction that drops the reference.
+   */
+  async detach(tx: Prisma.TransactionClient, assetId: string): Promise<void> {
+    await tx.mediaAsset.updateMany({ where: { id: assetId, attachedAt: { not: null } }, data: { attachedAt: null, detachedAt: this.clock.now() } });
+  }
+
+  private async enforceCaps(userId: string): Promise<void> {
+    const pending = await this.prisma.mediaAsset.count({ where: { ownerId: userId, status: "PENDING" } });
+    if (pending >= MAX_PENDING_UPLOADS) {
+      throw new AppError("UPLOAD_LIMIT_REACHED", 429, `You have ${MAX_PENDING_UPLOADS} unfinished uploads; finish or wait for them to expire`);
+    }
+    try {
+      await consumeRateLimit(this.redis, `media-upload:${userId}`, UPLOADS_PER_HOUR, 3600);
+    } catch (err) {
+      if (err instanceof AppError && err.code === "RATE_LIMITED") throw new AppError("UPLOAD_LIMIT_REACHED", 429, "Too many upload sessions; try again later", err.details);
+      throw err;
     }
   }
 
@@ -145,19 +170,22 @@ export class MediaService {
       if (parts.length === 0) throw new AppError("UPLOAD_INCOMPLETE", 409, "Parts are required to complete a multipart upload");
       const ordered = [...parts].sort((a, b) => a.partNumber - b.partNumber);
       try {
-        await this.r2.completeMultipart(asset.bucket, asset.objectKey, asset.uploadId, ordered);
+        await this.r2.completeMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId, ordered);
       } catch (err) {
         // A previous attempt may have completed the upload and then failed later: the object is then already in place.
         if (!isNoSuchUpload(err)) throw new AppError("UPLOAD_INCOMPLETE", 409, "The upload could not be completed; check the part list and ETags");
       }
     }
-    const head = await this.r2.head(asset.bucket, asset.objectKey);
+    const head = await this.r2.head(SOURCE_BUCKET, asset.objectKey);
     if (!head) throw new AppError("UPLOAD_INCOMPLETE", 409, "The file has not been uploaded yet");
     if (head.size !== Number(asset.declaredSize)) {
-      await this.r2.delete(asset.bucket, asset.objectKey).catch(() => undefined);
+      await this.r2.delete(SOURCE_BUCKET, asset.objectKey).catch(() => undefined);
       await this.lifecycle.markFailed(asset.id, "UPLOAD_SIZE_MISMATCH");
       throw new AppError("UPLOAD_SIZE_MISMATCH", 422, "The uploaded file size does not match the declared size", { declared: Number(asset.declaredSize), actual: head.size });
     }
+    // The worker reads the source with If-Match on this ETag: replacing the object after this point (the single-PUT URL
+    // stays valid for its TTL) makes the job fail instead of processing swapped bytes.
+    await this.prisma.mediaAsset.update({ where: { id: asset.id }, data: { sourceEtag: head.etag ?? null } });
   }
 
   private async owned(userId: string, assetId: string): Promise<MediaAsset> {

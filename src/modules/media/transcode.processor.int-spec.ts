@@ -1,9 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fixturePath } from "../../../test/fixtures/make-fixtures";
 import { createMediaWorkerHarness, type MediaWorkerHarness } from "../../../test/support/media-worker";
-import { ffmpegPath } from "./ffmpeg";
+import { ffmpegPath, ladderFor, probe, transcodeToHls } from "./ffmpeg";
 
 const hasFfmpeg = spawnSync(ffmpegPath(), ["-version"]).status === 0;
 if (!hasFfmpeg) {
@@ -54,6 +57,75 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
 
     expect(await h.events(row.id, "media.ready")).toHaveLength(1);
     expect(mediaTmpDirs()).toEqual(before); // the working directory is always removed
+  });
+
+  it("the source is deleted after READY and the public bucket never holds one", async () => {
+    const { row, sourceKey } = await h.createAsset({ purpose: "REEL", source: "sample-3s-180p.mp4", mime: "video/mp4" });
+    await run(row.id);
+    expect(await h.r2.head("PRIVATE", sourceKey)).toBeNull();
+    expect((await h.r2.listKeys("PUBLIC", "")).filter((k) => k.endsWith("/source"))).toEqual([]);
+  });
+
+  it("a course lesson keeps its private source for reprocessing", async () => {
+    const { row, sourceKey } = await h.createAsset({ purpose: "COURSE_LESSON", source: "sample-3s-180p.mp4", mime: "video/mp4" });
+    await run(row.id);
+    expect((await reload(row.id)).status).toBe("READY");
+    expect(await h.r2.head("PRIVATE", sourceKey)).not.toBeNull();
+  });
+
+  it("a source overwritten after complete (ETag changed) fails with SOURCE_CHANGED", async () => {
+    const { row, sourceKey } = await h.createAsset({ purpose: "REEL", source: "sample-3s-180p.mp4", mime: "video/mp4" });
+    await h.r2.putObject("PRIVATE", sourceKey, readFileSync(fixturePath("sample-3s-720p.mp4")), "video/mp4");
+    await run(row.id);
+    expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "SOURCE_CHANGED" });
+  });
+
+  it("a source whose size differs from the declared size fails with UPLOAD_SIZE_MISMATCH", async () => {
+    const { row } = await h.createAsset({ purpose: "REEL", source: "sample-3s-180p.mp4", mime: "video/mp4", declaredSize: 5 });
+    await run(row.id);
+    expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "UPLOAD_SIZE_MISMATCH" });
+  });
+
+  it("an HLS playlist renamed .mp4 is rejected (container allowlist / protocol whitelist), nothing is fetched", async () => {
+    const playlist = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nhttp://127.0.0.1:9/x.ts\n#EXT-X-ENDLIST\n";
+    const { row } = await h.createAsset({ purpose: "REEL", source: Buffer.from(playlist), mime: "video/mp4" });
+    await run(row.id);
+    const done = await reload(row.id);
+    expect(done.status).toBe("FAILED");
+    expect(done.failureReason).toMatch(/^(MEDIA_TYPE_MISMATCH|INVALID_MEDIA)$/);
+  });
+
+  it("a 91 s reel is rejected, a 90 s reel is accepted (no tolerance)", async () => {
+    const tooLong = await h.createAsset({ purpose: "REEL", source: "sample-91s-video-only.mp4", mime: "video/mp4" });
+    await run(tooLong.row.id);
+    expect(await reload(tooLong.row.id)).toMatchObject({ status: "FAILED", failureReason: "DURATION_EXCEEDED" });
+    const ok = await h.createAsset({ purpose: "REEL", source: "sample-90s-video-only.mp4", mime: "video/mp4" });
+    await run(ok.row.id);
+    const done = await reload(ok.row.id);
+    expect(done.status).toBe("READY");
+    expect(done.durationSec).toBeLessThanOrEqual(90);
+  }, 180_000);
+
+  it("transcodeToHls with a duration cap never produces a longer output", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "skiller-cap-"));
+    try {
+      await transcodeToHls(fixturePath("sample-3s-180p.mp4"), dir, ladderFor(180), { maxDurationSec: 2 });
+      expect((await probe("index.m3u8", join(dir, "240p"))).durationSec).toBeLessThanOrEqual(2.1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("a hung ffmpeg is killed and the asset fails with PROCESSING_TIMEOUT", async () => {
+    const { row } = await h.createAsset({ purpose: "COURSE_LESSON", source: "sample-portrait-100s.mp4", mime: "video/mp4" });
+    const original = h.transcode.transcodeTimeoutMs;
+    h.transcode.transcodeTimeoutMs = 1;
+    try {
+      await run(row.id);
+    } finally {
+      h.transcode.transcodeTimeoutMs = original;
+    }
+    expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "PROCESSING_TIMEOUT" });
   });
 
   it("a source shorter than 240p gets only the 240p rendition", async () => {

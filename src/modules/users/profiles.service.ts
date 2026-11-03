@@ -141,8 +141,8 @@ export class ProfilesService {
     return new Map(rows.map((r) => [r.userId, toSummary(r)]));
   }
 
-  /** `inTx` runs inside the update's transaction before the write (used to attach media so a rejected asset aborts the whole update). */
-  async update(userId: string, patch: ProfilePatch, inTx?: (tx: Prisma.TransactionClient) => Promise<void>): Promise<ProfileView> {
+  /** `inTx` runs inside the update's transaction before the write, with the current row (used to attach/detach media so a rejected asset aborts the whole update). */
+  async update(userId: string, patch: ProfilePatch, inTx?: (tx: Prisma.TransactionClient, current: Profile) => Promise<void>): Promise<ProfileView> {
     await this.ensure(userId);
     const data: Prisma.ProfileUpdateInput = {};
     if (patch.handle !== undefined) {
@@ -165,7 +165,7 @@ export class ProfilesService {
     try {
       return toProfileView(
         await this.prisma.$transaction(async (tx) => {
-          if (inTx) await inTx(tx);
+          if (inTx) await inTx(tx, await tx.profile.findUniqueOrThrow({ where: { userId } }));
           return tx.profile.update({ where: { userId }, data });
         }),
       );

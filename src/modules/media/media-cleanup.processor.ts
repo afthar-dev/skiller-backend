@@ -6,7 +6,7 @@ import type { JobProcessor } from "../../common/queue/job-processor";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
-import { assetPrefix } from "./media.rules";
+import { SOURCE_BUCKET, assetPrefix, sourcePrefixOf } from "./media.rules";
 import { R2Client } from "./r2.client";
 
 export const MEDIA_CLEANUP_JOB = "media.cleanup";
@@ -52,7 +52,12 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
     let after: string | undefined;
     for (;;) {
       const batch = await this.prisma.mediaAsset.findMany({
-        where: { attachedAt: null, createdAt: { lt: cutoff }, ...(after ? { id: { gt: after } } : {}) },
+        where: {
+          attachedAt: null,
+          // Never attached: 24 h after creation. Detached (replaced/cleared by its owner): 24 h after detaching.
+          OR: [{ detachedAt: null, createdAt: { lt: cutoff } }, { detachedAt: { lt: cutoff } }],
+          ...(after ? { id: { gt: after } } : {}),
+        },
         orderBy: { id: "asc" },
         take: BATCH_SIZE,
       });
@@ -83,7 +88,8 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
         if (!asset) return false;
         const removed = await tx.mediaAsset.deleteMany({ where: { id, attachedAt: null } });
         if (removed.count === 0) return false;
-        if (asset.status === "PENDING" && asset.uploadId) await this.r2.abortMultipart(asset.bucket, asset.objectKey, asset.uploadId);
+        if (asset.status === "PENDING" && asset.uploadId) await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
+        await this.r2.deletePrefix(SOURCE_BUCKET, sourcePrefixOf(asset.id));
         await this.r2.deletePrefix(asset.bucket, `${assetPrefix(asset)}/`);
         return true;
       },

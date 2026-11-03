@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Queue } from "bullmq";
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
+import { R2Client } from "../../src/modules/media/r2.client";
 import { QueueNames, queueToken } from "../../src/common/queue/queue.constants";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
 
@@ -20,9 +21,12 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
     http().post(`/v1/media/uploads/${id}/complete`).set(auth(s)).send(parts ? { parts } : {});
   const get = (s: Session, id: string) => http().get(`/v1/media/${id}`).set(auth(s));
 
-  async function put(url: string, body: Buffer): Promise<string> {
-    const res = await fetch(url, { method: "PUT", body });
-    expect(res.status).toBe(200);
+  async function putRaw(url: string, body: Buffer, headers: Record<string, string> = {}) {
+    return fetch(url, { method: "PUT", body, headers });
+  }
+  async function put(url: string, body: Buffer, headers: Record<string, string> = {}): Promise<string> {
+    const res = await putRaw(url, body, headers);
+    if (res.status !== 200) throw new Error(`PUT ${res.status}: ${await res.text()}`);
     return res.headers.get("etag")!;
   }
 
@@ -30,10 +34,10 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
   async function upload(s: Session, purpose: string, mime: string, bytes: Buffer, declared = bytes.length) {
     const res = await create(s, { purpose, filename: "f.bin", mime, size: declared });
     expect(res.status).toBe(201);
-    const { assetId, partSize, partUrls } = res.body as { assetId: string; partSize: number; partUrls: string[] };
+    const { assetId, partSize, partUrls, putHeaders } = res.body as { assetId: string; partSize: number; partUrls: string[]; putHeaders?: Record<string, string> };
     const parts: { partNumber: number; etag: string }[] = [];
     for (let i = 0; i < partUrls.length; i++) {
-      const etag = await put(partUrls[i], bytes.subarray(i * partSize, (i + 1) * partSize));
+      const etag = await put(partUrls[i], bytes.subarray(i * partSize, (i + 1) * partSize), putHeaders);
       parts.push({ partNumber: i + 1, etag });
     }
     return { assetId, partUrls, parts };
@@ -61,7 +65,7 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       expect((await http().post("/v1/media/uploads").send({})).status).toBe(401);
     });
 
-    it("images get one presigned PUT and no multipart upload id; the key follows {purpose}/{owner}/{asset}/source", async () => {
+    it("images get one presigned PUT and no multipart upload id; the source key is incoming/{asset}/source", async () => {
       const s = await t.login();
       const res = await create(s, { purpose: "avatar", filename: "me.png", mime: "image/png", size: 1000 });
       expect(res.status).toBe(201);
@@ -69,7 +73,9 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       expect(res.body.partSize).toBe(10 * MB);
       const row = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: res.body.assetId } });
       expect(row).toMatchObject({ ownerId: s.userId, purpose: "AVATAR", bucket: "PUBLIC", status: "PENDING", uploadId: null });
-      expect(row.objectKey).toBe(`avatar/${s.userId}/${row.id}/source`);
+      // every source lands in the private bucket under incoming/, whatever the purpose
+      expect(row.objectKey).toBe(`incoming/${row.id}/source`);
+      expect(res.body.putHeaders).toEqual({ "Content-Type": "image/png" });
     });
 
     it("videos use multipart: one URL per 10 MB part", async () => {
@@ -165,15 +171,23 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       expect(await jobsFor(assetId)).toHaveLength(1);
     });
 
-    it("one byte short -> UPLOAD_SIZE_MISMATCH and the asset is FAILED", async () => {
+    it("size differing from the declared size -> UPLOAD_SIZE_MISMATCH and the asset is FAILED", async () => {
       const s = await t.login();
-      const { assetId } = await upload(s, "avatar", "image/png", randomBytes(999), 1000);
+      const { assetId } = await upload(s, "avatar", "image/png", randomBytes(1000));
+      await prisma.mediaAsset.update({ where: { id: assetId }, data: { declaredSize: 1001n } });
       const res = await complete(s, assetId);
       expect(res.status).toBe(422);
       expect(res.body.error.code).toBe("UPLOAD_SIZE_MISMATCH");
       const status = await get(s, assetId);
       expect(status.body).toMatchObject({ status: "FAILED", failureReason: "UPLOAD_SIZE_MISMATCH" });
       expect(await jobsFor(assetId)).toHaveLength(0);
+    });
+
+    it("records the source ETag at complete", async () => {
+      const s = await t.login();
+      const { assetId } = await upload(s, "avatar", "image/png", png());
+      await complete(s, assetId);
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } })).sourceEtag).toBeTruthy();
     });
 
     it("completing before uploading anything is a retryable 409, not a failure", async () => {
@@ -190,6 +204,64 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       const b = await t.login();
       const { assetId } = await upload(a, "avatar", "image/png", png());
       expect((await complete(b, assetId)).status).toBe(404);
+    });
+  });
+
+  describe("presigned scope", () => {
+    it("a single PUT with more or fewer bytes than declared is rejected by storage (Content-Length is signed)", async () => {
+      const s = await t.login();
+      const res = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 1000 });
+      const over = await putRaw(res.body.partUrls[0], randomBytes(2000), res.body.putHeaders);
+      expect(over.status).toBeGreaterThanOrEqual(400);
+      const under = await putRaw(res.body.partUrls[0], randomBytes(999), res.body.putHeaders);
+      expect(under.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("a different Content-Type is rejected (Content-Type is signed)", async () => {
+      const s = await t.login();
+      const res = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 1000 });
+      const bad = await putRaw(res.body.partUrls[0], randomBytes(1000), { "Content-Type": "text/html" });
+      expect(bad.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("a multipart part larger than its signed length is rejected", async () => {
+      const s = await creator();
+      const res = await create(s, { purpose: "reel", filename: "r.mp4", mime: "video/mp4", size: 2 * MB });
+      const bad = await putRaw(res.body.partUrls[0], randomBytes(3 * MB));
+      expect(bad.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("the public bucket never holds a source object; sources wait in the private bucket", async () => {
+      const s = await creator();
+      const { assetId } = await upload(s, "avatar", "image/png", png());
+      await complete(s, assetId);
+      const r2 = t.app.get(R2Client);
+      expect((await r2.listKeys("PUBLIC", "")).filter((k) => k.endsWith("/source"))).toEqual([]);
+      expect(await r2.listKeys("PRIVATE", `incoming/${assetId}/`)).toEqual([`incoming/${assetId}/source`]);
+    });
+  });
+
+  describe("abuse caps", () => {
+    it("max 10 PENDING assets per user -> 429 UPLOAD_LIMIT_REACHED", async () => {
+      const s = await t.login();
+      for (let i = 0; i < 10; i++) expect((await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 })).status).toBe(201);
+      const res = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 });
+      expect(res.status).toBe(429);
+      expect(res.body.error.code).toBe("UPLOAD_LIMIT_REACHED");
+    });
+
+    it("30 sessions per hour per user -> 429 UPLOAD_LIMIT_REACHED with Retry-After", async () => {
+      const s = await t.login();
+      for (let i = 0; i < 30; i++) {
+        const r = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 });
+        expect(r.status).toBe(201);
+        await prisma.mediaAsset.update({ where: { id: r.body.assetId }, data: { status: "FAILED" } }); // stay under the pending cap
+      }
+      const res = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 });
+      expect(res.status).toBe(429);
+      expect(res.body.error.code).toBe("UPLOAD_LIMIT_REACHED");
+      expect(res.body.error.details.retryAfterSec).toBeGreaterThan(0);
+      expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
     });
   });
 
@@ -253,6 +325,33 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       expect((await patch({ avatarAssetId: pending.id })).body.error.code).toBe("MEDIA_NOT_USABLE");
       expect((await patch({ avatarAssetId: "00000000-0000-7000-8000-000000000000" })).body.error.code).toBe("MEDIA_NOT_USABLE");
       expect((await patch({ avatarAssetId: "not-a-uuid" })).status).toBe(400);
+    });
+
+    it("replacing or clearing an avatar detaches the old asset", async () => {
+      const s = await t.login();
+      const first = await readyAsset(s, "AVATAR");
+      const second = await readyAsset(s, "AVATAR");
+      const patch = (body: object) => http().patch("/v1/me/profile").set(auth(s)).send(body);
+      await patch({ avatarAssetId: first });
+      await patch({ avatarAssetId: first }); // re-saving the same asset keeps it attached
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: first } })).attachedAt).not.toBeNull();
+      await patch({ avatarAssetId: second });
+      const old = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: first } });
+      expect(old.attachedAt).toBeNull();
+      expect(old.detachedAt).not.toBeNull();
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: second } })).attachedAt).not.toBeNull();
+      await patch({ avatarAssetId: null });
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: second } })).detachedAt).not.toBeNull();
+    });
+
+    it("replacing an org logo detaches the old one", async () => {
+      const owner = await t.login();
+      const org = await http().post("/v1/orgs").set(auth(owner)).send({ name: "Swap Org", slug: `swap-${Math.random().toString(36).slice(2, 10)}` });
+      const a = await readyAsset(owner, "AVATAR");
+      const b = await readyAsset(owner, "AVATAR");
+      await http().patch(`/v1/orgs/${org.body.slug}`).set(auth(owner)).send({ logoAssetId: a });
+      await http().patch(`/v1/orgs/${org.body.slug}`).set(auth(owner)).send({ logoAssetId: b });
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: a } })).detachedAt).not.toBeNull();
     });
 
     it("avatarAssetId: null clears the avatar", async () => {
