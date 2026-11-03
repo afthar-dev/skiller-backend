@@ -701,6 +701,8 @@ model Order {
   updatedAt         DateTime        @updatedAt
 
   items             OrderItem[]
+  invoice           Invoice?
+  refunds           Refund[]
   coupon            Coupon?         @relation(fields: [couponId], references: [id], onDelete: Restrict)
   planVersion       PlanVersion     @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   duplicatePayments DuplicatePayment[]
@@ -803,4 +805,76 @@ model IdempotencyRecord {
   @@unique([userId, route, key])
   @@index([createdAt])
   @@map("idempotency_records")
+}
+
+// ─── invoices and refunds ────────────────────────────────────────────────
+
+/// One tax invoice per paid order or per subscription charge. The number is allocated from invoice_counters in the same transaction
+/// that creates the row (gap-free per financial year); the PDF is rendered from `details` and uploaded afterwards (uploadedAt).
+model Invoice {
+  id              String           @id @default(uuid(7))
+  number          String           @unique
+  orderId         String?          @unique
+  /// Razorpay payment id of a subscription charge: the idempotency key of a subscription invoice.
+  paymentId       String?          @unique
+  subscriptionId  String?
+  /// The user who paid (order buyer / subscription notify user): may download.
+  buyerUserId     String?
+  /// The seller of an order invoice (null for subscriptions): may download when it is a user.
+  sellerOwnerType SellerOwnerType?
+  sellerOwnerId   String?
+  objectKey       String
+  totalPaise      BigInt
+  taxPaise        BigInt
+  /// Everything the PDF prints, frozen at issue time so a retry renders the same document.
+  details         Json
+  issuedAt        DateTime
+  uploadedAt      DateTime?
+  createdAt       DateTime         @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([buyerUserId, id])
+  @@index([uploadedAt, createdAt])
+  @@map("invoices")
+}
+
+/// Last number issued per financial year ("2026-27"). Locked FOR UPDATE while a number is allocated.
+model InvoiceCounter {
+  fy         String @id
+  lastNumber Int    @default(0)
+
+  @@map("invoice_counters")
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  PROCESSED
+  REJECTED
+  FAILED
+}
+
+/// Full refunds only in Phase 2. At most one refund per order is live (REQUESTED..PROCESSED): partial unique index
+/// refunds_order_live_key (hand-written in the migration; `migrate dev` proposes to drop it: strip that line).
+model Refund {
+  id               String       @id @default(uuid(7))
+  orderId          String
+  amountPaise      BigInt
+  status           RefundStatus @default(REQUESTED)
+  reason           String
+  /// A user id, or "system" for automatic refunds.
+  requestedBy      String
+  decidedBy        String?
+  razorpayRefundId String?      @unique
+  failureReason    String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@map("refunds")
 }

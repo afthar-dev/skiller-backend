@@ -16,6 +16,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "subscription.changed": true,
   "order.paid": true,
   "order.fulfilment_failed": true,
+  "order.hold_released": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
 };
@@ -47,7 +48,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     const { queueToken, QueueNames } = await import("./common/queue/queue.constants");
     const { WebhookDispatcher } = await import("./modules/billing");
     const schedulers = await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers();
-    expect(schedulers.map((x) => x.key)).toEqual(expect.arrayContaining(["orders.expire", "idempotency.cleanup"]));
+    expect(schedulers.map((x) => x.key)).toEqual(expect.arrayContaining(["orders.expire", "idempotency.cleanup", "holds.release", "invoices.complete"]));
     expect(app.get(WebhookDispatcher).registeredTypes()).toEqual(expect.arrayContaining(["payment.captured", "payment.failed"]));
   });
 });

@@ -4,15 +4,21 @@ import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { IdempotencyCleanup } from "../../common/idempotency";
 import { OrganizationsModule } from "../organizations";
+import { ObjectStorageModule } from "../media";
 import { UsersModule } from "../users";
 import { WalletModule } from "../wallet";
 import { AdminBillingController } from "./admin-billing.controller";
-import { CheckoutController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
+import { CheckoutController, InvoicesController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
 import { CheckoutService } from "./checkout.service";
 import { CouponsService } from "./coupons.service";
 import { EntitlementsModule } from "./entitlements.module";
 import { FinanceAlerts } from "./finance-alerts.service";
 import { FulfilmentService } from "./fulfilment.service";
+import { HoldReleaseProcessor } from "./hold-release.processor";
+import { InvoiceHandlers } from "./invoice-handlers";
+import { InvoiceIssuer } from "./invoice-issuer";
+import { InvoicesProcessor } from "./invoices.processor";
+import { InvoicesService } from "./invoices.service";
 import { OrderHandlers } from "./order-handlers";
 import { OrderMaintenanceProcessor } from "./order-maintenance.processor";
 import { OrdersService } from "./orders.service";
@@ -46,15 +52,19 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   FulfilmentService,
   OrderHandlers,
   OrderMaintenanceProcessor,
+  HoldReleaseProcessor,
+  InvoiceIssuer,
+  InvoiceHandlers,
+  InvoicesProcessor,
 ];
 
-export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor];
+export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor];
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
-  imports: [ClockModule, EntitlementsModule, WalletModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
-  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, AdminBillingController],
-  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService],
+  imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
+  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, InvoicesController, AdminBillingController],
+  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService, InvoicesService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
 })
 export class BillingModule {}

@@ -17,6 +17,7 @@ import { RequirePermission } from "../rbac";
 import { ProfilesService } from "../users";
 import { CheckoutService } from "./checkout.service";
 import { FulfilmentService } from "./fulfilment.service";
+import { InvoicesService } from "./invoices.service";
 import { OrdersService } from "./orders.service";
 import { PlansService } from "./plans.service";
 import { RAZORPAY_CLIENT, type RazorpayClient } from "./razorpay.client";
@@ -197,5 +198,19 @@ export class OrdersController {
   @ApiOperation({ summary: "One of my orders" })
   get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.orders.getFor(user.id, id);
+  }
+}
+
+@ApiTags("Invoices")
+@Controller("invoices")
+export class InvoicesController {
+  constructor(private readonly invoices: InvoicesService) {}
+
+  @AuthenticatedOnly()
+  @Get(":id/download")
+  @ApiOperation({ summary: "A 5 minute signed URL for the invoice PDF (buyer, seller, or billing.view_any; anyone else gets 404)" })
+  @ApiErrorResponse(409, "The PDF is not ready yet.")
+  download(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.invoices.downloadUrl(user.id, id);
   }
 }

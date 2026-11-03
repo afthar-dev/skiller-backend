@@ -82,6 +82,19 @@ export class R2Client implements OnApplicationShutdown {
     );
   }
 
+  /** Short-lived GET URL for a private object. `filename` sets the download name. */
+  presignGet(bucket: MediaBucket, key: string, opts: { expiresInSec: number; filename?: string }): Promise<string> {
+    return getSignedUrl(
+      this.s3,
+      new GetObjectCommand({
+        Bucket: this.buckets[bucket],
+        Key: key,
+        ...(opts.filename ? { ResponseContentDisposition: `attachment; filename="${opts.filename.replace(/[^A-Za-z0-9._-]/g, "_")}"` } : {}),
+      }),
+      { expiresIn: opts.expiresInSec },
+    );
+  }
+
   async completeMultipart(bucket: MediaBucket, key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void> {
     await this.s3.send(
       new CompleteMultipartUploadCommand({

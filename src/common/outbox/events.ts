@@ -46,6 +46,16 @@ export type DomainEvent =
       totalPaise: string;
       /** Why the seller module refused: CODE: message. */
       error: string;
+    }
+  | {
+      /** The hold on an order's seller share ended: PENDING moved to AVAILABLE. */
+      type: "order.hold_released";
+      orderId: string;
+      sellerOwnerType: "USER" | "ORG";
+      sellerOwnerId: string;
+      itemTitle: string;
+      /** The seller share moved, paise as a decimal string. */
+      amountPaise: string;
     };
 
 export type DomainEventType = DomainEvent["type"];

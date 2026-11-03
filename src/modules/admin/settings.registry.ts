@@ -14,6 +14,8 @@ export const SETTINGS = {
   tds_bps: { schema: z.number().int().min(0).max(10_000), default: 0 },
   /** Smallest payout a seller can request, in paise (50000 = INR 500). */
   min_payout_paise: { schema: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), default: 50_000 },
+  /** The platform's GSTIN, printed on invoices; empty until the registration is through (invoices then say "GSTIN: applied for"). */
+  platform_gstin: { schema: z.string().regex(/^(|[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])$/, "a 15 character GSTIN or empty"), default: "" },
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

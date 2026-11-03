@@ -13,6 +13,7 @@ export const NOTIFICATION_TYPES = {
   "order.receipt": { transactional: true },
   "order.sale": { transactional: false },
   "order.fulfilment_failed": { transactional: true },
+  "earnings.available": { transactional: false },
   "finance.alert": { transactional: false },
 } as const;
 

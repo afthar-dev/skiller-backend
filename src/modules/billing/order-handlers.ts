@@ -5,7 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { NotificationsService } from "../notifications";
 import { FinanceAlerts } from "./finance-alerts.service";
 import { FulfilmentService } from "./fulfilment.service";
-import { fromApi } from "./money";
+import { formatInr, fromApi } from "./money";
 import { OrdersService } from "./orders.service";
 import { WebhookDispatcher, type WebhookEventContext } from "./webhook.dispatcher";
 
@@ -13,9 +13,6 @@ const asRecord = (v: unknown): Record<string, unknown> | undefined => (v && type
 const paymentOf = (payload: Record<string, unknown>) => asRecord(asRecord(asRecord(payload.payload)?.payment)?.entity);
 
 const FINAL_CODES = new Set(["PAYMENT_AMOUNT_MISMATCH", "PAYMENT_ORDER_MISMATCH", "PAYMENT_NOT_CAPTURED", "PAYMENT_NOT_FOUND", "ORDER_NOT_FOUND"]);
-
-/** 12345 paise -> "INR 123.45". Integer arithmetic only. */
-export const formatInr = (paise: bigint): string => `INR ${paise / 100n}.${(paise % 100n).toString().padStart(2, "0")}`;
 
 /**
  * Wires orders to their inputs: Razorpay payment webhooks (through the dispatcher) and the order.paid outbox event
@@ -56,6 +53,19 @@ export class OrderHandlers implements OnModuleInit {
         message: `Order ${e.orderId} is paid but could not be delivered (${e.error}). Refund it.`,
         dedupeKey: `fulfilment-failed:${e.orderId}`,
         data: { error: e.error },
+      });
+    });
+
+    // The hold ended: the seller can now withdraw this order's earnings. Organization sellers have no single recipient yet.
+    this.bus.on("order.hold_released", async (e, { eventId }) => {
+      if (e.sellerOwnerType !== "USER") return;
+      await this.notifications.notify(e.sellerOwnerId, {
+        type: "earnings.available",
+        title: "Earnings available",
+        body: `${formatInr(fromApi(e.amountPaise))} from ${e.itemTitle} is now available to withdraw.`,
+        link: "/wallet",
+        data: { orderId: e.orderId },
+        sourceEventId: eventId,
       });
     });
 

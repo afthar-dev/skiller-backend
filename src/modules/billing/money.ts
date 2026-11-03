@@ -70,3 +70,14 @@ export function fromGatewayAmount(v: unknown): Paise {
   }
   throw invalid();
 }
+
+/** 12345 paise -> "INR 123.45". Integer arithmetic only; negative amounts keep their sign. */
+export function formatInr(paise: Paise): string {
+  const abs = paise < 0n ? -paise : paise;
+  return `${paise < 0n ? "-" : ""}INR ${abs / 100n}.${(abs % 100n).toString().padStart(2, "0")}`;
+}
+
+/** 1800 bps -> "18.00%". */
+export function formatBps(bps: number): string {
+  return `${Math.floor(bps / 100)}.${String(bps % 100).padStart(2, "0")}%`;
+}
