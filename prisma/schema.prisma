@@ -908,3 +908,54 @@ model CreditNote {
   @@index([uploadedAt, createdAt])
   @@map("credit_notes")
 }
+
+// ─── payouts ─────────────────────────────────────────────────────────────
+
+enum PayoutAccountType {
+  BANK
+  UPI
+}
+
+enum PayoutAccountStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  /// Replaced by a newer account. Kept for the audit trail and for duplicate-PAN detection.
+  INACTIVE
+}
+
+/// Where an owner's payouts go. NEVER holds a full bank account number, a full VPA or a full PAN: those travel to RazorpayX in the
+/// request and are not stored (accountLast4, vpaMasked "ab***@okhdfc", panLast4 + panHash, a keyed HMAC used only to spot one PAN on two accounts).
+/// One live (not INACTIVE) account per owner: partial unique index payout_accounts_owner_live_key (hand-written in the migration;
+/// `migrate dev` proposes to drop it: strip that line). Replacing the account inserts a new row and retires the old one.
+model PayoutAccount {
+  id                     String              @id @default(uuid(7))
+  ownerType              SellerOwnerType
+  ownerId                String
+  type                   PayoutAccountType
+  status                 PayoutAccountStatus @default(PENDING)
+  holderName             String
+  ifsc                   String?
+  accountLast4           String?
+  vpaMasked              String?
+  panLast4               String
+  panHash                String
+  /// Whether the name the bank reports for the account matches holderName (null until RazorpayX reports one).
+  panNameMatch           Boolean?
+  /// Set for finance review (e.g. DUPLICATE_PAN: the same PAN is on another owner's account). Never blocks the owner.
+  reviewFlag             String?
+  razorpayxContactId     String
+  razorpayxFundAccountId String              @unique
+  failureReason          String?
+  verifiedAt             DateTime?
+  /// Payouts to a changed account are blocked until this moment (24 h after the change, anti-fraud).
+  cooldownUntil          DateTime
+  createdBy              String
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([ownerType, ownerId, createdAt])
+  @@index([panHash])
+  @@index([reviewFlag])
+  @@map("payout_accounts")
+}

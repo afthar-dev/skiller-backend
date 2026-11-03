@@ -64,6 +64,13 @@ describe("loadConfig", () => {
     }
   });
 
+  it("keys PAN hashing with KYC_PEPPER, falling back to OTP_PEPPER, and rejects a short one", () => {
+    expect(loadConfig(validEnv).kycPepper).toBe(validEnv.OTP_PEPPER);
+    const own = "k".repeat(40);
+    expect(loadConfig({ ...validEnv, KYC_PEPPER: own }).kycPepper).toBe(own);
+    expect(() => loadConfig({ ...validEnv, KYC_PEPPER: "short" })).toThrow(/KYC_PEPPER/);
+  });
+
   it("rejects short jwt secret", () => {
     expect(() => loadConfig({ ...validEnv, JWT_SECRET: "short" })).toThrow(ConfigError);
     expect(() => loadConfig({ ...validEnv, JWT_SECRET: "short" })).toThrow(/JWT_SECRET/);

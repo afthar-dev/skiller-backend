@@ -32,6 +32,8 @@ const envSchema = z.object({
   // RazorpayX (payouts): the current account number the payouts debit, and its own webhook secret.
   RAZORPAYX_ACCOUNT_NUMBER: z.string().min(1),
   RAZORPAYX_WEBHOOK_SECRET: z.string().min(1),
+  // Keys the HMAC of PAN numbers (duplicate-PAN detection). Falls back to OTP_PEPPER; set it to rotate independently.
+  KYC_PEPPER: secret("KYC_PEPPER").optional(),
   SENTRY_DSN: z.string().url().optional(),
   // Number of reverse-proxy hops in front of the API whose X-Forwarded-For is trusted (0 = none).
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
@@ -58,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     redisUrl: e.REDIS_URL,
     jwtSecret: e.JWT_SECRET,
     otpPepper: e.OTP_PEPPER,
+    kycPepper: e.KYC_PEPPER ?? e.OTP_PEPPER,
     playbackSecret: e.PLAYBACK_SECRET,
     corsOrigins: e.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
     webBaseUrl: e.WEB_BASE_URL.replace(/\/+$/, ""),

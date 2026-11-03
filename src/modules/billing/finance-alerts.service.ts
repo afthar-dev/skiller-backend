@@ -3,7 +3,12 @@ import { reportException } from "../../common/observability/sentry";
 import { NotificationsService } from "../notifications";
 import { PlatformRoleDirectory } from "../rbac";
 
-export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED" | "REFUND_FAILED" | "REFUND_UNMATCHED" | "REFUND_WEBHOOK_FAILED";
+export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED" | "REFUND_FAILED" | "REFUND_UNMATCHED" | "REFUND_WEBHOOK_FAILED"
+  | "DUPLICATE_PAN"
+  | "PAYOUT_FAILED"
+  | "PAYOUT_UNMATCHED"
+  | "PAYOUT_AMOUNT_MISMATCH"
+  | "PAYOUT_WEBHOOK_FAILED";
 
 export const FINANCE_ADMIN_ROLE = "finance_admin";
 const PAGE = 100;
@@ -21,7 +26,7 @@ export class FinanceAlerts {
     private readonly roles: PlatformRoleDirectory,
   ) {}
 
-  async raise(alert: { kind: FinanceAlertKind; orderId?: string; message: string; dedupeKey: string; data?: Record<string, unknown> }): Promise<void> {
+  async raise(alert: { kind: FinanceAlertKind; orderId?: string; message: string; dedupeKey: string; data?: Record<string, unknown>; link?: string }): Promise<void> {
     this.logger.error(`finance alert ${alert.kind} for order ${alert.orderId ?? "(unknown)"}: ${alert.message}`);
     try {
       reportException(new Error(`[finance] ${alert.kind}: ${alert.message} (order ${alert.orderId ?? "unknown"})`), 500);
@@ -33,7 +38,7 @@ export class FinanceAlerts {
             type: "finance.alert",
             title: "Payment needs attention",
             body: alert.message,
-            link: alert.orderId ? `/admin/orders/${alert.orderId}` : "/admin/refunds",
+            link: alert.link ?? (alert.orderId ? `/admin/orders/${alert.orderId}` : "/admin/refunds"),
             data: { ...alert.data, kind: alert.kind, orderId: alert.orderId },
             sourceEventId: `finance:${alert.dedupeKey}`,
           });

@@ -13,6 +13,7 @@ import { ApiErrorResponse } from "../../common/openapi/error-response";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { InjectQueue, QueueNames } from "../../common/queue";
 import { verifyWebhookSignature } from "./signature";
+import { scrubPayoutDetails } from "./webhook-scrub";
 import { WEBHOOK_PROCESS_JOB, type WebhookJobData } from "./webhook.processor";
 
 const MAX_EVENT_ID_LENGTH = 200;
@@ -75,6 +76,8 @@ export class WebhooksController {
     // The signature covers the body only, not the event-id header: dedupe on the body hash too, so replaying a captured
     // body under a fresh header cannot run the handlers again. A genuine Razorpay retry has an identical body.
     const bodySha256 = createHash("sha256").update(raw).digest("hex");
+    // RazorpayX fund-account events carry bank details in full; only masked values are ever stored.
+    if (provider === "RAZORPAYX") payload = scrubPayoutDetails(payload);
     let row: { id: string; processedAt: Date | null };
     try {
       row = await this.prisma.webhookEvent.create({ data: { provider, eventId, bodySha256, type, payload: payload as Prisma.InputJsonObject }, select: { id: true, processedAt: true } });

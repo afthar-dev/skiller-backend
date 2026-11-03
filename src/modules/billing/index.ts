@@ -24,6 +24,12 @@ export type {
 } from "./razorpay.client";
 export { FakeRazorpayClient } from "./razorpay.fake";
 export type { FakeWebhook } from "./razorpay.fake";
+export { RAZORPAYX_CLIENT } from "./razorpayx.client";
+export type { CreateFundAccountInput, CreatePayoutInput, PayoutMode, RazorpayXClient, RazorpayXContact, RazorpayXFundAccount, RazorpayXPayout, RazorpayXValidation } from "./razorpayx.client";
+export { FakeRazorpayXClient } from "./razorpayx.fake";
+export type { FakeFundAccount, FakePayoutEvent } from "./razorpayx.fake";
+export { PayoutAccountsService, PAYOUT_ACCOUNT_COOLDOWN } from "./payout-accounts.service";
+export type { PayoutAccountView } from "./payout-accounts.service";
 export { WebhookDispatcher } from "./webhook.dispatcher";
 export type { WebhookEventContext, WebhookHandler } from "./webhook.dispatcher";
 export { SubscriptionsService } from "./subscriptions.service";

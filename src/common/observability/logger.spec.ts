@@ -37,6 +37,21 @@ describe("logger redaction", () => {
     expect(parsed.req.headers["user-agent"]).toBe("jest");
   });
 
+  it("never logs a full bank account number, UPI id or PAN, however deep the payload nests them", () => {
+    const { lines, stream } = capture();
+    const params = buildLoggerParams({ nodeEnv: "production" });
+    const logger = pino({ ...(params.pinoHttp as pino.LoggerOptions), transport: undefined }, stream);
+    logger.info({
+      accountNumber: "50100123456789",
+      body: { pan: "ABCDE1234F", bank: { ifsc: "HDFC0001234", accountNumber: "50100123456789" }, upi: { vpa: "asha@okhdfc" } },
+      req: { body: { bank: { accountNumber: "50100123456789" }, pan: "ABCDE1234F" } },
+      fund_account: { bank_account: { account_number: "50100123456789" } },
+    });
+    const line = lines.join("");
+    for (const secret of ["50100123456789", "ABCDE1234F", "asha@okhdfc"]) expect(line).not.toContain(secret);
+    expect(line).toContain("HDFC0001234"); // the IFSC is not secret
+  });
+
   it("lists the agreed redact paths", () => {
     expect(REDACT_PATHS).toEqual(
       expect.arrayContaining(["req.headers.authorization", "req.headers.cookie", 'res.headers["set-cookie"]', "*.code", "*.token", "*.refreshToken", "*.password"]),

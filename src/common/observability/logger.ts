@@ -12,6 +12,8 @@ export const REDACT_PATHS = [
   "*.token",
   "*.refreshToken",
   "*.password",
+  // Payout details (bank account number, UPI id, PAN): full values must never reach a log line, at the top level or up to three levels deep.
+  ...["accountNumber", "account_number", "pan", "vpa"].flatMap((k) => [k, `*.${k}`, `*.*.${k}`, `*.*.*.${k}`]),
 ];
 
 type RequestWithId = IncomingMessage & { id?: string };
