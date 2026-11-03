@@ -175,7 +175,7 @@ export class CheckoutController {
     if (order.razorpayOrderId !== input.razorpayOrderId) throw new AppError("PAYMENT_ORDER_MISMATCH", 422, "This payment does not belong to this order");
     const result = await this.fulfilment.fulfil(order.id, input.razorpayPaymentId, "verify");
     if (result.status !== "PAID") res.status(202);
-    return { orderId: result.orderId, status: result.status };
+    return { orderId: result.orderId, status: result.status, ...(result.fulfilment ? { fulfilment: result.fulfilment } : {}) };
   }
 }
 

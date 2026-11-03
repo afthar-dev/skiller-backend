@@ -39,6 +39,7 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   SubscriptionHandlers,
   SubscriptionMaintenanceProcessor,
   SellableRegistry,
+  CouponsService,
   IdempotencyCleanup,
   OrdersService,
   FinanceAlerts,
@@ -53,7 +54,7 @@ export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, Subscri
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [ClockModule, EntitlementsModule, WalletModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
   controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, AdminBillingController],
-  providers: [...BILLING_CORE_PROVIDERS, PlansService, CouponsService, CheckoutService],
+  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
 })
 export class BillingModule {}

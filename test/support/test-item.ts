@@ -19,7 +19,7 @@ export interface TestItem {
  * production code never registers a TEST_ITEM. State is module-level (one jest suite = one module registry).
  */
 export const testItems = new Map<string, TestItem>();
-export const testState = { owned: new Set<string>(), paid: [] as string[], refunded: [] as string[], failOnPaid: null as Error | null };
+export const testState = { owned: new Set<string>(), paid: [] as string[], refunded: [] as string[], failOnPaid: null as Error | null, writeMarkerBeforeFail: false };
 
 export function createTestItem(item: Partial<TestItem> & { sellerOwnerId: string }): string {
   const id = randomUUID();
@@ -45,8 +45,12 @@ export class TestItemProvider implements SellableProvider, OnModuleInit {
     return item;
   }
 
-  async onPaid(_tx: Prisma.TransactionClient, order: PaidOrder): Promise<void> {
-    if (testState.failOnPaid) throw testState.failOnPaid;
+  async onPaid(tx: Prisma.TransactionClient, order: PaidOrder): Promise<void> {
+    if (testState.failOnPaid) {
+      // A half-done grant: it must vanish with the failure (savepoint rollback), never stay behind.
+      if (testState.writeMarkerBeforeFail) await tx.notification.create({ data: { userId: order.buyerId, type: "test.marker", title: "marker", body: order.id } });
+      throw testState.failOnPaid;
+    }
     testState.owned.add(`${order.buyerId}:${order.items[0].itemId}`);
     testState.paid.push(order.id);
   }

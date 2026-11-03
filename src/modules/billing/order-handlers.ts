@@ -3,6 +3,7 @@ import { AppError } from "../../common/errors/app-error";
 import { EventBus } from "../../common/outbox/event-bus";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { NotificationsService } from "../notifications";
+import { FinanceAlerts } from "./finance-alerts.service";
 import { FulfilmentService } from "./fulfilment.service";
 import { fromApi } from "./money";
 import { OrdersService } from "./orders.service";
@@ -10,6 +11,8 @@ import { WebhookDispatcher, type WebhookEventContext } from "./webhook.dispatche
 
 const asRecord = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
 const paymentOf = (payload: Record<string, unknown>) => asRecord(asRecord(asRecord(payload.payload)?.payment)?.entity);
+
+const FINAL_CODES = new Set(["PAYMENT_AMOUNT_MISMATCH", "PAYMENT_ORDER_MISMATCH", "PAYMENT_NOT_CAPTURED", "PAYMENT_NOT_FOUND", "ORDER_NOT_FOUND"]);
 
 /** 12345 paise -> "INR 123.45". Integer arithmetic only. */
 export const formatInr = (paise: bigint): string => `INR ${paise / 100n}.${(paise % 100n).toString().padStart(2, "0")}`;
@@ -29,11 +32,32 @@ export class OrderHandlers implements OnModuleInit {
     private readonly fulfilment: FulfilmentService,
     private readonly orders: OrdersService,
     private readonly notifications: NotificationsService,
+    private readonly alerts: FinanceAlerts,
   ) {}
 
   onModuleInit() {
     this.dispatcher.on("payment.captured", (e) => this.onCaptured(e));
     this.dispatcher.on("payment.failed", (e) => this.onFailed(e));
+    this.dispatcher.onExhausted("payment.captured", (e, err) => this.onCapturedExhausted(e, err));
+
+    // The seller module permanently refused to deliver a paid order: tell the buyer and finance (a refund follows).
+    this.bus.on("order.fulfilment_failed", async (e, { eventId }) => {
+      await this.notifications.notify(e.buyerId, {
+        type: "order.fulfilment_failed",
+        title: "We could not deliver your purchase",
+        body: `We could not deliver ${e.itemTitle}; a refund is on its way.`,
+        link: `/orders/${e.orderId}`,
+        data: { orderId: e.orderId },
+        sourceEventId: eventId,
+      });
+      await this.alerts.raise({
+        kind: "FULFILMENT_FAILED",
+        orderId: e.orderId,
+        message: `Order ${e.orderId} is paid but could not be delivered (${e.error}). Refund it.`,
+        dedupeKey: `fulfilment-failed:${e.orderId}`,
+        data: { error: e.error },
+      });
+    });
 
     this.bus.on("order.paid", async (e, { eventId }) => {
       const amount = formatInr(fromApi(e.totalPaise));
@@ -82,13 +106,31 @@ export class OrderHandlers implements OnModuleInit {
       const result = await this.fulfilment.fulfil(order.id, paymentId, "webhook");
       if (result.outcome === "PENDING_CAPTURE") throw new Error(`payment ${paymentId} is not captured yet; retrying`);
     } catch (err) {
-      // A 4xx outcome (amount mismatch, payment of another order, ...) is final and already alerted: retrying cannot change it.
-      if (err instanceof AppError && err.status < 500) {
+      // Only these outcomes are final (already alerted, or harmless): retrying cannot change them. Anything else, including a 4xx from the
+      // seller module, is handled inside fulfilment or retried.
+      if (err instanceof AppError && FINAL_CODES.has(err.code)) {
         this.logger.warn(`webhook ${event.webhookEventId}: payment ${paymentId} not fulfilled: ${err.code}`);
         return;
       }
       throw err;
     }
+  }
+
+  /** Every retry failed: the buyer has paid and nothing was delivered. A human must look. */
+  private async onCapturedExhausted(event: WebhookEventContext, err: Error): Promise<void> {
+    const payment = paymentOf(event.payload);
+    const razorpayOrderId = typeof payment?.order_id === "string" ? payment.order_id : null;
+    const paymentId = typeof payment?.id === "string" ? payment.id : null;
+    if (!razorpayOrderId) return;
+    const order = await this.prisma.order.findUnique({ where: { razorpayOrderId }, select: { id: true, status: true } });
+    if (!order || order.status === "PAID") return;
+    await this.alerts.raise({
+      kind: "FULFILMENT_FAILED",
+      orderId: order.id,
+      message: `Payment ${paymentId} was captured but order ${order.id} could not be fulfilled after repeated retries: ${err.message}`,
+      dedupeKey: `fulfilment-exhausted:${order.id}`,
+      data: { paymentId },
+    });
   }
 
   private async onFailed(event: WebhookEventContext): Promise<void> {

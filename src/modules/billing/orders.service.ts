@@ -4,6 +4,7 @@ import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { CouponsService } from "./coupons.service";
 import { toApi } from "./money";
 
 /** A CREATED order that was never paid is closed after this long. */
@@ -48,6 +49,7 @@ export class OrdersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly coupons: CouponsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -71,8 +73,12 @@ export class OrdersService {
 
   /** payment.failed: the attempt failed, but the buyer may retry on the same Razorpay order, so a later capture still fulfils it. */
   async markFailedByRazorpayOrder(razorpayOrderId: string): Promise<boolean> {
-    const res = await this.prisma.order.updateMany({ where: { razorpayOrderId, status: "CREATED" }, data: { status: "FAILED" } });
-    return res.count === 1;
+    return this.prisma.$transaction(async (tx) => {
+      const open = await tx.order.findMany({ where: { razorpayOrderId, status: "CREATED" }, select: { id: true } });
+      const res = await tx.order.updateMany({ where: { id: { in: open.map((o) => o.id) }, status: "CREATED" }, data: { status: "FAILED" } });
+      await this.coupons.release(tx, open.map((o) => o.id));
+      return res.count === 1;
+    });
   }
 
   /** CREATED orders older than 24 h become EXPIRED. Each pass is a conditional bulk update, so overlapping runs are harmless. */
@@ -82,7 +88,12 @@ export class OrdersService {
     for (;;) {
       const ids = await this.prisma.order.findMany({ where: { status: "CREATED", createdAt: { lt: cutoff } }, select: { id: true }, orderBy: { id: "asc" }, take: EXPIRY_BATCH });
       if (ids.length === 0) break;
-      const res = await this.prisma.order.updateMany({ where: { id: { in: ids.map((r) => r.id) }, status: "CREATED" }, data: { status: "EXPIRED" } });
+      const res = await this.prisma.$transaction(async (tx) => {
+        const flipped = await tx.order.updateMany({ where: { id: { in: ids.map((r) => r.id) }, status: "CREATED" }, data: { status: "EXPIRED" } });
+        // A paid order reservation is already REDEEMED (flipped in its fulfilment transaction), so only expired orders give a use back.
+        await this.coupons.release(tx, ids.map((r) => r.id));
+        return flipped;
+      });
       total += res.count;
       if (ids.length < EXPIRY_BATCH || res.count === 0) break;
     }

@@ -1,10 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { Prisma, type Coupon, type CouponFunding, type CouponKind, type CouponScope, type SellerOwnerType } from "@prisma/client";
+import { Prisma, type RedemptionStatus, type Coupon, type CouponFunding, type CouponKind, type CouponScope, type SellerOwnerType } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService } from "./entitlements.service";
 import { splitBps, type Paise } from "./money";
+
+/** Statuses that count against max_uses and the one-per-user rule. */
+export const LIVE_REDEMPTION: RedemptionStatus[] = ["RESERVED", "REDEEMED"];
 
 const CODE_PATTERN = /^[A-Z0-9][A-Z0-9_-]{2,31}$/;
 
@@ -87,12 +90,28 @@ export class CouponsService {
     }
   }
 
+  /** Takes the row lock that serialises reservations and redemptions of one coupon (checkout and fulfilment). */
+  async lockByCode(tx: Prisma.TransactionClient, code: string): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "coupons" WHERE "code" = ${normalizeCouponCode(code)} FOR UPDATE`;
+  }
+
+  /** Holds one use for an order that is about to be created. Call inside the transaction that holds the coupon lock. */
+  async reserve(tx: Prisma.TransactionClient, couponId: string, userId: string, orderId: string): Promise<void> {
+    await tx.couponRedemption.create({ data: { couponId, userId, orderId, status: "RESERVED" } });
+  }
+
+  /** Gives the reserved uses of failed or expired orders back. REDEEMED rows are never touched. */
+  async release(db: Prisma.TransactionClient | PrismaService, orderIds: string[]): Promise<void> {
+    if (orderIds.length === 0) return;
+    await db.couponRedemption.updateMany({ where: { orderId: { in: orderIds }, status: "RESERVED" }, data: { status: "RELEASED" } });
+  }
+
   /**
-   * Whether the buyer may use the coupon on this item now, and the discount it gives. Read-only: the redemption is counted when the
-   * order is paid, so this check only prevents most over-use (FulfilmentService is the authority).
+   * Whether the buyer may use the coupon on this item now, and the discount it gives. Reserved uses count, so run it in the
+   * transaction that holds the coupon lock (lockByCode) and reserves the use; the paid order later flips the reservation to REDEEMED.
    */
-  async evaluate(check: CouponCheck): Promise<{ coupon: Coupon; discountPaise: Paise }> {
-    const coupon = await this.prisma.coupon.findUnique({ where: { code: normalizeCouponCode(check.code) } });
+  async evaluate(check: CouponCheck, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<{ coupon: Coupon; discountPaise: Paise }> {
+    const coupon = await db.coupon.findUnique({ where: { code: normalizeCouponCode(check.code) } });
     if (!coupon) throw new AppError("COUPON_NOT_FOUND", 404, "Coupon not found");
     if (!coupon.isActive) throw new AppError("COUPON_INACTIVE", 422, "This coupon is no longer active");
     if (coupon.expiresAt && coupon.expiresAt.getTime() <= this.clock.now().getTime()) throw new AppError("COUPON_EXPIRED", 422, "This coupon has expired");
@@ -108,10 +127,10 @@ export class CouponsService {
       if ((await this.entitlements.limit({ ownerType: item.sellerOwnerType, ownerId: item.sellerOwnerId }, "creator_coupons")) !== true) throw notApplicable();
     }
 
-    if (coupon.maxUses !== null && (await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } })) >= coupon.maxUses) {
+    if (coupon.maxUses !== null && (await db.couponRedemption.count({ where: { couponId: coupon.id, status: { in: LIVE_REDEMPTION } } })) >= coupon.maxUses) {
       throw new AppError("COUPON_EXHAUSTED", 422, "This coupon has been used up");
     }
-    if (await this.prisma.couponRedemption.findUnique({ where: { couponId_userId: { couponId: coupon.id, userId: check.buyerId } }, select: { id: true } })) {
+    if (await db.couponRedemption.findFirst({ where: { couponId: coupon.id, userId: check.buyerId, status: { in: LIVE_REDEMPTION } }, select: { id: true } })) {
       throw new AppError("COUPON_ALREADY_USED", 409, "You have already used this coupon");
     }
 

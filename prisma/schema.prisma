@@ -662,6 +662,12 @@ enum CouponScope {
   ITEM
 }
 
+enum RedemptionStatus {
+  RESERVED
+  REDEEMED
+  RELEASED
+}
+
 enum IdempotencyStatus {
   IN_PROGRESS
   COMPLETED
@@ -688,6 +694,9 @@ model Order {
   razorpayOrderId   String?         @unique
   razorpayPaymentId String?         @unique
   paidAt            DateTime?
+  /// Set when the payment was captured and the sale posted but the seller module refused to deliver (permanent error); a refund follows.
+  fulfilmentFailedAt DateTime?
+  fulfilmentError   String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -759,17 +768,21 @@ model Coupon {
   @@map("coupons")
 }
 
-/// Counted when the order is fulfilled (paid), not at checkout. One per user per coupon.
+/// RESERVED at checkout (under a lock on the coupon), REDEEMED when the order is paid, RELEASED when it fails or expires.
+/// RESERVED and REDEEMED count against max_uses and the one-per-user rule; the one-per-user rule is also a partial unique
+/// index (couponId, userId) WHERE status IN (RESERVED, REDEEMED), added by hand in the migration.
 model CouponRedemption {
-  id        String   @id @default(uuid(7))
+  id        String           @id @default(uuid(7))
   couponId  String
   userId    String
-  orderId   String   @unique
-  createdAt DateTime @default(now())
+  orderId   String           @unique
+  status    RedemptionStatus @default(REDEEMED)
+  createdAt DateTime         @default(now())
 
   coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
 
-  @@unique([couponId, userId])
+  @@index([couponId, status])
+  @@index([couponId, userId])
   @@map("coupon_redemptions")
 }
 

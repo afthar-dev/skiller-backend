@@ -60,5 +60,7 @@ export class WebhookProcessor implements JobProcessor, OnModuleInit {
 
   async onExhausted(job: Job<WebhookJobData>, err: Error): Promise<void> {
     await this.prisma.webhookEvent.updateMany({ where: { id: job.data.webhookEventId, processedAt: null }, data: { lastError: truncate(err.message) } });
+    const row = await this.prisma.webhookEvent.findUnique({ where: { id: job.data.webhookEventId } });
+    if (row) await this.dispatcher.exhausted({ webhookEventId: row.id, provider: row.provider, eventId: row.eventId, type: row.type, payload: row.payload as Record<string, unknown> }, err);
   }
 }

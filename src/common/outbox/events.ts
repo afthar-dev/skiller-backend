@@ -35,6 +35,17 @@ export type DomainEvent =
       totalPaise: string;
       currency: string;
       paidAt: string;
+    }
+  | {
+      type: "order.fulfilment_failed";
+      orderId: string;
+      buyerId: string;
+      itemType: string;
+      itemId: string;
+      itemTitle: string;
+      totalPaise: string;
+      /** Why the seller module refused: CODE: message. */
+      error: string;
     };
 
 export type DomainEventType = DomainEvent["type"];

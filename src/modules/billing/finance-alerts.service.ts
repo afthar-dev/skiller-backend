@@ -3,7 +3,7 @@ import { reportException } from "../../common/observability/sentry";
 import { NotificationsService } from "../notifications";
 import { PlatformRoleDirectory } from "../rbac";
 
-export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT";
+export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED";
 
 export const FINANCE_ADMIN_ROLE = "finance_admin";
 const PAGE = 100;

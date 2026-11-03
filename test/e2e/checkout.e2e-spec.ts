@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import request from "supertest";
+import { AppError } from "../../src/common/errors/app-error";
 import { EventBus } from "../../src/common/outbox/event-bus";
 import { IdempotencyCleanup } from "../../src/common/idempotency";
 import * as sentry from "../../src/common/observability/sentry";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
-import { CouponsService, EntitlementsService, FakeRazorpayClient, FulfilmentService, OrdersService, RAZORPAY_CLIENT } from "../../src/modules/billing";
+import { CouponsService, EntitlementsService, FakeRazorpayClient, FulfilmentService, OrdersService, RAZORPAY_CLIENT, WebhookDispatcher } from "../../src/modules/billing";
 import { RolesService } from "../../src/modules/rbac";
 import { LedgerService } from "../../src/modules/wallet";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
@@ -90,8 +91,10 @@ describe("checkout, coupons and fulfilment", () => {
     await t.app.get(RolesService).grantSystem(financeAdmin.userId, "finance_admin");
   });
   afterAll(() => t?.close());
+  afterEach(() => jest.restoreAllMocks());
   beforeEach(() => {
     testState.failOnPaid = null;
+    testState.writeMarkerBeforeFail = false;
   });
 
   describe("POST /v1/checkout", () => {
@@ -174,6 +177,17 @@ describe("checkout, coupons and fulfilment", () => {
       expect(again.body.error).toMatchObject({ code: "ITEM_NOT_PURCHASABLE", message: "You already own this item" });
     });
 
+    it("a member of the seller organization cannot buy the organization item (self-purchase); outsiders can", async () => {
+      const owner = await t.login();
+      const org = (await http().post("/v1/orgs").set(auth(owner)).send({ name: "Sell Org", slug: `sell-${randomUUID().slice(0, 8)}` })).body as { id: string };
+      const itemId = createTestItem({ sellerOwnerType: "ORG", sellerOwnerId: org.id });
+      const own = await checkout(owner, { itemType: "TEST_ITEM", itemId });
+      expect(own.status).toBe(422);
+      expect(own.body.error.code).toBe("CHECKOUT_SELF_PURCHASE");
+      const outsider = await t.login();
+      expect((await checkout(outsider, { itemType: "TEST_ITEM", itemId })).status).toBe(201);
+    });
+
     it("rejects an item priced below the gateway minimum and a coupon that leaves less than 1 INR", async () => {
       const cheap = await listing({ pricePaise: 50n });
       const buyer = await t.login();
@@ -251,7 +265,6 @@ describe("checkout, coupons and fulfilment", () => {
       const alert = await financeAlert(order.orderId);
       expect(alert.data).toMatchObject({ kind: "PAYMENT_AMOUNT_MISMATCH", orderId: order.orderId });
       expect(spy).toHaveBeenCalled();
-      spy.mockRestore();
     });
 
     it("an authorized (not yet captured) payment is not fulfilled; once captured the same verify succeeds", async () => {
@@ -345,6 +358,90 @@ describe("checkout, coupons and fulfilment", () => {
       testState.failOnPaid = null;
       expect((await verify(buyer, order.orderId, order.razorpayOrderId, payment.id)).status).toBe(200);
       expect(await prisma.journalEntry.count({ where: { refType: "ORDER", refId: order.orderId } })).toBe(1);
+    });
+
+    it("a permanent (4xx) onPaid failure on a captured payment keeps the order PAID and the sale posted, rolls back the half-done grant, and tells the buyer and finance", async () => {
+      const { itemId } = await listing();
+      const { buyer, order } = await start(itemId);
+      const payment = fake.capturePayment(order.razorpayOrderId);
+      testState.failOnPaid = new AppError("COURSE_NOT_FOUND", 404, "The course no longer exists");
+      testState.writeMarkerBeforeFail = true;
+      try {
+        await deliver("payment.captured", captured(payment));
+      } finally {
+        testState.failOnPaid = null;
+        testState.writeMarkerBeforeFail = false;
+      }
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: order.orderId } });
+      expect(row.status).toBe("PAID");
+      expect(row.razorpayPaymentId).toBe(payment.id);
+      expect(row.fulfilmentFailedAt).not.toBeNull();
+      expect(row.fulfilmentError).toContain("COURSE_NOT_FOUND");
+      expect((await entryOf(order.orderId))!.byKind).toMatchObject({ GATEWAY_CLEARING: -100000n, PENDING: 90000n });
+      expect(testState.paid).not.toContain(order.orderId);
+      expect(await prisma.notification.count({ where: { userId: buyer.userId, type: "test.marker" } })).toBe(0);
+      const events = await prisma.outboxEvent.findMany({ where: { type: { in: ["order.paid", "order.fulfilment_failed"] } } });
+      const mine = events.filter((x) => (x.payload as { orderId?: string }).orderId === order.orderId);
+      expect(mine.map((x) => x.type)).toEqual(["order.fulfilment_failed"]);
+
+      const bus = t.app.get(EventBus);
+      const event = { type: "order.fulfilment_failed" as const, ...(mine[0].payload as object) } as Parameters<EventBus["dispatch"]>[0];
+      await bus.dispatch(event, mine[0].id);
+      await bus.dispatch(event, mine[0].id);
+      const told = await prisma.notification.findMany({ where: { userId: buyer.userId, type: "order.fulfilment_failed" } });
+      expect(told).toHaveLength(1);
+      expect(told[0].body).toContain("refund");
+      expect((await financeAlert(order.orderId)).data).toMatchObject({ kind: "FULFILMENT_FAILED" });
+
+      // the browser asking afterwards is told the same thing
+      const res = await verify(buyer, order.orderId, order.razorpayOrderId, payment.id);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ orderId: order.orderId, status: "PAID", fulfilment: "FAILED" });
+    });
+
+    it("verify answers 200 {status PAID, fulfilment FAILED} when the provider refuses permanently", async () => {
+      const { itemId } = await listing();
+      const { buyer, order } = await start(itemId);
+      const payment = fake.capturePayment(order.razorpayOrderId);
+      testState.failOnPaid = new AppError("ALREADY_ENROLLED", 409, "Already enrolled");
+      try {
+        const res = await verify(buyer, order.orderId, order.razorpayOrderId, payment.id);
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ orderId: order.orderId, status: "PAID", fulfilment: "FAILED" });
+      } finally {
+        testState.failOnPaid = null;
+      }
+      expect(await entryOf(order.orderId)).not.toBeNull();
+    });
+
+    it("a transient (5xx or unknown) onPaid failure on the webhook path rolls everything back and the retry succeeds", async () => {
+      const { itemId } = await listing();
+      const { order } = await start(itemId);
+      const payment = fake.capturePayment(order.razorpayOrderId);
+      testState.failOnPaid = new Error("database hiccup");
+      testState.writeMarkerBeforeFail = true;
+      try {
+        await expect(fulfilment.fulfil(order.orderId, payment.id, "webhook")).rejects.toThrow("database hiccup");
+      } finally {
+        testState.failOnPaid = null;
+        testState.writeMarkerBeforeFail = false;
+      }
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: order.orderId } });
+      expect(row).toMatchObject({ status: "CREATED", fulfilmentFailedAt: null });
+      expect(await entryOf(order.orderId)).toBeNull();
+      expect(await fulfilment.fulfil(order.orderId, payment.id, "webhook")).toMatchObject({ status: "PAID", outcome: "FULFILLED" });
+      expect(testState.paid).toContain(order.orderId);
+    });
+
+    it("when the payment.captured job exhausts its retries, finance is alerted", async () => {
+      const { itemId } = await listing();
+      const { order } = await start(itemId);
+      const payment = fake.capturePayment(order.razorpayOrderId);
+      await t.app.get(WebhookDispatcher).exhausted(
+        { webhookEventId: randomUUID(), provider: "RAZORPAY", eventId: `evt_${randomUUID()}`, type: "payment.captured", payload: { payload: { payment: { entity: captured(payment) } } } },
+        new Error("onPaid keeps failing"),
+      );
+      expect((await financeAlert(order.orderId)).data).toMatchObject({ kind: "FULFILMENT_FAILED" });
     });
 
     it("FulfilmentService.fulfil is idempotent when called directly", async () => {
@@ -447,30 +544,71 @@ describe("checkout, coupons and fulfilment", () => {
       expect((await tryCode(foreignItem)).body.error.code).toBe("COUPON_NOT_APPLICABLE");
     });
 
-    it("max_uses is counted when an order is paid, not at checkout; an exhausted coupon is refused at checkout", async () => {
+    it("max_uses is reserved at checkout (RESERVED then REDEEMED on payment); an exhausted coupon is refused up front", async () => {
       const code = newCode("ONCE");
       await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL", maxUses: 1 });
       const a = await listing();
       const first = await start(a.itemId, code);
-      const second = await start(a.itemId, code); // a second buyer can still start: nobody has paid yet
-      expect(await prisma.couponRedemption.count({ where: { coupon: { code } } })).toBe(0);
+      expect(await prisma.couponRedemption.findMany({ where: { coupon: { code } } })).toMatchObject([{ status: "RESERVED", orderId: first.order.orderId, userId: first.buyer.userId }]);
 
-      const p1 = fake.capturePayment(first.order.razorpayOrderId);
-      expect((await verify(first.buyer, first.order.orderId, first.order.razorpayOrderId, p1.id)).status).toBe(200);
-      expect(await prisma.couponRedemption.count({ where: { coupon: { code } } })).toBe(1);
-
-      const third = await t.login();
-      const refused = await checkout(third, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      const second = await t.login();
+      const refused = await checkout(second, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
       expect(refused.status).toBe(422);
       expect(refused.body.error.code).toBe("COUPON_EXHAUSTED");
 
-      // the second buyer already holds a discounted order and has paid: they get the product and finance is told
-      const p2 = fake.capturePayment(second.order.razorpayOrderId);
-      expect((await verify(second.buyer, second.order.orderId, second.order.razorpayOrderId, p2.id)).status).toBe(200);
-      expect((await prisma.order.findUniqueOrThrow({ where: { id: second.order.orderId } })).status).toBe("PAID");
-      expect(await entryOf(second.order.orderId)).not.toBeNull();
-      const alert = await financeAlert(second.order.orderId);
-      expect(alert.data).toMatchObject({ kind: "COUPON_OVER_LIMIT" });
+      const p1 = fake.capturePayment(first.order.razorpayOrderId);
+      expect((await verify(first.buyer, first.order.orderId, first.order.razorpayOrderId, p1.id)).status).toBe(200);
+      expect(await prisma.couponRedemption.findMany({ where: { coupon: { code } } })).toMatchObject([{ status: "REDEEMED", orderId: first.order.orderId }]);
+    });
+
+    it("max_uses=2 across three buyers: the third is COUPON_EXHAUSTED, even before anyone has paid", async () => {
+      const code = newCode("TWO");
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL", maxUses: 2 });
+      const a = await listing();
+      await start(a.itemId, code);
+      await start(a.itemId, code);
+      const third = await t.login();
+      const res = await checkout(third, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      expect(res.status).toBe(422);
+      expect(res.body.error.code).toBe("COUPON_EXHAUSTED");
+    });
+
+    it("ten parallel checkouts by one buyer with a single-use coupon: one succeeds, the rest are COUPON_ALREADY_USED", async () => {
+      const code = newCode("PAR");
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL" });
+      const a = await listing();
+      const buyer = await t.login();
+      const results = await Promise.all(Array.from({ length: 10 }, () => checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code })));
+      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+      const others = results.filter((r) => r.status !== 201);
+      expect(others).toHaveLength(9);
+      expect(others.every((r) => r.status === 409 && r.body.error.code === "COUPON_ALREADY_USED")).toBe(true);
+      expect(await prisma.couponRedemption.count({ where: { coupon: { code } } })).toBe(1);
+    });
+
+    it("a reservation released by a failed payment is re-redeemed when that order is later paid and there is capacity; over capacity it still fulfils and finance is told", async () => {
+      const code = newCode("REDO");
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL", maxUses: 1 });
+      const a = await listing();
+      const first = await start(a.itemId, code);
+      await deliver("payment.failed", { id: `pay_${randomUUID().slice(0, 12)}`, order_id: first.order.razorpayOrderId, amount: 90000, status: "failed" });
+      expect(await prisma.couponRedemption.findFirstOrThrow({ where: { orderId: first.order.orderId } })).toMatchObject({ status: "RELEASED" });
+
+      // capacity is free again: the paid order takes the use back
+      const p1 = fake.capturePayment(first.order.razorpayOrderId);
+      expect((await verify(first.buyer, first.order.orderId, first.order.razorpayOrderId, p1.id)).status).toBe(200);
+      expect(await prisma.couponRedemption.findFirstOrThrow({ where: { orderId: first.order.orderId } })).toMatchObject({ status: "REDEEMED" });
+
+      // the same again, but another buyer took the freed use meanwhile
+      const code2 = newCode("FULL");
+      await coupons.create({ code: code2, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL", maxUses: 1 });
+      const slow = await start(a.itemId, code2);
+      await deliver("payment.failed", { id: `pay_${randomUUID().slice(0, 12)}`, order_id: slow.order.razorpayOrderId, amount: 90000, status: "failed" });
+      await start(a.itemId, code2); // takes the single use
+      const p2 = fake.capturePayment(slow.order.razorpayOrderId);
+      expect((await verify(slow.buyer, slow.order.orderId, slow.order.razorpayOrderId, p2.id)).status).toBe(200);
+      expect(await entryOf(slow.order.orderId)).not.toBeNull();
+      expect((await financeAlert(slow.order.orderId)).data).toMatchObject({ kind: "COUPON_OVER_LIMIT" });
     });
 
     it("one redemption per user per coupon", async () => {
@@ -567,6 +705,20 @@ describe("checkout, coupons and fulfilment", () => {
       const buyerAgain = await t.login(stale.buyer.email); // the first access token is a day old now
       expect((await verify(buyerAgain, stale.order.orderId, stale.order.razorpayOrderId, late.id)).status).toBe(200);
       expect((await prisma.order.findUniqueOrThrow({ where: { id: stale.order.orderId } })).status).toBe("PAID");
+    });
+
+    it("expiry releases a coupon reservation so the buyer can use the coupon again", async () => {
+      const code = `EXP${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL", maxUses: 1 });
+      const { itemId } = await listing();
+      const first = await start(itemId, code);
+      t.clock.advance(25 * 3600_000);
+      await orders.expireStale();
+      expect(await prisma.couponRedemption.findFirstOrThrow({ where: { orderId: first.order.orderId } })).toMatchObject({ status: "RELEASED" });
+      const buyerAgain = await t.login(first.buyer.email);
+      const again = await checkout(buyerAgain, { itemType: "TEST_ITEM", itemId, couponCode: code });
+      expect(again.status).toBe(201);
+      expect(again.body.amountPaise).toBe("90000");
     });
   });
 });

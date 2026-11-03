@@ -15,6 +15,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "org.created": true,
   "subscription.changed": true,
   "order.paid": true,
+  "order.fulfilment_failed": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
 };

@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = {
   "subscription.expired": { transactional: true },
   "order.receipt": { transactional: true },
   "order.sale": { transactional: false },
+  "order.fulfilment_failed": { transactional: true },
   "finance.alert": { transactional: false },
 } as const;
 
