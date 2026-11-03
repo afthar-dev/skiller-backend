@@ -25,3 +25,17 @@ model FeatureFlag {
 
   @@map("feature_flags")
 }
+
+// ─── outbox ──────────────────────────────────────────────────────────────
+
+model OutboxEvent {
+  id          String    @id @default(uuid(7))
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+
+  @@index([publishedAt])
+  @@map("outbox_events")
+}

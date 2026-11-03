@@ -4,13 +4,14 @@ import { ConfigModule, APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 import { ErrorFilter } from "./common/errors/error.filter";
 import { RequestIdMiddleware } from "./common/http/request-id.middleware";
+import { OutboxModule } from "./common/outbox/outbox.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { QueueModule } from "./common/queue/queue.module";
 import { RedisModule } from "./common/redis/redis.module";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register()],
+  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },

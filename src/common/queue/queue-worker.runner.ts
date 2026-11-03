@@ -23,7 +23,9 @@ export class QueueWorkerRunner {
       const worker = new Worker(
         queue,
         async (job: Job) => {
-          for (const p of processors) await p.process(job);
+          for (const p of processors) {
+            if (!p.jobNames || p.jobNames.includes(job.name)) await p.process(job);
+          }
         },
         { connection: this.connection, concurrency },
       );
