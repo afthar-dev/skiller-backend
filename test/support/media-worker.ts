@@ -9,7 +9,7 @@ import { applyTestEnv } from "../setup/env";
 /** The worker-side media providers (processors, R2, lifecycle) wired against the test containers, without starting BullMQ workers. */
 export async function createMediaWorkerHarness() {
   applyTestEnv({ DATABASE_URL: process.env.DATABASE_URL!, REDIS_URL: process.env.REDIS_URL! });
-  const [{ ConfigModule }, { ClockModule }, { PrismaModule }, { RedisModule }, { QueueModule }, { OutboxModule }, { MailModule }, { MediaWorkerModule }] = await Promise.all([
+  const [{ ConfigModule }, { ClockModule }, { PrismaModule }, { RedisModule }, { QueueModule }, { OutboxModule }, { MailModule }, { MediaWorkerModule }, { SettingsModule }] = await Promise.all([
     import("../../src/common/config/config.module"),
     import("../../src/common/clock/clock"),
     import("../../src/common/prisma/prisma.module"),
@@ -18,6 +18,7 @@ export async function createMediaWorkerHarness() {
     import("../../src/common/outbox/outbox.module"),
     import("../../src/modules/mail/mail.module"),
     import("../../src/modules/media/media-worker.module"),
+    import("../../src/modules/admin/settings.module"),
   ]);
   const [{ QueueWorkerRunner }, { PrismaService }, { R2Client }, { TranscodeProcessor }, { ImageProcessor }, { FileProcessor }, { MediaCleanupProcessor }, { EventBus }, { QueueNames, queueToken }] = await Promise.all([
     import("../../src/common/queue/queue-worker.runner"),
@@ -32,7 +33,7 @@ export async function createMediaWorkerHarness() {
   ]);
 
   const moduleRef = await Test.createTestingModule({
-    imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, MediaWorkerModule],
+    imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, MediaWorkerModule],
   }).compile();
   await moduleRef.init();
 

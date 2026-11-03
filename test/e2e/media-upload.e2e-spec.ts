@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Queue } from "bullmq";
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
+import { SettingsService } from "../../src/modules/admin/settings.service";
 import { R2Client } from "../../src/modules/media/r2.client";
 import { QueueNames, queueToken } from "../../src/common/queue/queue.constants";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
@@ -63,6 +64,22 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
   describe("create", () => {
     it("requires authentication", async () => {
       expect((await http().post("/v1/media/uploads").send({})).status).toBe(401);
+    });
+
+    it("course_lesson max size follows the max_upload_mb_course_lesson setting (MEDIA_TOO_LARGE above it)", async () => {
+      const s = await creator();
+      const settings = t.app.get(SettingsService);
+      await settings.set("test", "max_upload_mb_course_lesson", 100);
+      try {
+        const over = await create(s, { purpose: "course_lesson", filename: "l.mp4", mime: "video/mp4", size: 101 * MB });
+        expect(over.status).toBe(413);
+        expect(over.body.error.code).toBe("MEDIA_TOO_LARGE");
+        expect(over.body.error.details.maxBytes).toBe(100 * MB);
+        expect((await create(s, { purpose: "course_lesson", filename: "l.mp4", mime: "video/mp4", size: 99 * MB })).status).toBe(201);
+      } finally {
+        await settings.set("test", "max_upload_mb_course_lesson", 5120);
+      }
+      expect((await create(s, { purpose: "course_lesson", filename: "l.mp4", mime: "video/mp4", size: 101 * MB })).status).toBe(201);
     });
 
     it("images get one presigned PUT and no multipart upload id; the source key is incoming/{asset}/source", async () => {

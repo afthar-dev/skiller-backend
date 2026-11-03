@@ -53,6 +53,17 @@ describe("notifications", () => {
     expect((await http().get("/v1/notifications").set(auth(owner))).body.items).toHaveLength(2);
   });
 
+  it("media.ready notifies only for videos (reel, course_lesson), not images or files", async () => {
+    const u = await t.login();
+    for (const purpose of ["avatar", "banner", "thumbnail", "gig_gallery", "course_resource"]) {
+      await bus.dispatch({ type: "media.ready", assetId: randomUUID(), ownerId: u.userId, purpose }, randomUUID());
+    }
+    expect((await http().get("/v1/notifications").set(auth(u))).body.items).toHaveLength(0);
+    await bus.dispatch({ type: "media.ready", assetId: randomUUID(), ownerId: u.userId, purpose: "course_lesson" }, randomUUID());
+    await bus.dispatch(mediaReady(u.userId), randomUUID());
+    expect((await http().get("/v1/notifications").set(auth(u))).body.items).toHaveLength(2);
+  });
+
   it("unread count decrements on read; read-all clears the rest; unread filter and pagination work", async () => {
     const u = await t.login();
     for (let i = 0; i < 3; i++) await bus.dispatch(mediaReady(u.userId), randomUUID());
@@ -102,7 +113,7 @@ describe("notifications", () => {
     expect((await http().get("/v1/notifications").set(auth(u))).body.items).toHaveLength(1);
     const jobs = await mailJobs(u.email, "media_failed");
     expect(jobs).toHaveLength(1);
-    expect(jobs[0].data.data).toMatchObject({ fileName: "holiday.mp4", reason: expect.stringMatching(/90 seconds/) });
+    expect(jobs[0].data.data).toMatchObject({ fileName: "holiday.mp4", reason: expect.stringMatching(/longer than the maximum/) });
   });
 
   it("email preference off for media.failed: no mail job, in-app row still created; in-app off: mail but no row", async () => {

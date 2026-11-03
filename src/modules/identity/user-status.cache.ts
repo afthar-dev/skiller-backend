@@ -25,6 +25,24 @@ export class UserStatusCache {
     return user.status;
   }
 
+  /**
+   * Overwrites the cached value (retried). For suspension this replaces a bust: a stale ACTIVE can never survive a successful write,
+   * and unlike DEL it needs no later read-through to become correct. Throws if every attempt fails.
+   */
+  async put(userId: string, status: UserStatus): Promise<void> {
+    let last: unknown;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await this.redis.set(key(userId), status, "EX", USER_STATUS_TTL_SEC);
+        return;
+      } catch (err) {
+        last = err;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 25 * attempt));
+      }
+    }
+    throw last;
+  }
+
   /** Call after changing a user's status so the change takes effect immediately. */
   async bust(userId: string): Promise<void> {
     await this.redis.del(key(userId));

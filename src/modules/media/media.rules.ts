@@ -64,8 +64,9 @@ export function partSizes(totalBytes: number): number[] {
   return Array.from({ length: count }, (_, i) => (i < count - 1 ? PART_SIZE : totalBytes - PART_SIZE * (count - 1)));
 }
 
-export function validateUpload(purpose: MediaPurpose, mime: string, size: number): MediaRule {
-  const rule = MEDIA_RULES[purpose];
+/** `overrides` carries admin-configured limits (platform settings) that replace the static defaults. */
+export function validateUpload(purpose: MediaPurpose, mime: string, size: number, overrides: { maxBytes?: number } = {}): MediaRule {
+  const rule: MediaRule = { ...MEDIA_RULES[purpose], ...(overrides.maxBytes !== undefined ? { maxBytes: overrides.maxBytes } : {}) };
   if (!Number.isSafeInteger(size) || size < 1) {
     throw new AppError("VALIDATION_FAILED", 400, "Request validation failed", { fields: { size: ["must be a positive integer number of bytes"] } });
   }

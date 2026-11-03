@@ -3,13 +3,14 @@ import { EventBus } from "../../common/outbox/event-bus";
 import { NotificationsService } from "./notifications.service";
 
 const FAILURE_REASONS: Record<string, string> = {
-  DURATION_EXCEEDED: "The video is longer than the 90 seconds allowed for reels.",
+  DURATION_EXCEEDED: "The video is longer than the maximum allowed for reels.",
   NO_VIDEO_STREAM: "The file does not contain a video track.",
   INVALID_MEDIA: "The file is damaged or in a format we cannot read.",
   INVALID_IMAGE: "The image is damaged or in a format we cannot read.",
   UPLOAD_SIZE_MISMATCH: "The upload was incomplete.",
 };
 const DEFAULT_FAILURE_REASON = "Something went wrong while processing the file.";
+/** Only videos are worth a notification (they take a while); images and files are ready almost at once. */
 const VIDEO_PURPOSES = new Set(["reel", "course_lesson"]);
 
 /**
@@ -36,9 +37,10 @@ export class NotificationEventHandlers implements OnModuleInit {
     });
 
     this.bus.on("media.ready", async (e, { eventId }) => {
+      if (!VIDEO_PURPOSES.has(e.purpose)) return;
       await this.notifications.notify(e.ownerId, {
         type: "media.ready",
-        title: VIDEO_PURPOSES.has(e.purpose) ? "Your video is ready" : "Your upload is ready",
+        title: "Your video is ready",
         body: "Processing has finished and your file is ready to use.",
         data: { assetId: e.assetId, purpose: e.purpose },
         sourceEventId: eventId,

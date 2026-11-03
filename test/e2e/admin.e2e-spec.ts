@@ -123,6 +123,59 @@ describe("admin shell", () => {
       expect((await prisma.session.findMany({ where: { userId: victim.userId } })).every((s) => s.revokedAt)).toBe(true);
       expect(await audit("user.suspend", victim.userId)).toHaveLength(1);
     });
+
+    it("unsuspend of a DELETED user is USER_DELETED and the status stays DELETED", async () => {
+      const u = await t.login();
+      await prisma.user.update({ where: { id: u.userId }, data: { status: "DELETED" } });
+      const res = await http().post(`/v1/admin/users/${u.userId}/unsuspend`).set(auth(admin));
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("USER_DELETED");
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: u.userId } })).status).toBe("DELETED");
+      expect(await audit("user.unsuspend", u.userId)).toHaveLength(0);
+    });
+
+    it("fail-closed: status cache SET and DEL both fail -> 503, sessions are still revoked, the token stays blocked once Redis is back", async () => {
+      const victim = await t.login();
+      expect((await http().get("/v1/me").set(auth(victim))).status).toBe(200); // caches ACTIVE
+      const redis = t.app.get<Redis>(REDIS);
+      const realSet = redis.set.bind(redis) as (...a: unknown[]) => Promise<unknown>;
+      const set = jest
+        .spyOn(redis, "set")
+        .mockImplementation(((key: string, ...rest: unknown[]) => (key.startsWith("user:status:") ? Promise.reject(new Error("redis down")) : realSet(key, ...rest))) as never);
+      const del = jest.spyOn(redis, "del").mockRejectedValue(new Error("redis down"));
+      let res;
+      try {
+        res = await http().post(`/v1/admin/users/${victim.userId}/suspend`).set(auth(admin)).send({ reason: "x" });
+      } finally {
+        set.mockRestore();
+        del.mockRestore();
+      }
+      expect(res.status).toBe(503);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: victim.userId } })).status).toBe("SUSPENDED");
+      // revocation was still attempted although the status write failed
+      expect((await prisma.session.findMany({ where: { userId: victim.userId } })).every((s) => s.revokedAt)).toBe(true);
+      expect((await http().get("/v1/me").set(auth(victim))).status).not.toBe(200);
+      expect((await http().post(`/v1/admin/users/${victim.userId}/suspend`).set(auth(admin)).send({ reason: "x" })).status).toBe(200);
+    });
+
+    it("fail-closed: revocation markers fail but the SUSPENDED status is written -> 503 and the token gets 403 once Redis is back", async () => {
+      const victim = await t.login();
+      expect((await http().get("/v1/me").set(auth(victim))).status).toBe(200);
+      const redis = t.app.get<Redis>(REDIS);
+      const realSet = redis.set.bind(redis) as (...a: unknown[]) => Promise<unknown>;
+      const set = jest
+        .spyOn(redis, "set")
+        .mockImplementation(((key: string, ...rest: unknown[]) => (key.startsWith("sessions:revoked:") ? Promise.reject(new Error("redis down")) : realSet(key, ...rest))) as never);
+      let res;
+      try {
+        res = await http().post(`/v1/admin/users/${victim.userId}/suspend`).set(auth(admin)).send({ reason: "x" });
+      } finally {
+        set.mockRestore();
+      }
+      expect(res.status).toBe(503);
+      expect((await http().get("/v1/me").set(auth(victim))).status).toBe(403);
+      expect((await http().post(`/v1/admin/users/${victim.userId}/suspend`).set(auth(admin)).send({ reason: "x" })).status).toBe(200);
+    });
   });
 
   describe("users", () => {
@@ -159,13 +212,43 @@ describe("admin shell", () => {
       expect(none.body.items).toHaveLength(0);
     });
 
-    it("search uses the prefix indexes (no seq scan on users/profiles)", async () => {
-      await prisma.$executeRawUnsafe("SET enable_seqscan = off");
-      const plan = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(`EXPLAIN SELECT id FROM users WHERE email LIKE 'abc%' ORDER BY id DESC LIMIT 5`);
-      const handlePlan = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(`EXPLAIN SELECT "userId" FROM profiles WHERE handle LIKE 'abc%' LIMIT 5`);
-      await prisma.$executeRawUnsafe("RESET enable_seqscan");
-      expect(plan.map((r) => r["QUERY PLAN"]).join("\n")).toMatch(/users_email_pattern_idx|users_pkey|users_email_key/);
-      expect(handlePlan.map((r) => r["QUERY PLAN"]).join("\n")).toMatch(/profiles_handle_pattern_idx|profiles_handle_key/);
+    it("the prefix indexes exist and the parameterised prefix queries use them (and would not without the index)", async () => {
+      const found = await prisma.$queryRaw<{ indexname: string }[]>`SELECT indexname FROM pg_indexes WHERE indexname IN ('users_email_pattern_idx', 'profiles_handle_pattern_idx')`;
+      expect(found.map((r) => r.indexname).sort()).toEqual(["profiles_handle_pattern_idx", "users_email_pattern_idx"]);
+
+      // SET LOCAL inside one transaction never leaks to other pooled connections; throwing at the end rolls back the DROP INDEX.
+      const plan = async (drop?: string) => {
+        let out = "";
+        await prisma
+          .$transaction(async (tx) => {
+            await tx.$executeRawUnsafe("SET LOCAL enable_seqscan = off");
+            if (drop) await tx.$executeRawUnsafe(`DROP INDEX ${drop}`);
+            const email = await tx.$queryRawUnsafe<{ "QUERY PLAN": string }[]>("EXPLAIN SELECT id FROM users WHERE email LIKE $1", "abc%");
+            const handle = await tx.$queryRawUnsafe<{ "QUERY PLAN": string }[]>('EXPLAIN SELECT "userId" FROM profiles WHERE handle LIKE $1', "abc%");
+            out = [...email, ...handle].map((r) => r["QUERY PLAN"]).join("\n");
+            throw new Error("rollback");
+          })
+          .catch((e: Error) => {
+            if (e.message !== "rollback") throw e;
+          });
+        return out;
+      };
+      const withIndexes = await plan();
+      expect(withIndexes).toContain("users_email_pattern_idx");
+      expect(withIndexes).toContain("profiles_handle_pattern_idx");
+      expect(await plan("users_email_pattern_idx")).not.toContain("users_email_pattern_idx");
+    });
+
+    it("LIKE wildcards in q are literal: %% matches nothing, a_b does not match axb", async () => {
+      const tag = uid();
+      const underscore = await t.login(`wc${tag}_b@example.com`);
+      const other = await t.login(`wc${tag}xb@example.com`);
+      const ids = async (q: string) => (await http().get(`/v1/admin/users?q=${encodeURIComponent(q)}`).set(auth(admin))).body.items.map((i: { id: string }) => i.id);
+      expect(await ids(`wc${tag}_b`)).toEqual([underscore.userId]);
+      expect(await ids(`wc${tag}%`)).toEqual([]);
+      expect(await ids("%%")).toEqual([]);
+      expect(await ids("__")).toEqual([]);
+      expect(await ids(`wc${tag}`)).toEqual(expect.arrayContaining([underscore.userId, other.userId]));
     });
 
     it("rejects a one-character query and requires user.view", async () => {

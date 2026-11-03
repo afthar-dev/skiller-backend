@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixturePath } from "../../../test/fixtures/make-fixtures";
+import { SettingsService } from "../admin/settings.service";
 import { createMediaWorkerHarness, type MediaWorkerHarness } from "../../../test/support/media-worker";
 import { ffmpegPath, ladderFor, probe, transcodeToHls } from "./ffmpeg";
 
@@ -94,6 +95,21 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
     expect(done.status).toBe("FAILED");
     expect(done.failureReason).toMatch(/^(MEDIA_TYPE_MISMATCH|INVALID_MEDIA)$/);
   });
+
+  it("reel_max_seconds follows the setting: lowered to 2 rejects a 3 s reel; the default accepts it", async () => {
+    const settings = h.moduleRef.get(SettingsService);
+    await settings.set("test", "reel_max_seconds", 2);
+    try {
+      const { row } = await h.createAsset({ purpose: "REEL", source: "sample-3s-720p.mp4", mime: "video/mp4" });
+      await run(row.id);
+      expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "DURATION_EXCEEDED" });
+    } finally {
+      await settings.set("test", "reel_max_seconds", 90);
+    }
+    const ok = await h.createAsset({ purpose: "REEL", source: "sample-3s-720p.mp4", mime: "video/mp4" });
+    await run(ok.row.id);
+    expect((await reload(ok.row.id)).status).toBe("READY");
+  }, 120_000);
 
   it("a 91 s reel is rejected, a 90 s reel is accepted (no tolerance)", async () => {
     const tooLong = await h.createAsset({ purpose: "REEL", source: "sample-91s-video-only.mp4", mime: "video/mp4" });

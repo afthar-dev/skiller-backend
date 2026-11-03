@@ -118,7 +118,6 @@ export class AdminUsersService {
     const previous = await this.prisma.$transaction(async (tx) => {
       const from = await this.accounts.changeStatus(tx, targetId, "SUSPENDED");
       if (from === null) throw this.notFound();
-      if (from === "DELETED") throw new AppError("USER_DELETED", 409, "The account has been deleted");
       if (from !== "SUSPENDED") {
         await this.audit.record(tx, { actorId, action: "user.suspend", targetType: "user", targetId, before: { status: from }, after: { status: "SUSPENDED", reason }, ...meta });
       }
@@ -132,10 +131,9 @@ export class AdminUsersService {
   async unsuspend(actorId: string, targetId: string, meta: MutationMeta = {}) {
     if (actorId === targetId) throw new AppError("ADMIN_SELF_ACTION", 403, "You cannot change your own account status");
     const previous = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.user.findUnique({ where: { id: targetId }, select: { status: true } });
-      if (!current) throw this.notFound();
-      if (current.status === "DELETED") throw new AppError("USER_DELETED", 409, "The account has been deleted");
+      // changeStatus locks the row and throws USER_DELETED for a deleted account (the throw rolls back), so no unlocked pre-read.
       const from = await this.accounts.changeStatus(tx, targetId, "ACTIVE");
+      if (from === null) throw this.notFound();
       if (from === "SUSPENDED") {
         await this.audit.record(tx, { actorId, action: "user.unsuspend", targetType: "user", targetId, before: { status: from }, after: { status: "ACTIVE" }, ...meta });
       }
@@ -153,9 +151,21 @@ export class AdminUsersService {
     return { id: targetId, revoked: before };
   }
 
+  /**
+   * Fail-closed: overwrite the cached status with SUSPENDED (falling back to DEL), and revoke sessions regardless of whether
+   * the status write worked. Any failure surfaces as 503 once both were attempted; the suspension stays committed and repeating is safe.
+   */
   private async enforceSuspension(userId: string) {
-    await this.bustStatus(userId);
-    await this.sessions.revokeAllForUser(userId);
+    const failures: unknown[] = [];
+    try {
+      await this.statuses.put(userId, "SUSPENDED");
+    } catch {
+      await this.bustStatus(userId).catch((err: unknown) => failures.push(err));
+    }
+    await this.sessions.revokeAllForUser(userId).catch((err: unknown) => failures.push(err));
+    if (failures.length > 0) {
+      throw failures.find((e): e is AppError => e instanceof AppError && e.status === 503) ?? failures[0];
+    }
   }
 
   private async bustStatus(userId: string) {

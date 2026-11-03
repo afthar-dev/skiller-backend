@@ -4,6 +4,7 @@ import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
 import { UsersWorkerModule } from "./modules/users/users-worker.module";
+import { SettingsModule } from "./modules/admin/settings.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
 import { MediaCleanupProcessor } from "./modules/media/media-cleanup.processor";
@@ -15,7 +16,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule],
+  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(

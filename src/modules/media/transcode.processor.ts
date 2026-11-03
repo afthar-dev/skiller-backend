@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { SettingsService } from "../admin/settings.service";
 import type { MediaAsset } from "@prisma/client";
 import type { Job } from "bullmq";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
@@ -15,7 +16,7 @@ import { fetchSource } from "./source-fetch";
 import { R2Client } from "./r2.client";
 
 const UPLOAD_CONCURRENCY = 6;
-/** A reel may be up to 90 s plus this much measurement slack; the output is hard-capped at 90 s (-t) regardless. */
+/** A reel may be up to reel_max_seconds plus this much measurement slack; the output is hard-capped at that value (-t) regardless. */
 const DURATION_SLACK_SEC = 0.1;
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -50,6 +51,7 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
     private readonly r2: R2Client,
     private readonly lifecycle: MediaLifecycle,
     private readonly registry: ProcessorRegistry,
+    private readonly settings: SettingsService,
   ) {}
 
   onModuleInit() {
@@ -93,7 +95,8 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
     }
     if (!ALLOWED_VIDEO_FORMATS.has(info.formatName)) throw new PermanentMediaFailure("MEDIA_TYPE_MISMATCH");
     if (!info.hasVideo) throw new PermanentMediaFailure("NO_VIDEO_STREAM");
-    const maxDuration = MEDIA_RULES[asset.purpose].maxDurationSec;
+    // Reels are capped by the reel_max_seconds platform setting; other purposes keep their static rule (none today).
+    const maxDuration = asset.purpose === "REEL" ? await this.settings.get("reel_max_seconds") : MEDIA_RULES[asset.purpose].maxDurationSec;
     if (maxDuration !== undefined && info.durationSec > maxDuration + DURATION_SLACK_SEC) throw new PermanentMediaFailure("DURATION_EXCEEDED");
 
     const hlsDir = join(dir, "hls");

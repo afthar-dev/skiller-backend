@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { escapeLike } from "../../common/db/like";
 import { Prisma, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -139,7 +140,7 @@ export class ProfilesService {
   /** Index-backed prefix match (profiles_handle_pattern_idx, text_pattern_ops); `prefix` must be lower-case. Newest first, below `cursor`. */
   async idsByHandlePrefix(prefix: string, cursor: string | undefined, take: number): Promise<string[]> {
     const rows = await this.prisma.profile.findMany({
-      where: { handle: { startsWith: prefix }, ...(cursor ? { userId: { lt: cursor } } : {}) },
+      where: { handle: { startsWith: escapeLike(prefix) }, ...(cursor ? { userId: { lt: cursor } } : {}) },
       select: { userId: true },
       orderBy: { userId: "desc" },
       take,

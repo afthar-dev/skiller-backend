@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { SettingsService } from "../admin/settings.service";
 import { Prisma, type MediaAsset } from "@prisma/client";
 import type { Queue } from "bullmq";
 import { v7 as uuidv7 } from "uuid";
@@ -53,6 +54,7 @@ export class MediaService {
     private readonly lifecycle: MediaLifecycle,
     private readonly profiles: ProfilesService,
     private readonly permissions: PermissionService,
+    private readonly settings: SettingsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
     @InjectQueue(QueueNames.media) private readonly queue: Queue,
@@ -64,7 +66,8 @@ export class MediaService {
     if (requiresCreator(purpose) && !(await this.profiles.isCreator(userId))) {
       throw new AppError("CREATOR_REQUIRED", 403, "Only creators can upload this kind of media");
     }
-    const rule = validateUpload(purpose, input.mime, input.size);
+    const maxBytes = purpose === "COURSE_LESSON" ? (await this.settings.get("max_upload_mb_course_lesson")) * 1024 * 1024 : undefined;
+    const rule = validateUpload(purpose, input.mime, input.size, { maxBytes });
     await this.enforceCaps(userId);
     const id = uuidv7();
     const objectKey = sourceKeyOf(id);
