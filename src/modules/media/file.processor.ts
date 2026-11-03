@@ -16,7 +16,7 @@ const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // PK\x03\x04
 /** Course resources (pdf / zip): no transformation, but the bytes must really be what was declared before they become READY. */
 @Injectable()
 export class FileProcessor implements JobProcessor, OnModuleInit {
-  readonly queue = QueueNames.media;
+  readonly queue = QueueNames.mediaLight;
   readonly jobNames = [FILE_JOB];
   readonly concurrency = 4;
   private readonly logger = new Logger(FileProcessor.name);

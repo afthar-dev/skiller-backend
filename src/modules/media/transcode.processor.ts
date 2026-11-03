@@ -12,6 +12,7 @@ import { QueueNames } from "../../common/queue/queue.constants";
 import { MediaTimeoutError, MediaToolError, PROBE_TIMEOUT_MS, TRANSCODE_TIMEOUT_MS, extractPoster, ladderBasis, ladderFor, probe, transcodeToHls } from "./ffmpeg";
 import { MediaLifecycle, PermanentMediaFailure } from "./media-lifecycle";
 import { ALLOWED_VIDEO_FORMATS, MEDIA_RULES, SOURCE_BUCKET, TRANSCODE_JOB, assetPrefix, sourcePrefixOf } from "./media.rules";
+import { effectiveMaxBytes } from "./media-limits";
 import { fetchSource } from "./source-fetch";
 import { R2Client } from "./r2.client";
 
@@ -38,7 +39,7 @@ async function listFiles(dir: string): Promise<string[]> {
 
 @Injectable()
 export class TranscodeProcessor implements JobProcessor, OnModuleInit {
-  readonly queue = QueueNames.media;
+  readonly queue = QueueNames.mediaTranscode;
   readonly jobNames = [TRANSCODE_JOB];
   readonly concurrency = 1; // ffmpeg saturates the machine; scale by running more worker processes
   private readonly logger = new Logger(TranscodeProcessor.name);
@@ -83,7 +84,7 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
   private async transcode(asset: MediaAsset, dir: string): Promise<void> {
     // ffmpeg only ever sees this local copy, never a URL or a key.
     const source = join(dir, "source");
-    await fetchSource(this.r2, asset, source);
+    await fetchSource(this.r2, asset, source, await effectiveMaxBytes(this.settings, asset.purpose));
 
     let info;
     try {

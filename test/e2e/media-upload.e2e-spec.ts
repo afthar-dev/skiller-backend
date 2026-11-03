@@ -13,7 +13,7 @@ const MB = 1024 * 1024;
 describe("media upload sessions (MinIO standing in for R2)", () => {
   let t: AuthTestApp;
   let prisma: PrismaService;
-  let queue: Queue;
+  let queues: Queue[];
   const http = () => request(t.app.getHttpServer());
   const auth = (s: { accessToken: string }) => ({ Authorization: `Bearer ${s.accessToken}` });
 
@@ -52,12 +52,12 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
   }
 
   const png = () => randomBytes(1000);
-  const jobsFor = async (assetId: string) => (await queue.getJobs(["waiting", "active", "delayed", "completed", "failed"])).filter((j) => j.id === assetId);
+  const jobsFor = async (assetId: string) => (await Promise.all(queues.map((q) => q.getJobs(["waiting", "active", "delayed", "completed", "failed"])))).flat().filter((j) => j.id === assetId);
 
   beforeAll(async () => {
     t = await createAuthTestApp();
     prisma = t.app.get(PrismaService);
-    queue = t.app.get<Queue>(queueToken(QueueNames.media));
+    queues = [t.app.get<Queue>(queueToken(QueueNames.mediaTranscode)), t.app.get<Queue>(queueToken(QueueNames.mediaLight))];
   });
   afterAll(() => t?.close());
 
@@ -255,6 +255,85 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       const r2 = t.app.get(R2Client);
       expect((await r2.listKeys("PUBLIC", "")).filter((k) => k.endsWith("/source"))).toEqual([]);
       expect(await r2.listKeys("PRIVATE", `incoming/${assetId}/`)).toEqual([`incoming/${assetId}/source`]);
+    });
+  });
+
+  describe("resumable multipart parts", () => {
+    const expires = (url: string) => Number(new URL(url).searchParams.get("X-Amz-Expires"));
+    const parts = (s: Session, id: string, partNumbers: number[]) => http().post(`/v1/media/uploads/${id}/parts`).set(auth(s)).send({ partNumbers });
+    const videoUpload = async (s: Session) => {
+      const res = await create(s, { purpose: "reel", filename: "r.mp4", mime: "video/mp4", size: 10 * MB + 1 });
+      expect(res.status).toBe(201);
+      return res.body as { assetId: string; partUrls: string[]; partSize: number };
+    };
+
+    it("part URLs live 1 h; the single image PUT stays at 15 min", async () => {
+      const s = await creator();
+      const video = await videoUpload(s);
+      for (const url of video.partUrls) expect(expires(url)).toBe(3600);
+      const img = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 });
+      expect(expires(img.body.partUrls[0])).toBe(900);
+    });
+
+    it("the owner gets fresh signed URLs for the requested parts and can finish the upload with them", async () => {
+      const s = await creator();
+      const { assetId, partUrls, partSize } = await videoUpload(s);
+      const etag1 = await put(partUrls[0], randomBytes(partSize));
+      const res = await parts(s, assetId, [2, 2]); // duplicates collapse
+      expect(res.status).toBe(200);
+      expect(res.body.parts).toHaveLength(1);
+      expect(res.body.parts[0].partNumber).toBe(2);
+      expect(expires(res.body.parts[0].url)).toBe(3600);
+      const etag2 = await put(res.body.parts[0].url, randomBytes(1));
+      const done = await complete(s, assetId, [
+        { partNumber: 1, etag: etag1 },
+        { partNumber: 2, etag: etag2 },
+      ]);
+      expect(done.status).toBe(200);
+      expect(done.body.status).toBe("PROCESSING");
+    });
+
+    it("another user gets 404, and unknown assets too", async () => {
+      const owner = await creator();
+      const { assetId } = await videoUpload(owner);
+      const other = await creator();
+      const res = await parts(other, assetId, [1]);
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("MEDIA_NOT_FOUND");
+      expect((await parts(owner, "00000000-0000-4000-8000-000000000000", [1])).status).toBe(404);
+    });
+
+    it("a non-PENDING asset -> 409; so is a single-PUT image (no multipart upload)", async () => {
+      const s = await creator();
+      const { assetId, parts: done } = await upload(s, "reel", "video/mp4", randomBytes(2 * MB));
+      expect((await complete(s, assetId, done)).status).toBe(200);
+      const late = await parts(s, assetId, [1]);
+      expect(late.status).toBe(409);
+      expect(late.body.error.code).toBe("UPLOAD_NOT_PENDING");
+
+      const img = await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 });
+      const single = await parts(s, img.body.assetId, [1]);
+      expect(single.status).toBe(409);
+      expect(single.body.error.code).toBe("UPLOAD_NOT_MULTIPART");
+    });
+
+    it("part numbers must be within the part count of the asset; the body is validated", async () => {
+      const s = await creator();
+      const { assetId } = await videoUpload(s); // 2 parts
+      expect((await parts(s, assetId, [3])).body.error.code).toBe("VALIDATION_FAILED");
+      expect((await parts(s, assetId, [0])).status).toBe(400);
+      expect((await parts(s, assetId, [])).status).toBe(400);
+      expect((await http().post(`/v1/media/uploads/${assetId}/parts`).set(auth(s)).send({ partNumbers: [1], extra: 1 })).status).toBe(400);
+    });
+
+    it("60 requests per hour per user -> 429 RATE_LIMITED with Retry-After", async () => {
+      const s = await creator();
+      const { assetId } = await videoUpload(s);
+      for (let i = 0; i < 60; i++) expect((await parts(s, assetId, [1])).status).toBe(200);
+      const res = await parts(s, assetId, [1]);
+      expect(res.status).toBe(429);
+      expect(res.body.error.code).toBe("RATE_LIMITED");
+      expect(Number(res.headers["retry-after"])).toBeGreaterThan(0);
     });
   });
 

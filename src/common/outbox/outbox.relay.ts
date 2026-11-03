@@ -18,23 +18,22 @@ interface Row {
 
 @Injectable()
 export class OutboxRelay implements JobProcessor, OnModuleInit {
-  readonly queue = QueueNames.maintenance;
+  readonly queue = QueueNames.outbox;
   readonly jobNames = [OUTBOX_RELAY_JOB];
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly registry: ProcessorRegistry,
     @InjectQueue(QueueNames.outbox) private readonly outboxQueue: Queue,
-    @InjectQueue(QueueNames.maintenance) private readonly maintenanceQueue: Queue,
   ) {}
 
   onModuleInit() {
     this.registry.register(this);
   }
 
-  /** Called once by the worker process: schedules the relay to run every second. */
+  /** Called once by the worker process: schedules the relay every second on the outbox queue, away from slow maintenance jobs. */
   async schedule() {
-    await this.maintenanceQueue.upsertJobScheduler(
+    await this.outboxQueue.upsertJobScheduler(
       OUTBOX_RELAY_JOB,
       { every: 1000 },
       { name: OUTBOX_RELAY_JOB, opts: { attempts: 1, removeOnComplete: true, removeOnFail: true } },

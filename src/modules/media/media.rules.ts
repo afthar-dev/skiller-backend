@@ -4,7 +4,11 @@ import { AppError } from "../../common/errors/app-error";
 const MB = 1024 * 1024;
 
 export const PART_SIZE = 10 * MB;
+/** Single-PUT URLs (images, up to 10 MB). */
 export const PRESIGN_TTL_SEC = 15 * 60;
+/** Multipart part URLs: a 5 GB lesson needs far longer than 15 minutes on a normal connection; parts can be re-signed when this runs out. */
+export const PART_PRESIGN_TTL_SEC = 60 * 60;
+export const PART_RESIGNS_PER_HOUR = 60;
 
 /** Every upload lands in the private bucket first, whatever its purpose; processed outputs go to the purpose's own bucket. */
 export const SOURCE_BUCKET: MediaBucket = "PRIVATE";

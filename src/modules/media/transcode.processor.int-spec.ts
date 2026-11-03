@@ -111,6 +111,33 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
     expect((await reload(ok.row.id)).status).toBe("READY");
   }, 120_000);
 
+  it("the worker size cap for course lessons is the max_upload_mb_course_lesson setting, not a fixed 5 GB", async () => {
+    const GB = 1024 ** 3;
+    const settings = h.moduleRef.get(SettingsService);
+    const { row } = await h.createAsset({ purpose: "COURSE_LESSON", source: "sample-3s-180p.mp4", mime: "video/mp4", declaredSize: 6 * GB });
+    const sourceEtag = row.sourceEtag ?? undefined;
+    // A 6 GB object (size only; the bytes are never read because the download is stubbed to stop right after the size check).
+    const head = jest.spyOn(h.r2, "head").mockResolvedValue({ size: 6 * GB, etag: sourceEtag });
+    const download = jest.spyOn(h.r2, "downloadTo").mockRejectedValue(new Error("download reached"));
+    try {
+      // Default 5120 MB: 6 GB is over the limit -> permanent failure before any download.
+      await run(row.id);
+      expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "UPLOAD_SIZE_MISMATCH" });
+      expect(download).not.toHaveBeenCalled();
+
+      // Admin raises the limit to 10 GB: the worker now accepts the 6 GB object and proceeds to download it.
+      await settings.set("test", "max_upload_mb_course_lesson", 10 * 1024);
+      const raised = await h.createAsset({ purpose: "COURSE_LESSON", source: "sample-3s-180p.mp4", mime: "video/mp4", declaredSize: 6 * GB });
+      head.mockResolvedValue({ size: 6 * GB, etag: raised.row.sourceEtag ?? undefined });
+      await expect(run(raised.row.id)).rejects.toThrow("download reached");
+      expect(download).toHaveBeenCalledTimes(1);
+    } finally {
+      await settings.set("test", "max_upload_mb_course_lesson", 5120);
+      head.mockRestore();
+      download.mockRestore();
+    }
+  });
+
   it("a 91 s reel is rejected, a 90 s reel is accepted (no tolerance)", async () => {
     const tooLong = await h.createAsset({ purpose: "REEL", source: "sample-91s-video-only.mp4", mime: "video/mp4" });
     await run(tooLong.row.id);

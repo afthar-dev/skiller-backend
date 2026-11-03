@@ -20,7 +20,7 @@ import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
-import { PRESIGN_TTL_SEC } from "./media.rules";
+import { PART_PRESIGN_TTL_SEC, PRESIGN_TTL_SEC } from "./media.rules";
 
 const isMissing = (err: unknown) => {
   const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
@@ -62,11 +62,11 @@ export class R2Client implements OnApplicationShutdown {
   }
 
   /** One presigned UploadPart URL per part (numbered from 1). Each URL signs that part's exact Content-Length. */
-  presignParts(bucket: MediaBucket, key: string, uploadId: string, partSizes: number[]): Promise<string[]> {
+  presignParts(bucket: MediaBucket, key: string, uploadId: string, parts: { partNumber: number; size: number }[]): Promise<string[]> {
     return Promise.all(
-      partSizes.map((size, i) =>
-        getSignedUrl(this.s3, new UploadPartCommand({ Bucket: this.buckets[bucket], Key: key, UploadId: uploadId, PartNumber: i + 1, ContentLength: size }), {
-          expiresIn: PRESIGN_TTL_SEC,
+      parts.map(({ partNumber, size }) =>
+        getSignedUrl(this.s3, new UploadPartCommand({ Bucket: this.buckets[bucket], Key: key, UploadId: uploadId, PartNumber: partNumber, ContentLength: size }), {
+          expiresIn: PART_PRESIGN_TTL_SEC,
           signableHeaders: PART_SIGNED_HEADERS,
         }),
       ),

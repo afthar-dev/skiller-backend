@@ -16,7 +16,8 @@ import { InjectQueue } from "../../common/queue/queue.decorators";
 import { PermissionService } from "../rbac";
 import { ProfilesService } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
-import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { effectiveMaxBytes } from "./media-limits";
+import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { R2Client, isNoSuchUpload } from "./r2.client";
 
 export interface MediaAssetDto {
@@ -57,7 +58,8 @@ export class MediaService {
     private readonly settings: SettingsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
-    @InjectQueue(QueueNames.media) private readonly queue: Queue,
+    @InjectQueue(QueueNames.mediaTranscode) private readonly transcodeQueue: Queue,
+    @InjectQueue(QueueNames.mediaLight) private readonly lightQueue: Queue,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -66,7 +68,7 @@ export class MediaService {
     if (requiresCreator(purpose) && !(await this.profiles.isCreator(userId))) {
       throw new AppError("CREATOR_REQUIRED", 403, "Only creators can upload this kind of media");
     }
-    const maxBytes = purpose === "COURSE_LESSON" ? (await this.settings.get("max_upload_mb_course_lesson")) * 1024 * 1024 : undefined;
+    const maxBytes = await effectiveMaxBytes(this.settings, purpose);
     const rule = validateUpload(purpose, input.mime, input.size, { maxBytes });
     await this.enforceCaps(userId);
     const id = uuidv7();
@@ -85,12 +87,46 @@ export class MediaService {
       }
       const uploadId = await this.r2.createMultipart(SOURCE_BUCKET, objectKey, mime);
       await this.prisma.mediaAsset.update({ where: { id }, data: { uploadId } });
-      const partUrls = await this.r2.presignParts(SOURCE_BUCKET, objectKey, uploadId, partSizes(input.size));
+      const partUrls = await this.r2.presignParts(
+        SOURCE_BUCKET,
+        objectKey,
+        uploadId,
+        partSizes(input.size).map((size, i) => ({ partNumber: i + 1, size })),
+      );
       return { assetId: id, partSize: PART_SIZE, partUrls };
     } catch (err) {
       await this.prisma.mediaAsset.deleteMany({ where: { id } });
       throw err;
     }
+  }
+
+  /**
+   * Resume support: fresh (1 h) signed URLs for specific parts of a multipart upload that is still PENDING. Owner only
+   * (anyone else sees 404), at most 60 calls per hour per user.
+   */
+  async resignParts(userId: string, assetId: string, partNumbers: number[]): Promise<{ parts: { partNumber: number; url: string }[] }> {
+    const asset = await this.owned(userId, assetId);
+    if (asset.status !== "PENDING") throw new AppError("UPLOAD_NOT_PENDING", 409, "This upload is no longer waiting for parts");
+    if (!asset.uploadId) throw new AppError("UPLOAD_NOT_MULTIPART", 409, "This upload is a single request and has no parts; use the URL returned when it was created");
+    const sizes = partSizes(Number(asset.declaredSize));
+    const wanted = [...new Set(partNumbers)].sort((a, b) => a - b);
+    const outOfRange = wanted.filter((n) => n > sizes.length);
+    if (outOfRange.length > 0) {
+      throw new AppError("VALIDATION_FAILED", 400, "Request validation failed", { fields: { partNumbers: [`must be between 1 and ${sizes.length} for this upload`] } });
+    }
+    try {
+      await consumeRateLimit(this.redis, `media-parts:${userId}`, PART_RESIGNS_PER_HOUR, 3600);
+    } catch (err) {
+      if (err instanceof AppError && err.code === "RATE_LIMITED") throw new AppError("RATE_LIMITED", 429, "Too many part re-sign requests; try again later", err.details);
+      throw err;
+    }
+    const urls = await this.r2.presignParts(
+      SOURCE_BUCKET,
+      asset.objectKey,
+      asset.uploadId,
+      wanted.map((partNumber) => ({ partNumber, size: sizes[partNumber - 1] })),
+    );
+    return { parts: wanted.map((partNumber, i) => ({ partNumber, url: urls[i] })) };
   }
 
   /**
@@ -116,7 +152,7 @@ export class MediaService {
     const kind = MEDIA_RULES[asset.purpose].kind;
     const job = kind === "image" ? IMAGE_JOB : kind === "video" ? TRANSCODE_JOB : FILE_JOB;
     try {
-      await this.queue.add(job, { assetId }, { jobId: assetId, attempts: MEDIA_JOB_ATTEMPTS, backoff: { type: "fixed", delay: 5000 } });
+      await (kind === "video" ? this.transcodeQueue : this.lightQueue).add(job, { assetId }, { jobId: assetId, attempts: MEDIA_JOB_ATTEMPTS, backoff: { type: "fixed", delay: 5000 } });
     } catch (err) {
       await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PENDING" } });
       throw err;

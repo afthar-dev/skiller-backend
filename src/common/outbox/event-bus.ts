@@ -22,6 +22,11 @@ export class EventBus {
     this.handlers.set(type, list);
   }
 
+  /** Event types that have at least one handler in this process. */
+  registeredTypes(): DomainEventType[] {
+    return [...this.handlers.entries()].filter(([, list]) => list.length > 0).map(([type]) => type);
+  }
+
   /** Without an explicit `eventId` (direct dispatch in tests) the id is a content hash, so re-dispatching the same event is still a redelivery. */
   async dispatch(event: DomainEvent, eventId?: string): Promise<void> {
     const meta: EventMeta = { eventId: eventId ?? createHash("sha256").update(JSON.stringify(event)).digest("hex").slice(0, 32) };

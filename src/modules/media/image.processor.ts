@@ -20,7 +20,7 @@ const INPUT_OPTIONS = { failOn: "error" as const, limitInputPixels: 100_000_000 
 
 @Injectable()
 export class ImageProcessor implements JobProcessor, OnModuleInit {
-  readonly queue = QueueNames.media;
+  readonly queue = QueueNames.mediaLight;
   readonly jobNames = [IMAGE_JOB];
   readonly concurrency = 4;
   private readonly logger = new Logger(ImageProcessor.name);

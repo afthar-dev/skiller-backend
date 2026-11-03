@@ -29,6 +29,8 @@ const completeSchema = z
   })
   .strict();
 
+const partsSchema = z.object({ partNumbers: z.array(z.number().int().min(1).max(10_000)).min(1).max(1000) }).strict();
+
 const idParam = z.string().uuid();
 
 @ApiTags("Media")
@@ -48,6 +50,17 @@ export class MediaController {
   create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     const input = createSchema.parse(body);
     return this.media.createUpload(user.id, { ...input, purpose: toPurpose(input.purpose) });
+  }
+
+  /** Resume: fresh 1 h signed URLs for the given part numbers of a still-pending multipart upload. */
+  @Post("uploads/:id/parts")
+  @HttpCode(200)
+  @RequirePermission("media.upload")
+  @ApiOperation({ summary: "Re-sign upload part URLs (valid 1 h) to resume a pending multipart upload; 60 requests per hour" })
+  @ApiZodBody(partsSchema)
+  @ApiJsonResponse(200, "Fresh part URLs.", objectSchema({ parts: { type: "array", items: objectSchema({ partNumber: { type: "integer" }, url: schemas.str }, ["partNumber", "url"]) } }, ["parts"]))
+  parts(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.media.resignParts(user.id, idParam.parse(id), partsSchema.parse(body).partNumbers);
   }
 
   @Post("uploads/:id/complete")

@@ -99,7 +99,7 @@ export async function createMediaWorkerHarness() {
     cleanup: moduleRef.get(MediaCleanupProcessor),
     bus: moduleRef.get(EventBus),
     runner: moduleRef.get(QueueWorkerRunner),
-    mediaQueue: moduleRef.get<import("bullmq").Queue>(queueToken(QueueNames.media)),
+    mediaQueue: moduleRef.get<import("bullmq").Queue>(queueToken(QueueNames.mediaLight)),
     mailQueue: moduleRef.get<import("bullmq").Queue>(queueToken(QueueNames.mail)),
     fakeJob,
     createAsset,

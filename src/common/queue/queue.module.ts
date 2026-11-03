@@ -7,10 +7,10 @@ import type { AppConfig } from "../config/config.schema";
 import { ProcessorRegistry } from "./processor-registry";
 import { QueueWorkerRunner } from "./queue-worker.runner";
 import { QUEUE_CONNECTION, QueueName, QueueNames, queueToken } from "./queue.constants";
+import { jobOptionsFor } from "./queue.options";
 
 const names = Object.values(QueueNames) as QueueName[];
 
-const RETRY = { attempts: 5, backoff: { type: "exponential" as const, delay: 1000 } };
 
 const queueProviders: Provider[] = names.map((name) => ({
   provide: queueToken(name),
@@ -18,7 +18,7 @@ const queueProviders: Provider[] = names.map((name) => ({
   useFactory: (connection: Redis) =>
     new Queue(name, {
       connection,
-      defaultJobOptions: { ...RETRY, removeOnComplete: { age: 3600, count: 1000 }, removeOnFail: { age: 7 * 24 * 3600 } },
+      defaultJobOptions: jobOptionsFor(name),
     }),
 }));
 

@@ -36,7 +36,12 @@ model OutboxEvent {
   publishedAt DateTime?
   attempts    Int       @default(0)
 
+  /// Set when delivery to the handlers was given up (all job attempts failed); lastError is the final error message.
+  deadAt      DateTime?
+  lastError   String?
+
   @@index([publishedAt])
+  @@index([deadAt])
   @@map("outbox_events")
 }
 

@@ -1,7 +1,8 @@
 export const QueueNames = {
   outbox: "outbox",
   mail: "mail",
-  media: "media",
+  mediaTranscode: "media-transcode",
+  mediaLight: "media-light",
   maintenance: "maintenance",
 } as const;
 
