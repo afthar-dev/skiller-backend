@@ -15,6 +15,8 @@ import { fetchSource } from "./source-fetch";
 import { R2Client } from "./r2.client";
 
 const UPLOAD_CONCURRENCY = 6;
+/** A reel may be up to 90 s plus this much measurement slack; the output is hard-capped at 90 s (-t) regardless. */
+const DURATION_SLACK_SEC = 0.1;
 
 const CONTENT_TYPES: Record<string, string> = {
   ".m3u8": "application/vnd.apple.mpegurl",
@@ -92,7 +94,7 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
     if (!ALLOWED_VIDEO_FORMATS.has(info.formatName)) throw new PermanentMediaFailure("MEDIA_TYPE_MISMATCH");
     if (!info.hasVideo) throw new PermanentMediaFailure("NO_VIDEO_STREAM");
     const maxDuration = MEDIA_RULES[asset.purpose].maxDurationSec;
-    if (maxDuration !== undefined && info.durationSec > maxDuration) throw new PermanentMediaFailure("DURATION_EXCEEDED");
+    if (maxDuration !== undefined && info.durationSec > maxDuration + DURATION_SLACK_SEC) throw new PermanentMediaFailure("DURATION_EXCEEDED");
 
     const hlsDir = join(dir, "hls");
     const posterPath = join(dir, "poster.jpg");

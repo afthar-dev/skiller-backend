@@ -106,6 +106,29 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
     expect(done.durationSec).toBeLessThanOrEqual(90);
   }, 180_000);
 
+  it("a 90 s video with a slightly longer AAC track is accepted (duration is measured on the video stream)", async () => {
+    const { row } = await h.createAsset({ purpose: "REEL", source: "sample-90s-with-audio.mp4", mime: "video/mp4" });
+    await run(row.id);
+    expect((await reload(row.id)).status).toBe("READY");
+  }, 180_000);
+
+  it("a 90.05 s video-only reel is accepted and its renditions never exceed 90 s", async () => {
+    const { row, prefix } = await h.createAsset({ purpose: "REEL", source: "sample-90.05s-video-only.mp4", mime: "video/mp4" });
+    await run(row.id);
+    const done = await reload(row.id);
+    expect(done.status).toBe("READY");
+    expect(done.durationSec).toBeLessThanOrEqual(90);
+    const dir = await mkdtemp(join(tmpdir(), "skiller-out-"));
+    try {
+      await h.r2.downloadTo("PUBLIC", `${prefix}/hls/240p/index.m3u8`, join(dir, "index.m3u8"));
+      const segments = (await h.r2.listKeys("PUBLIC", `${prefix}/hls/240p/`)).filter((k) => k.endsWith(".ts"));
+      for (const key of segments) await h.r2.downloadTo("PUBLIC", key, join(dir, key.split("/").pop()!));
+      expect((await probe("index.m3u8", dir)).durationSec).toBeLessThanOrEqual(90.01);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 240_000);
+
   it("transcodeToHls with a duration cap never produces a longer output", async () => {
     const dir = await mkdtemp(join(tmpdir(), "skiller-cap-"));
     try {

@@ -135,20 +135,23 @@ export class MediaService {
    * The asset must belong to `ownerId`, have the given purpose and be READY. Unattached assets are deleted after 24 h.
    */
   async attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
-    const usable = { id: assetId, ownerId, purpose, status: "READY" as const };
-    const flipped = await tx.mediaAsset.updateMany({ where: { ...usable, attachedAt: null }, data: { attachedAt: this.clock.now(), detachedAt: null } });
-    if (flipped.count === 1) return;
-    // Already attached is fine (re-saving the same avatar); anything else is not usable.
-    if ((await tx.mediaAsset.count({ where: usable })) === 0) {
+    // Row lock: concurrent attaches / detaches of one asset serialise, so "exactly one attachment" holds.
+    await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
+    const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
+    if (!asset || asset.ownerId !== ownerId || asset.purpose !== purpose || asset.status !== "READY") {
       throw new AppError("MEDIA_NOT_USABLE", 422, "This media cannot be used here: it must be your own, fully processed upload of the right type");
     }
+    // An asset belongs to exactly one target. Callers re-saving the same target skip attach/detach when the id is unchanged.
+    if (asset.attachedAt) throw new AppError("MEDIA_NOT_USABLE", 409, "This media is already in use somewhere else; upload it again to use it here");
+    await tx.mediaAsset.update({ where: { id: assetId }, data: { attachedAt: this.clock.now(), detachedAt: null } });
   }
 
   /**
    * Releases an asset that a profile / org no longer references. It stays for 24 h (caches, in-flight pages), then the
-   * cleanup job deletes it. Call it in the same transaction that drops the reference.
+   * cleanup job deletes it. Call it in the same transaction that drops the reference. Safe because an asset has exactly one attachment (see attach).
    */
   async detach(tx: Prisma.TransactionClient, assetId: string): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
     await tx.mediaAsset.updateMany({ where: { id: assetId, attachedAt: { not: null } }, data: { attachedAt: null, detachedAt: this.clock.now() } });
   }
 

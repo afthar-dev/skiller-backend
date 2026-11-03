@@ -344,6 +344,31 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
       expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: second } })).detachedAt).not.toBeNull();
     });
 
+    it("an asset has exactly one attachment: reusing an attached avatar as an org logo -> 409 MEDIA_NOT_USABLE", async () => {
+      const s = await t.login();
+      const avatar = await readyAsset(s, "AVATAR");
+      expect((await http().patch("/v1/me/profile").set(auth(s)).send({ avatarAssetId: avatar })).status).toBe(200);
+      const org = await http().post("/v1/orgs").set(auth(s)).send({ name: "Reuse Org", slug: `reuse-${Math.random().toString(36).slice(2, 10)}` });
+      const res = await http().patch(`/v1/orgs/${org.body.slug}`).set(auth(s)).send({ logoAssetId: avatar });
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("MEDIA_NOT_USABLE");
+      // creating an org with it fails the same way, and the profile keeps it
+      const created = await http().post("/v1/orgs").set(auth(s)).send({ name: "Reuse Two", slug: `reuse-${Math.random().toString(36).slice(2, 10)}`, logoAssetId: avatar });
+      expect(created.status).toBe(409);
+      const row = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: avatar } });
+      expect(row.attachedAt).not.toBeNull();
+      expect(row.detachedAt).toBeNull();
+    });
+
+    it("saving the same avatar id twice is a no-op: still attached, never detached", async () => {
+      const s = await t.login();
+      const avatar = await readyAsset(s, "AVATAR");
+      for (let i = 0; i < 2; i++) expect((await http().patch("/v1/me/profile").set(auth(s)).send({ avatarAssetId: avatar })).status).toBe(200);
+      const row = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: avatar } });
+      expect(row.attachedAt).not.toBeNull();
+      expect(row.detachedAt).toBeNull();
+    });
+
     it("replacing an org logo detaches the old one", async () => {
       const owner = await t.login();
       const org = await http().post("/v1/orgs").set(auth(owner)).send({ name: "Swap Org", slug: `swap-${Math.random().toString(36).slice(2, 10)}` });

@@ -27,6 +27,9 @@ export const FIXTURES: Fixture[] = [
   { file: "sample-portrait-100s.mp4", input: video("360x640", 10, 100) },
   // No audio track, so the container duration is exactly frames / rate (aac priming would add ~20 ms).
   { file: "sample-90s-video-only.mp4", input: videoOnly("320x180", 10, 90) },
+  { file: "sample-90.05s-video-only.mp4", input: videoOnly("320x180", 20, 90.05) },
+  // Video is exactly 90 s; the AAC track runs ~20 ms longer (priming/padding), which must not matter.
+  { file: "sample-90s-with-audio.mp4", input: video("320x180", 10, 90) },
   { file: "sample-91s-video-only.mp4", input: videoOnly("320x180", 10, 91) },
   { file: "sample-audio-only.mp4", input: ["-f", "lavfi", "-i", "sine=frequency=440:duration=3"] },
 ];

@@ -106,8 +106,11 @@ export async function probe(path: string, cwd?: string, opts: { timeoutMs?: numb
   // Phone footage is often stored landscape with a rotation flag; ffmpeg auto-rotates, so report the displayed size.
   const rotation = Math.abs(Number(video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? video?.tags?.rotate ?? 0)) % 180;
   const [width, height] = video ? (rotation === 90 ? [video.height!, video.width!] : [video.width!, video.height!]) : [0, 0];
-  // Container headers can understate what the streams really hold, so the longest claim wins.
-  const claims = [json.format?.duration, ...streams.map((s) => s.duration)].map(Number).filter((n) => Number.isFinite(n));
+  // The playable length is the video's: audio tracks often run a few ms longer (encoder padding). Take the longest video
+  // stream (a header can understate the container), and only fall back to the container when no video stream reports one.
+  const videoClaims = streams.filter((s) => s.codec_type === "video").map((s) => Number(s.duration)).filter((n) => Number.isFinite(n));
+  const fallback = [json.format?.duration, ...streams.map((s) => s.duration)].map(Number).filter((n) => Number.isFinite(n));
+  const claims = videoClaims.length > 0 ? videoClaims : fallback;
   const duration = claims.length > 0 ? Math.max(...claims) : 0;
   return { formatName: json.format?.format_name ?? "", durationSec: duration, width, height, hasVideo: Boolean(video), hasAudio };
 }
