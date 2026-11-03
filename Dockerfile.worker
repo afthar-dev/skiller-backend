@@ -1,5 +1,7 @@
 # Background worker: BullMQ processors incl. the ffmpeg HLS transcoder. Build: docker build -f Dockerfile.worker -t skiller-worker .
 FROM node:24-bookworm-slim AS build
+# openssl must be present when `prisma generate` runs, or the client is generated for the wrong engine (openssl-1.1.x).
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@10.17.1 --activate
 COPY package.json pnpm-lock.yaml ./
@@ -9,7 +11,7 @@ COPY prisma ./prisma
 RUN pnpm exec prisma generate
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
-RUN pnpm build
+RUN pnpm exec nest build
 
 FROM node:24-bookworm-slim
 RUN apt-get update \
