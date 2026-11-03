@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_FILTER } from "@nestjs/core";
+import { ClockModule } from "./common/clock/clock";
 import { ConfigModule, APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 import { ErrorFilter } from "./common/errors/error.filter";
@@ -12,7 +13,7 @@ import { MailModule } from "./modules/mail/mail.module";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule],
+  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },
