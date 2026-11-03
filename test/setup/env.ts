@@ -2,6 +2,8 @@
 const secret = "test-secret-".padEnd(40, "x");
 
 export function applyTestEnv(overrides: Record<string, string> = {}) {
+  // Set by global setup when the MinIO container is up; unit tests fall back to a placeholder.
+  const minio = process.env.MINIO_ENDPOINT;
   Object.assign(process.env, {
     NODE_ENV: "test",
     PORT: "4999",
@@ -18,7 +20,8 @@ export function applyTestEnv(overrides: Record<string, string> = {}) {
     R2_SECRET_ACCESS_KEY: "minioadmin",
     R2_PUBLIC_BUCKET: "skiller-public",
     R2_PRIVATE_BUCKET: "skiller-private",
-    R2_PUBLIC_BASE_URL: "http://localhost:9000/skiller-public",
+    R2_PUBLIC_BASE_URL: `${minio ?? "http://localhost:9000"}/skiller-public`,
+    ...(minio ? { R2_ENDPOINT: minio } : {}),
     R2_PLAYBACK_BASE_URL: "http://localhost:8787",
     RESEND_API_KEY: "re_test",
     RESEND_FROM_ADDRESS: "Skiller <no-reply@skiller.test>",

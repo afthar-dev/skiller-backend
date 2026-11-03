@@ -82,7 +82,7 @@ describe("organizations and invites", () => {
       expect(missing.body.error.code).toBe("ORG_NOT_FOUND");
     });
 
-    it("PATCH needs org.manage in that org; logo ids are not accepted yet", async () => {
+    it("PATCH needs org.manage in that org; logo ids must be media asset ids", async () => {
       const { owner, org } = await ownerWithOrg();
       const ok = await http().patch(`/v1/orgs/${org.slug}`).set(auth(owner)).send({ name: "Renamed", about: "hi" });
       expect(ok.status).toBe(200);

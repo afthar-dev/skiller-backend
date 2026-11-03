@@ -14,6 +14,7 @@ import { REDIS } from "../../common/redis/redis.constants";
 import { AuditService } from "../audit/audit.service";
 import { AccountService } from "../identity/account.service";
 import { MailService } from "../mail/mail.service";
+import { MediaService } from "../media/media.service";
 import { PermissionService } from "../rbac/permission.service";
 import { RolesService, type MutationMeta } from "../rbac/roles.service";
 import { ProfilesService } from "../users/profiles.service";
@@ -69,6 +70,7 @@ export class OrganizationsService {
     private readonly mail: MailService,
     private readonly accounts: AccountService,
     private readonly profiles: ProfilesService,
+    private readonly media: MediaService,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(REDIS) private readonly redis: Redis,
@@ -93,7 +95,7 @@ export class OrganizationsService {
     return toView(await this.getRow(slug));
   }
 
-  async create(userId: string, input: { name: string; slug?: string; about?: string | null }, meta: MutationMeta = {}): Promise<OrgView> {
+  async create(userId: string, input: { name: string; slug?: string; about?: string | null; logoAssetId?: string | null }, meta: MutationMeta = {}): Promise<OrgView> {
     const explicit = input.slug !== undefined;
     const base = input.slug ?? slugify(input.name);
 
@@ -101,7 +103,8 @@ export class OrganizationsService {
       const slug = attempt === 0 ? base : `${base.slice(0, 33)}-${randomBytes(2).toString("hex")}`;
       try {
         const org = await this.prisma.$transaction(async (tx) => {
-          const created = await tx.organization.create({ data: { slug, name: input.name, about: input.about ?? null, ownerId: userId } });
+          if (input.logoAssetId) await this.media.attach(tx, input.logoAssetId, userId, "AVATAR");
+          const created = await tx.organization.create({ data: { slug, name: input.name, about: input.about ?? null, logoAssetId: input.logoAssetId ?? null, ownerId: userId } });
           await this.roles.grantSystem(userId, "org_owner", tx, created.id);
           await this.outbox.enqueue(tx, { type: "rbac.permissions_changed", userIds: [userId] });
           await this.audit.record(tx, { actorId: userId, action: "org.create", targetType: "organization", targetId: created.id, before: null, after: toView(created), ...meta });
@@ -117,12 +120,15 @@ export class OrganizationsService {
     throw new AppError("ORG_SLUG_TAKEN", 409, "Could not allocate an organization slug; provide one");
   }
 
-  async update(actorId: string, slug: string, patch: { name?: string; about?: string | null }, meta: MutationMeta = {}): Promise<OrgView> {
+  async update(actorId: string, slug: string, patch: { name?: string; about?: string | null; logoAssetId?: string | null }, meta: MutationMeta = {}): Promise<OrgView> {
     const current = await this.getRow(slug);
     const data: Prisma.OrganizationUpdateInput = {};
     if (patch.name !== undefined) data.name = patch.name;
     if (patch.about !== undefined) data.about = patch.about;
+    if (patch.logoAssetId !== undefined) data.logoAssetId = patch.logoAssetId;
     const updated = await this.prisma.$transaction(async (tx) => {
+      // Logos are uploaded with purpose "avatar" by whoever manages the org; the uploader owns the asset.
+      if (patch.logoAssetId) await this.media.attach(tx, patch.logoAssetId, actorId, "AVATAR");
       const row = await tx.organization.update({ where: { id: current.id }, data });
       await this.audit.record(tx, { actorId, action: "org.update", targetType: "organization", targetId: current.id, before: toView(current), after: toView(row), ...meta });
       return row;

@@ -37,6 +37,8 @@ export interface ProfilePatch {
   about?: string | null;
   location?: string | null;
   links?: { label: string; url: string }[];
+  avatarAssetId?: string | null;
+  bannerAssetId?: string | null;
 }
 
 export interface ExperienceInput {
@@ -125,6 +127,11 @@ export class ProfilesService {
     return profile;
   }
 
+  async isCreator(userId: string): Promise<boolean> {
+    const row = await this.prisma.profile.findUnique({ where: { userId }, select: { isCreator: true } });
+    return row?.isCreator ?? false;
+  }
+
   async displayNameOf(userId: string): Promise<string> {
     return (await this.ensure(userId)).displayName;
   }
@@ -134,7 +141,8 @@ export class ProfilesService {
     return new Map(rows.map((r) => [r.userId, toSummary(r)]));
   }
 
-  async update(userId: string, patch: ProfilePatch): Promise<ProfileView> {
+  /** `inTx` runs inside the update's transaction before the write (used to attach media so a rejected asset aborts the whole update). */
+  async update(userId: string, patch: ProfilePatch, inTx?: (tx: Prisma.TransactionClient) => Promise<void>): Promise<ProfileView> {
     await this.ensure(userId);
     const data: Prisma.ProfileUpdateInput = {};
     if (patch.handle !== undefined) {
@@ -151,9 +159,16 @@ export class ProfilesService {
     if (patch.about !== undefined) data.about = patch.about;
     if (patch.location !== undefined) data.location = patch.location;
     if (patch.links !== undefined) data.links = patch.links as Prisma.InputJsonValue;
+    if (patch.avatarAssetId !== undefined) data.avatarAssetId = patch.avatarAssetId;
+    if (patch.bannerAssetId !== undefined) data.bannerAssetId = patch.bannerAssetId;
 
     try {
-      return toProfileView(await this.prisma.profile.update({ where: { userId }, data }));
+      return toProfileView(
+        await this.prisma.$transaction(async (tx) => {
+          if (inTx) await inTx(tx);
+          return tx.profile.update({ where: { userId }, data });
+        }),
+      );
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new AppError("HANDLE_TAKEN", 409, "This handle is already taken");

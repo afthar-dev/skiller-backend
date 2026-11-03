@@ -6,6 +6,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AccountService } from "../identity/account.service";
 import { PermissionService } from "../rbac/permission.service";
 import { RolesService } from "../rbac/roles.service";
+import { MediaService } from "../media/media.service";
 import { CreatorService } from "./creator.service";
 import { ProfilesService, toProfileView } from "./profiles.service";
 
@@ -18,7 +19,9 @@ const httpUrl = z
 const optText = (max: number) => z.string().trim().max(max).nullable().optional();
 const date = z.string().date();
 
-// .strict() everywhere: unknown fields (avatar/banner/org logo ids, isCreator, ...) are rejected, not silently dropped.
+const assetId = z.string().uuid().nullable().optional();
+
+// .strict() everywhere: unknown fields (isCreator, ...) are rejected, not silently dropped.
 const profilePatch = z
   .object({
     handle: z.string().max(60).optional(),
@@ -27,6 +30,8 @@ const profilePatch = z
     about: optText(5000),
     location: optText(80),
     links: z.array(z.object({ label: z.string().trim().min(1).max(40), url: httpUrl }).strict()).max(10).optional(),
+    avatarAssetId: assetId,
+    bannerAssetId: assetId,
   })
   .strict();
 
@@ -88,6 +93,7 @@ export class MeController {
     private readonly roles: RolesService,
     private readonly permissions: PermissionService,
     private readonly creator: CreatorService,
+    private readonly media: MediaService,
   ) {}
 
   @Get()
@@ -104,7 +110,12 @@ export class MeController {
 
   @Patch("profile")
   updateProfile(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
-    return this.profiles.update(auth.id, profilePatch.parse(body));
+    const patch = profilePatch.parse(body);
+    // Attaching happens in the profile update's own transaction: a media asset that is not usable rejects the whole PATCH.
+    return this.profiles.update(auth.id, patch, async (tx) => {
+      if (patch.avatarAssetId) await this.media.attach(tx, patch.avatarAssetId, auth.id, "AVATAR");
+      if (patch.bannerAssetId) await this.media.attach(tx, patch.bannerAssetId, auth.id, "BANNER");
+    });
   }
 
   @Put("experience")

@@ -1,4 +1,5 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
+import { MediaModule } from "../media/media.module";
 import { CreatorService } from "./creator.service";
 import { FollowsService } from "./follows.service";
 import { MeController } from "./me.controller";
@@ -7,6 +8,7 @@ import { ProfilesController } from "./profiles.controller";
 import { ProfilesService } from "./profiles.service";
 
 @Module({
+  imports: [forwardRef(() => MediaModule)],
   controllers: [MeController, ProfilesController],
   providers: [ProfilesService, FollowsService, CreatorService, ProfileRegistrationHandler],
   exports: [ProfilesService],

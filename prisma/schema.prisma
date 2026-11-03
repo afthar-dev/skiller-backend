@@ -338,3 +338,56 @@ model OrgInvite {
   @@index([orgId, email])
   @@map("org_invites")
 }
+
+// ─── media ───
+
+enum MediaPurpose {
+  AVATAR
+  BANNER
+  THUMBNAIL
+  GIG_GALLERY
+  REEL
+  COURSE_LESSON
+  COURSE_RESOURCE
+}
+
+enum MediaBucket {
+  PUBLIC
+  PRIVATE
+}
+
+enum MediaStatus {
+  PENDING
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+// ownerId / attachment targets are plain ids (no FKs): the media module owns this table only.
+// attachedAt is set by MediaService.attach(); unattached assets older than 24 h are deleted by the cleanup job.
+model MediaAsset {
+  id            String       @id @default(uuid(7))
+  ownerId       String
+  purpose       MediaPurpose
+  bucket        MediaBucket
+  status        MediaStatus  @default(PENDING)
+  objectKey     String
+  filename      String?
+  mime          String
+  declaredSize  BigInt
+  uploadId      String?
+  durationSec   Float?
+  width         Int?
+  height        Int?
+  renditions    Json?
+  posterKey     String?
+  failureReason String?
+  attachedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([attachedAt, createdAt])
+  @@map("media_assets")
+}

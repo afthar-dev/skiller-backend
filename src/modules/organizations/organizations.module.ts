@@ -1,11 +1,12 @@
 import { Module, OnModuleInit } from "@nestjs/common";
+import { MediaModule } from "../media/media.module";
 import { OrgParamResolverRegistry } from "../rbac/org-param-resolver";
 import { UsersModule } from "../users/users.module";
 import { OrganizationsController, OrgInvitesController } from "./organizations.controller";
 import { OrganizationsService } from "./organizations.service";
 
 @Module({
-  imports: [UsersModule],
+  imports: [UsersModule, MediaModule],
   controllers: [OrganizationsController, OrgInvitesController],
   providers: [OrganizationsService],
   exports: [OrganizationsService],

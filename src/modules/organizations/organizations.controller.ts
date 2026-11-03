@@ -18,9 +18,9 @@ const slug = z
 const name = z.string().trim().min(1).max(100);
 const about = z.string().trim().max(5000).nullable().optional();
 
-// .strict(): logo ids are not accepted until media wiring lands.
-const createSchema = z.object({ name, slug: slug.optional(), about }).strict();
-const updateSchema = z.object({ name: name.optional(), about }).strict();
+const logoAssetId = z.string().uuid().nullable().optional();
+const createSchema = z.object({ name, slug: slug.optional(), about, logoAssetId }).strict();
+const updateSchema = z.object({ name: name.optional(), about, logoAssetId }).strict();
 const inviteSchema = z.object({ email: z.string().trim().email().max(254), roleKey: z.enum(INVITABLE_ROLE_KEYS) }).strict();
 const acceptSchema = z.object({ token: z.string().min(20).max(200) }).strict();
 
