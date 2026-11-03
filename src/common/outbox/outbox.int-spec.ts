@@ -1,9 +1,11 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import type { Queue } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { applyTestEnv } from "../../../test/setup/env";
 import { ConfigModule } from "../config/config.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
+import { queueToken, QueueNames } from "../queue/queue.constants";
 import { QueueModule } from "../queue/queue.module";
 import { QueueWorkerRunner } from "../queue/queue-worker.runner";
 import { RedisModule } from "../redis/redis.module";
@@ -85,6 +87,33 @@ describe("outbox", () => {
     expect(seen.filter((u) => u === userId)).toHaveLength(1);
     const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
     expect(row.publishedAt).not.toBeNull();
+  });
+
+  it("relay lock: concurrent relays enqueue each event exactly once and publish it once", async () => {
+    const userId = randomUUID();
+    await prisma.$transaction((tx) => outbox.enqueue(tx, { type: "user.registered", userId, email: "lock@example.com" }));
+    const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
+
+    // Slow add() keeps the first relay's transaction (and row lock) open while the second one reads.
+    const queue = moduleRef.get<Queue>(queueToken(QueueNames.outbox));
+    const original = queue.add.bind(queue);
+    const spy = jest.spyOn(queue, "add").mockImplementation(async (...args: Parameters<Queue["add"]>) => {
+      await sleep(300);
+      return original(...args);
+    });
+    try {
+      const counts = await Promise.all([relay.relayOnce(), relay.relayOnce()]);
+      const adds = spy.mock.calls.filter((c) => c[2]?.jobId === row.id);
+      expect(adds).toHaveLength(1);
+      expect(counts[0] + counts[1]).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const after = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.publishedAt).not.toBeNull();
+    expect(after.attempts).toBe(1);
+    await waitFor(() => seen.includes(userId));
   });
 
   it("retries when a handler fails", async () => {
