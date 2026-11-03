@@ -86,23 +86,94 @@ jobs:
   docker:
     needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: smoke
+          POSTGRES_DB: skiller
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Production-mode smoke environment: dummy secrets and endpoints, real Postgres / Redis from the service containers.
+      SMOKE_ENV: >-
+        -e NODE_ENV=production
+        -e DATABASE_URL=postgresql://postgres:smoke@localhost:5432/skiller
+        -e REDIS_URL=redis://localhost:6379
+        -e JWT_SECRET=smoke-secret-0123456789abcdef0123456789abcdef
+        -e OTP_PEPPER=smoke-secret-0123456789abcdef0123456789abcdef
+        -e PLAYBACK_SECRET=smoke-secret-0123456789abcdef0123456789abcdef
+        -e CORS_ORIGINS=https://app.skiller.test
+        -e WEB_BASE_URL=https://app.skiller.test
+        -e COOKIE_DOMAIN=skiller.test
+        -e R2_ACCOUNT_ID=smoke
+        -e R2_ACCESS_KEY_ID=smoke
+        -e R2_SECRET_ACCESS_KEY=smoke
+        -e R2_PUBLIC_BUCKET=skiller-public
+        -e R2_PRIVATE_BUCKET=skiller-private
+        -e R2_PUBLIC_BASE_URL=https://media.skiller.test
+        -e R2_PLAYBACK_BASE_URL=https://play.skiller.test
+        -e RESEND_API_KEY=re_smoke
+        -e RESEND_FROM_ADDRESS=no-reply@skiller.test
+        -e RESEND_WEBHOOK_SECRET=whsec_dGVzdHNlY3JldA==
+        -e SUPER_ADMIN_EMAIL=admin@skiller.test
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Build API image (not pushed)
+      - name: Build API image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
-          push: false
+          load: true
+          tags: skiller-api:ci
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
-      - name: Build worker image (not pushed)
+      - name: Build worker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.worker
-          push: false
+          load: true
+          tags: skiller-worker:ci
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
+
+      # Boots the images that would be deployed: catches import-order / module-graph failures that only show up in the compiled build.
+      - name: Release (migrate + seed) with the API image
+        run: docker run --rm --network host $SMOKE_ENV skiller-api:ci npm run release:seed
+      - name: Smoke - API answers /v1/health and /v1/ready
+        run: |
+          docker run -d --name api --network host $SMOKE_ENV -e PORT=4000 skiller-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4000/v1/health; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:4000/v1/health
+          curl -fsS http://localhost:4000/v1/ready
+      - name: Smoke - worker starts every queue worker
+        run: |
+          docker run -d --name worker --network host $SMOKE_ENV skiller-worker:ci
+          for i in $(seq 1 30); do
+            if docker logs worker 2>&1 | grep -q "workers started"; then break; fi
+            sleep 2
+          done
+          docker logs worker 2>&1 | grep "workers started" | grep -q "outbox" && docker logs worker 2>&1 | grep "workers started" | grep -q "media-transcode"
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          docker logs api || true
+          docker logs worker || true
