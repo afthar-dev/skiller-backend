@@ -68,7 +68,47 @@ export type DomainEvent =
       itemId: string;
       itemTitle: string;
       amountPaise: string;
-    };;
+    }
+  | {
+      /** A seller asked to withdraw: the amount is locked (AVAILABLE -> PAYOUT_LOCKED) and waits for finance. */
+      type: "payout.requested";
+      payoutId: string;
+      ownerType: "USER" | "ORG";
+      ownerId: string;
+      /** The user who asked (and who is told about every step). */
+      requestedBy: string;
+      /** Paise as decimal strings (events are JSON). */
+      amountPaise: string;
+      tdsPaise: string;
+      netPaise: string;
+    }
+  | { type: "payout.approved"; payoutId: string; ownerType: "USER" | "ORG"; ownerId: string; requestedBy: string; amountPaise: string; tdsPaise: string; netPaise: string }
+  | { type: "payout.rejected"; payoutId: string; ownerType: "USER" | "ORG"; ownerId: string; requestedBy: string; amountPaise: string; tdsPaise: string; netPaise: string; note: string | null }
+  | {
+      /** The money reached the bank (RazorpayX payout.processed). */
+      type: "payout.settled";
+      payoutId: string;
+      ownerType: "USER" | "ORG";
+      ownerId: string;
+      requestedBy: string;
+      amountPaise: string;
+      tdsPaise: string;
+      netPaise: string;
+      utr: string | null;
+    }
+  | {
+      /** The payout did not reach the bank, or came back: the funds are in AVAILABLE again. */
+      type: "payout.failed";
+      payoutId: string;
+      ownerType: "USER" | "ORG";
+      ownerId: string;
+      requestedBy: string;
+      amountPaise: string;
+      tdsPaise: string;
+      netPaise: string;
+      outcome: "FAILED" | "REVERSED";
+      reason: string;
+    };
 
 export type DomainEventType = DomainEvent["type"];
 export type EventOf<T extends DomainEventType> = Extract<DomainEvent, { type: T }>;

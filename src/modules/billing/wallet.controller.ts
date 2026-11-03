@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Req } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Put, Query, Req } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { z } from "zod";
@@ -6,8 +6,10 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AppError } from "../../common/errors/app-error";
+import { parsePage } from "../../common/http/pagination";
+import { Idempotent } from "../../common/idempotency";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
-import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { OrganizationsService } from "../organizations";
 import { RequirePermission } from "../rbac";
@@ -16,6 +18,9 @@ import { ProfilesService } from "../users";
 import type { Owner } from "./entitlements.service";
 import { ACCOUNT_NUMBER_PATTERN, IFSC_PATTERN, PAN_PATTERN, VPA_PATTERN } from "./kyc";
 import { PayoutAccountsService } from "./payout-accounts.service";
+import { fromApi } from "./money";
+import { PayoutsService } from "./payouts.service";
+import { WalletService } from "./wallet.service";
 
 export const metaOf = (req: Request): MutationMeta => ({ ip: req.ip, requestId: (req as Request & { id?: string }).id });
 
@@ -40,6 +45,8 @@ export const payoutAccountSchema = z
     if (v.type === "UPI" && (!v.upi || v.bank)) ctx.addIssue({ code: "custom", message: "send `upi` (and no `bank`) for a UPI account", path: ["upi"] });
   });
 
+export const payoutRequestSchema = z.object({ amountPaise: z.string().regex(/^[1-9]\d{0,14}$/, 'integer paise as a string, e.g. "100000"') }).strict();
+
 /** The wallet of the signed-in creator. Payout details are masked everywhere they come back. */
 @ApiTags("Wallet")
 @Controller("wallet")
@@ -47,6 +54,8 @@ export class WalletController {
   constructor(
     private readonly accounts: PayoutAccountsService,
     private readonly profiles: ProfilesService,
+    private readonly wallet: WalletService,
+    private readonly payouts: PayoutsService,
   ) {}
 
   private async owner(user: AuthUser): Promise<Owner> {
@@ -73,6 +82,43 @@ export class WalletController {
   async getAccount(@CurrentUser() user: AuthUser) {
     return { account: await this.accounts.current(await this.owner(user)) };
   }
+
+  @AuthenticatedOnly()
+  @Get("me")
+  @ApiOperation({ summary: "My balances (available, pending, locked for payouts) as strings, and lifetime earned / withdrawn" })
+  async me(@CurrentUser() user: AuthUser) {
+    return this.wallet.me(await this.owner(user));
+  }
+
+  @AuthenticatedOnly()
+  @Get("ledger")
+  @ApiOperation({ summary: "My ledger lines, newest first" })
+  @ApiPagination()
+  async ledger(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
+    return this.wallet.ledgerLines(await this.owner(user), parsePage(query));
+  }
+
+  @AuthenticatedOnly()
+  @Get("payouts")
+  @ApiOperation({ summary: "My payouts, newest first" })
+  @ApiPagination()
+  async list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
+    return this.payouts.listFor(await this.owner(user), parsePage(query));
+  }
+
+  @AuthenticatedOnly()
+  @Idempotent()
+  @Post("payouts")
+  @HttpCode(201)
+  @RequireStepUp()
+  @ApiOperation({ summary: "Withdraw money: locks the amount from my available balance until finance decides (requires Idempotency-Key and step-up)" })
+  @ApiZodBody(payoutRequestSchema)
+  @ApiErrorResponse(409, "INSUFFICIENT_BALANCE, PAYOUT_ACCOUNT_COOLDOWN or an idempotency conflict.")
+  @ApiErrorResponse(422, "PAYOUT_BELOW_MINIMUM, PAYOUT_ACCOUNT_REQUIRED or PAYOUT_ACCOUNT_NOT_VERIFIED.")
+  async request(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    const owner = await this.owner(user);
+    return this.payouts.request(owner, user.id, fromApi(payoutRequestSchema.parse(body).amountPaise));
+  }
 }
 
 /** The same wallet for an organization, authorised by `org.manage` on that organization. */
@@ -83,6 +129,8 @@ export class OrgWalletController {
     private readonly accounts: PayoutAccountsService,
     private readonly orgs: OrganizationsService,
     private readonly profiles: ProfilesService,
+    private readonly wallet: WalletService,
+    private readonly payouts: PayoutsService,
   ) {}
 
   private async owner(slug: string): Promise<Owner> {
@@ -107,5 +155,40 @@ export class OrgWalletController {
   @ApiOperation({ summary: "The organization's current payout account (masked), or null" })
   async getAccount(@Param("slug") slug: string) {
     return { account: await this.accounts.current(await this.owner(slug)) };
+  }
+
+  @Get("me")
+  @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "The organization's balances and lifetime totals" })
+  async me(@Param("slug") slug: string) {
+    return this.wallet.me(await this.owner(slug));
+  }
+
+  @Get("ledger")
+  @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "The organization's ledger lines, newest first" })
+  @ApiPagination()
+  async ledger(@Param("slug") slug: string, @Query() query: Record<string, unknown>) {
+    return this.wallet.ledgerLines(await this.owner(slug), parsePage(query));
+  }
+
+  @Get("payouts")
+  @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "The organization's payouts, newest first" })
+  @ApiPagination()
+  async list(@Param("slug") slug: string, @Query() query: Record<string, unknown>) {
+    return this.payouts.listFor(await this.owner(slug), parsePage(query));
+  }
+
+  @Idempotent()
+  @Post("payouts")
+  @HttpCode(201)
+  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Withdraw the organization's money (requires Idempotency-Key and step-up)" })
+  @ApiZodBody(payoutRequestSchema)
+  async request(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {
+    const owner = await this.owner(slug);
+    return this.payouts.request(owner, user.id, fromApi(payoutRequestSchema.parse(body).amountPaise));
   }
 }

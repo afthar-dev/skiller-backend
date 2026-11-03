@@ -15,6 +15,12 @@ export interface LedgerEntryInput {
   refId: string;
   description: string;
   lines: LedgerLineInput[];
+  /**
+   * Accounts whose balance must still be >= 0 once this entry is applied, checked under the balance row locks the entry already holds
+   * (INSUFFICIENT_BALANCE, 409, and the caller's transaction rolls back). This is how a payout request spends AVAILABLE safely: two
+   * concurrent requests queue on the row lock and the second sees the balance the first left.
+   */
+  nonNegative?: string[];
 }
 
 export interface PostResult {
@@ -37,7 +43,7 @@ export class LedgerService {
   constructor(private readonly prisma: PrismaService) {}
 
   async post(tx: Prisma.TransactionClient, entry: LedgerEntryInput): Promise<PostResult> {
-    const { refType, refId, description, lines } = entry;
+    const { refType, refId, description, lines, nonNegative } = entry;
     if (!refType || !refId || !description) throw new AppError("LEDGER_INVALID_REF", 500, "Ledger entries need refType, refId and description");
     if (lines.length === 0) throw new AppError("LEDGER_EMPTY", 500, "A ledger entry needs at least one line");
     if (lines.some((l) => typeof l.amountPaise !== "bigint")) throw new AppError("LEDGER_INVALID_LINE", 500, "Ledger line amounts must be bigint paise");
@@ -83,6 +89,10 @@ export class LedgerService {
     for (const l of lines) deltas.set(l.accountId, (deltas.get(l.accountId) ?? 0n) + l.amountPaise);
     for (const accountId of accountIds) {
       await tx.accountBalance.update({ where: { accountId }, data: { balancePaise: { increment: deltas.get(accountId)! } } });
+    }
+    if (nonNegative && nonNegative.length > 0) {
+      const negative = await tx.accountBalance.findMany({ where: { accountId: { in: nonNegative }, balancePaise: { lt: 0n } }, select: { accountId: true } });
+      if (negative.length > 0) throw new AppError("INSUFFICIENT_BALANCE", 409, "The balance does not cover this amount", { accountIds: negative.map((a) => a.accountId) });
     }
     return { entryId, duplicate: false };
   }

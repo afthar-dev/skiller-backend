@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { reportException } from "../../common/observability/sentry";
-import { NotificationsService } from "../notifications";
+import { NotificationsService, type NotifyInput } from "../notifications";
 import { PlatformRoleDirectory } from "../rbac";
 
 export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED" | "REFUND_FAILED" | "REFUND_UNMATCHED" | "REFUND_WEBHOOK_FAILED"
@@ -25,6 +25,23 @@ export class FinanceAlerts {
     private readonly notifications: NotificationsService,
     private readonly roles: PlatformRoleDirectory,
   ) {}
+
+  /** An ordinary notification to every finance admin (no Sentry report), e.g. "a payout awaits approval". Idempotent per `sourceKey`. Never throws. */
+  async broadcast(n: { type: NotifyInput["type"]; title: string; body: string; link: string; data?: Record<string, unknown>; sourceKey: string }): Promise<void> {
+    try {
+      let cursor: string | undefined;
+      for (;;) {
+        const ids = await this.roles.userIdsWithRole(FINANCE_ADMIN_ROLE, cursor, PAGE);
+        for (const userId of ids) {
+          await this.notifications.notify(userId, { type: n.type, title: n.title, body: n.body, link: n.link, data: n.data, sourceEventId: `finance:${n.sourceKey}` });
+        }
+        if (ids.length < PAGE) break;
+        cursor = ids[ids.length - 1];
+      }
+    } catch (err) {
+      this.logger.error(`could not notify finance (${n.type}): ${(err as Error).message}`);
+    }
+  }
 
   async raise(alert: { kind: FinanceAlertKind; orderId?: string; message: string; dedupeKey: string; data?: Record<string, unknown>; link?: string }): Promise<void> {
     this.logger.error(`finance alert ${alert.kind} for order ${alert.orderId ?? "(unknown)"}: ${alert.message}`);

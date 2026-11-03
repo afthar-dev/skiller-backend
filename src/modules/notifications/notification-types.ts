@@ -17,6 +17,12 @@ export const NOTIFICATION_TYPES = {
   "refund.processed": { transactional: true },
   "refund.rejected": { transactional: true },
   "finance.alert": { transactional: false },
+  "payout.requested": { transactional: true },
+  "payout.approved": { transactional: true },
+  "payout.rejected": { transactional: true },
+  "payout.paid": { transactional: true },
+  "payout.failed": { transactional: true },
+  "payout.review": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

@@ -959,3 +959,50 @@ model PayoutAccount {
   @@index([reviewFlag])
   @@map("payout_accounts")
 }
+
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  PAID
+  REJECTED
+  /// RazorpayX sent the money back after reporting it processed.
+  REVERSED
+  /// Could not be sent, or RazorpayX failed / rejected it before settlement.
+  FAILED
+}
+
+enum PayoutMode {
+  IMPS
+  UPI
+  NEFT
+}
+
+/// A seller's withdrawal. `amountPaise` leaves AVAILABLE when requested; the bank receives amount - tdsPaise. The tax rate (tdsBps) is
+/// frozen at request time so a later settings change cannot alter a payout in flight. Ledger entries are keyed (PAYOUT, id, step).
+model Payout {
+  id                String          @id @default(uuid(7))
+  ownerType         SellerOwnerType
+  ownerId           String
+  /// The account the money goes to, as it was when the payout was requested (a later account change does not redirect this payout).
+  payoutAccountId   String
+  amountPaise       BigInt
+  tdsBps            Int
+  tdsPaise          BigInt
+  mode              PayoutMode
+  status            PayoutStatus    @default(REQUESTED)
+  requestedBy       String
+  approvedBy        String?
+  approvedAt        DateTime?
+  razorpayxPayoutId String?         @unique
+  utr               String?
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([ownerType, ownerId, id])
+  @@index([status, createdAt])
+  @@index([status, approvedAt])
+  @@map("payouts")
+}

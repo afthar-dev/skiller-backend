@@ -45,6 +45,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | yes | Razorpay API credentials (orders, refunds, subscriptions). Use test-mode keys outside production. |
 | `RAZORPAY_WEBHOOK_SECRET` | yes | Secret of the Razorpay dashboard webhook; verifies `X-Razorpay-Signature` on `POST /v1/webhooks/razorpay`. |
 | `RAZORPAYX_ACCOUNT_NUMBER`, `RAZORPAYX_WEBHOOK_SECRET` | yes | RazorpayX payout account number, and the secret verifying `POST /v1/webhooks/razorpayx`. |
+| `KYC_PEPPER` | no | 32+ character secret keying the HMAC of PAN numbers (duplicate-PAN detection); defaults to `OTP_PEPPER`. Changing it stops old accounts matching new ones. |
 | `SUPER_ADMIN_EMAIL` | yes | Gets the `super_admin` role at seed time. |
 | `TRUST_PROXY` | no | Reverse-proxy hops in front of the API (default `0`). |
 | `SENTRY_DSN` | no | Enables Sentry. Only server errors (status >= 500) are reported. |

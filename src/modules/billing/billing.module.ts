@@ -25,6 +25,10 @@ import { OrderHandlers } from "./order-handlers";
 import { OrderMaintenanceProcessor } from "./order-maintenance.processor";
 import { OrdersService } from "./orders.service";
 import { PayoutAccountHandlers } from "./payout-account-handlers";
+import { PayoutHandlers } from "./payout-handlers";
+import { PayoutMaintenanceProcessor, PayoutSendProcessor } from "./payout.processor";
+import { PayoutsService } from "./payouts.service";
+import { WalletService } from "./wallet.service";
 import { PayoutAccountsService } from "./payout-accounts.service";
 import { PlansService } from "./plans.service";
 import { DefaultRefundEligibility, RefundEligibilityRegistry } from "./refund-eligibility";
@@ -80,9 +84,14 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   RefundsProcessor,
   PayoutAccountsService,
   PayoutAccountHandlers,
+  PayoutsService,
+  PayoutHandlers,
+  PayoutSendProcessor,
+  PayoutMaintenanceProcessor,
+  WalletService,
 ];
 
-export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor, RefundEligibilityRegistry, RefundsProcessor];
+export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor, RefundEligibilityRegistry, RefundsProcessor, PayoutMaintenanceProcessor];
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.

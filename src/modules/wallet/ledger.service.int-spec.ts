@@ -71,6 +71,35 @@ describe("Ledger and accounts", () => {
       expect(await prisma.journalEntry.count({ where: { refId: r.refId } })).toBe(0);
     });
 
+    it("nonNegative: an entry that would take a listed account below zero is INSUFFICIENT_BALANCE and applies nothing; exactly zero is allowed", async () => {
+      const [a, b] = await newAccounts(2);
+      await post([{ accountId: a, amountPaise: 1000n }, { accountId: b, amountPaise: -1000n }]);
+      const r = ref();
+      await expect(prisma.$transaction((tx) => ledger.post(tx, { ...r, lines: [{ accountId: a, amountPaise: -1001n }, { accountId: b, amountPaise: 1001n }], nonNegative: [a] }))).rejects.toMatchObject({ code: "INSUFFICIENT_BALANCE", status: 409 });
+      expect(await prisma.journalEntry.count({ where: { refId: r.refId } })).toBe(0);
+      expect(await ledger.balance(a)).toBe(1000n);
+      await prisma.$transaction((tx) => ledger.post(tx, { ...ref(), lines: [{ accountId: a, amountPaise: -1000n }, { accountId: b, amountPaise: 1000n }], nonNegative: [a] }));
+      expect(await ledger.balance(a)).toBe(0n);
+      // An account that is already negative stays blocked, and an account not listed is unconstrained.
+      await expect(prisma.$transaction((tx) => ledger.post(tx, { ...ref(), lines: [{ accountId: a, amountPaise: -1n }, { accountId: b, amountPaise: 1n }], nonNegative: [a] }))).rejects.toMatchObject({ code: "INSUFFICIENT_BALANCE" });
+      await post([{ accountId: a, amountPaise: -1n }, { accountId: b, amountPaise: 1n }]);
+      expect(await ledger.balance(a)).toBe(-1n);
+      // Debiting an already negative account further is blocked; crediting it back to zero is not.
+      await expect(prisma.$transaction((tx) => ledger.post(tx, { ...ref(), lines: [{ accountId: a, amountPaise: -1n }, { accountId: b, amountPaise: 1n }], nonNegative: [a] }))).rejects.toMatchObject({ code: "INSUFFICIENT_BALANCE" });
+      await prisma.$transaction((tx) => ledger.post(tx, { ...ref(), lines: [{ accountId: a, amountPaise: 1n }, { accountId: b, amountPaise: -1n }], nonNegative: [a] }));
+      expect(await ledger.balance(a)).toBe(0n);
+    });
+
+    it("nonNegative: concurrent spends of the same balance queue on the row lock; only what is there is spent", async () => {
+      const [a, b] = await newAccounts(2);
+      await post([{ accountId: a, amountPaise: 1000n }, { accountId: b, amountPaise: -1000n }]);
+      const spend = () => prisma.$transaction((tx) => ledger.post(tx, { ...ref(), lines: [{ accountId: a, amountPaise: -600n }, { accountId: b, amountPaise: 600n }], nonNegative: [a] }));
+      const results = await Promise.allSettled([spend(), spend(), spend(), spend()]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(results.filter((r) => r.status === "rejected").every((r) => (r as PromiseRejectedResult).reason.code === "INSUFFICIENT_BALANCE")).toBe(true);
+      expect(await ledger.balance(a)).toBe(400n);
+    });
+
     it("rejects an unknown account", async () => {
       const [a] = await newAccounts(1);
       await expect(post([{ accountId: a, amountPaise: -1n }, { accountId: randomUUID(), amountPaise: 1n }])).rejects.toMatchObject({ code: "LEDGER_ACCOUNT_NOT_FOUND" });
