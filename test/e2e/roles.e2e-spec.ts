@@ -1,6 +1,10 @@
 import { Controller, Get } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import type { Redis } from "ioredis";
 import request from "supertest";
+import { EventBus } from "../../src/common/outbox/event-bus";
+import type { DomainEvent } from "../../src/common/outbox/events";
+import { REDIS } from "../../src/common/redis/redis.constants";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { PermissionService } from "../../src/modules/rbac/permission.service";
 import { RequirePermission } from "../../src/modules/rbac/require-permission.decorator";
@@ -206,6 +210,47 @@ describe("roles and audit", () => {
     expect(stillLast.body.error.code).toBe("LAST_SUPER_ADMIN");
   });
 
+  it("a suspended super_admin does not count as active for LAST_SUPER_ADMIN", async () => {
+    const other = await t.login();
+    await onlySuperAdmins([admin.userId, other.userId]);
+    const adminGrant = await prisma.userRole.findFirstOrThrow({ where: { userId: admin.userId, role: { key: "super_admin" } } });
+    await prisma.user.update({ where: { id: other.userId }, data: { status: "SUSPENDED" } });
+    try {
+      const res = await revoke(admin, admin.userId, adminGrant.id);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("LAST_SUPER_ADMIN");
+    } finally {
+      await prisma.user.update({ where: { id: other.userId }, data: { status: "ACTIVE" } });
+      await onlySuperAdmins([admin.userId]);
+    }
+  });
+
+  it("if cache invalidation fails after commit the request still succeeds, and the outbox backstop invalidates", async () => {
+    const key = roleKey("backstop");
+    const role = (await createRole(admin, { key, name: "B", scope: "PLATFORM", permissionKeys: ["media.manage_any"] })).body;
+    const user = await t.login();
+    expect((await grant(admin, user.userId, { roleKey: key })).status).toBe(201);
+    expect((await mediaRoute(user)).status).toBe(200); // cached
+
+    const redis = t.app.get<Redis>(REDIS);
+    const incr = jest.spyOn(redis, "incr").mockRejectedValue(new Error("redis down"));
+    let patched;
+    try {
+      patched = await http().patch(`/v1/admin/roles/${role.id}`).set(auth(admin)).send({ permissionKeys: ["user.view"] });
+    } finally {
+      incr.mockRestore();
+    }
+    expect(patched.status).toBe(200);
+    expect((await mediaRoute(user)).status).toBe(200); // stale: the direct invalidation failed
+
+    const events = (await prisma.outboxEvent.findMany({ where: { type: "rbac.permissions_changed" } })).filter((e) =>
+      ((e.payload as { userIds: string[] }).userIds ?? []).includes(user.userId),
+    );
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    for (const e of events) await t.app.get(EventBus).dispatch({ type: e.type, ...(e.payload as object) } as DomainEvent);
+    expect((await mediaRoute(user)).status).toBe(403);
+  });
+
   it("two concurrent revokes of the two remaining super_admins: exactly one succeeds", async () => {
     const other = await t.login();
     await stepUp(other);
@@ -213,11 +258,14 @@ describe("roles and audit", () => {
     const otherGrant = await prisma.userRole.findFirstOrThrow({ where: { userId: other.userId, role: { key: "super_admin" } } });
     const adminGrant = await prisma.userRole.findFirstOrThrow({ where: { userId: admin.userId, role: { key: "super_admin" } } });
 
+    // Warm both actors' permission caches so the two requests reach the transaction at the same moment.
+    await Promise.all([admin, other].map((x) => http().get("/v1/admin/roles").set(auth(x))));
     const [a, b] = await Promise.all([revoke(admin, other.userId, otherGrant.id), revoke(other, admin.userId, adminGrant.id)]);
-    const statuses = [a.status, b.status].sort();
-    expect(statuses).toEqual([204, 409]);
-    const failed = a.status === 409 ? a : b;
-    expect(failed.body.error.code).toBe("LAST_SUPER_ADMIN");
+    // Exactly one wins. The loser is refused either by the lock (LAST_SUPER_ADMIN) or, if the winner already committed before the
+    // loser's escalation check, because the loser has just lost super_admin itself (ROLE_ESCALATION_DENIED). Never two 204s.
+    expect([a.status, b.status].filter((x) => x === 204)).toHaveLength(1);
+    const failed = a.status === 204 ? b : a;
+    expect(["LAST_SUPER_ADMIN", "ROLE_ESCALATION_DENIED"]).toContain(failed.body.error.code);
     const role = await prisma.role.findUniqueOrThrow({ where: { key: "super_admin" } });
     expect(await prisma.userRole.count({ where: { roleId: role.id, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } })).toBe(1);
 

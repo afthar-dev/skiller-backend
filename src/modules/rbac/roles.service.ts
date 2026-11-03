@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma, type RoleScope } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
@@ -42,6 +42,8 @@ const toRoleView = (role: RoleRow): RoleView => ({ id: role.id, ...auditShape(ro
 
 @Injectable()
 export class RolesService {
+  private readonly logger = new Logger(RolesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionService,
@@ -103,12 +105,14 @@ export class RolesService {
         await tx.rolePermission.createMany({ data: permissionIds.map((permissionId) => ({ roleId, permissionId })) });
       }
       const after = await tx.role.findUniqueOrThrow({ where: { id: roleId }, include: roleInclude });
+      const holders = await tx.userRole.findMany({ where: { roleId }, select: { userId: true }, distinct: ["userId"] });
+      await this.enqueueInvalidation(tx, holders.map((h) => h.userId));
       await this.audit.record(tx, { actorId, action: "role.update", targetType: "role", targetId: roleId, before: auditShape(current), after: auditShape(after), ...meta });
       return after;
     });
 
     // After commit and before returning: holders see the new permissions on their very next request.
-    await this.permissions.invalidateRole(roleId);
+    await this.invalidateWithRetry(() => this.permissions.invalidateRole(roleId), `role ${roleId}`);
     return toRoleView(updated);
   }
 
@@ -121,10 +125,11 @@ export class RolesService {
       // Holders must be read before the delete cascades their UserRole rows away.
       const rows = await tx.userRole.findMany({ where: { roleId }, select: { userId: true }, distinct: ["userId"] });
       await tx.role.delete({ where: { id: roleId } });
+      await this.enqueueInvalidation(tx, rows.map((r) => r.userId));
       await this.audit.record(tx, { actorId, action: "role.delete", targetType: "role", targetId: roleId, before: auditShape(role), after: null, ...meta });
       return rows.map((r) => r.userId);
     });
-    await this.permissions.invalidateUsers(holders);
+    await this.invalidateWithRetry(() => this.permissions.invalidateUsers(holders), `deleted role ${roleId}`);
   }
 
   async grant(
@@ -168,10 +173,11 @@ export class RolesService {
         ...meta,
       });
       await this.outbox.enqueue(tx, { type: "role.granted", userId: input.userId, roleKey: role.key, grantedBy: actorId });
+      await this.enqueueInvalidation(tx, [input.userId]);
       return { id: row.id, ...after };
     });
 
-    await this.permissions.invalidateUser(input.userId);
+    await this.invalidateWithRetry(() => this.permissions.invalidateUser(input.userId), `user ${input.userId}`);
     return view;
   }
 
@@ -186,15 +192,18 @@ export class RolesService {
         // Lock every active super_admin grant (fixed order, so concurrent revokes cannot deadlock). A second revoke blocks here
         // until the first commits, then sees the reduced set and is refused.
         const now = this.clock.now();
+        // Only grants of ACTIVE users count: a suspended or deleted super_admin cannot act, so it is no safety net.
         const active = await tx.$queryRaw<{ id: string }[]>`
-          SELECT id FROM user_roles
-          WHERE "roleId" = ${target.roleId} AND ("expiresAt" IS NULL OR "expiresAt" > ${now})
-          ORDER BY id
-          FOR UPDATE`;
+          SELECT ur.id FROM user_roles ur
+          JOIN users u ON u.id = ur."userId"
+          WHERE ur."roleId" = ${target.roleId} AND (ur."expiresAt" IS NULL OR ur."expiresAt" > ${now}) AND u.status = 'ACTIVE'
+          ORDER BY ur.id
+          FOR UPDATE OF ur`;
         if (active.some((r) => r.id === target.id) && active.length <= 1) {
           throw new AppError("LAST_SUPER_ADMIN", 409, "Cannot revoke the last active super_admin");
         }
       }
+      await this.enqueueInvalidation(tx, [target.userId]);
       const deleted = await tx.userRole.deleteMany({ where: { id: target.id } });
       if (deleted.count === 0) throw new AppError("NOT_FOUND", 404, "Role grant not found");
       await this.audit.record(tx, {
@@ -208,7 +217,7 @@ export class RolesService {
       });
     });
 
-    await this.permissions.invalidateUser(target.userId);
+    await this.invalidateWithRetry(() => this.permissions.invalidateUser(target.userId), `user ${target.userId}`);
   }
 
   /**
@@ -234,7 +243,33 @@ export class RolesService {
     if (tx) await run(tx);
     else {
       await this.prisma.$transaction(run);
-      await this.permissions.invalidateUser(userId);
+      await this.invalidateWithRetry(() => this.permissions.invalidateUser(userId), `user ${userId}`);
+    }
+  }
+
+  /**
+   * Written in the mutation's own transaction: if the direct cache invalidation after commit fails, the relayed event makes the
+   * worker bump the same epochs. Extra bumps only cost a cache miss.
+   */
+  private async enqueueInvalidation(tx: Prisma.TransactionClient, userIds: string[]): Promise<void> {
+    const unique = [...new Set(userIds)];
+    if (unique.length > 0) await this.outbox.enqueue(tx, { type: "rbac.permissions_changed", userIds: unique });
+  }
+
+  /** Post-commit invalidation: retried, and a final failure is logged but never fails the already-committed request. */
+  private async invalidateWithRetry(fn: () => Promise<void>, what: string): Promise<void> {
+    const attempts = 3;
+    for (let i = 1; i <= attempts; i++) {
+      try {
+        await fn();
+        return;
+      } catch (err) {
+        if (i === attempts) {
+          this.logger.error(`permission cache invalidation failed for ${what}; relying on the outbox backstop`, err instanceof Error ? err.stack : String(err));
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 25 * i));
+      }
     }
   }
 

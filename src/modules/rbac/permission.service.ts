@@ -5,7 +5,11 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis/redis.constants";
 
 export const PERMISSION_CACHE_TTL_SEC = 10 * 60;
-const cacheKey = (userId: string) => `perm:${userId}`;
+// Cache entries live under perm:{userId}:{epoch}. Invalidation bumps the epoch, so a reader that loaded the DB before the change
+// and writes after it lands on an old-epoch key nobody reads again (and expires on its own TTL).
+const epochKey = (userId: string) => `perm:epoch:${userId}`;
+const cacheKey = (userId: string, epoch: number) => `perm:${userId}:${epoch}`;
+const EPOCH_TTL_SEC = 24 * 3600; // far longer than any cache entry, so a lapsed epoch can never revive a live key
 
 export interface EffectivePermissions {
   /** Keys from grants with no org (apply everywhere). */
@@ -28,7 +32,10 @@ export class PermissionService {
   ) {}
 
   async effective(userId: string): Promise<EffectivePermissions> {
-    const cached = await this.redis.get(cacheKey(userId));
+    // Epoch first, then the DB: anything invalidated after this read is guaranteed to bump the epoch past it.
+    const epoch = Number(await this.redis.get(epochKey(userId))) || 0;
+    const key = cacheKey(userId, epoch);
+    const cached = await this.redis.get(key);
     if (cached) {
       try {
         return this.fromShape(JSON.parse(cached) as CachedShape);
@@ -63,7 +70,7 @@ export class PermissionService {
       platform: [...platform],
       byOrg: Object.fromEntries([...byOrg].map(([org, keys]) => [org, [...keys]])),
     };
-    await this.redis.set(cacheKey(userId), JSON.stringify(shape), "EX", ttl);
+    await this.redis.set(key, JSON.stringify(shape), "EX", ttl);
     return { platform, byOrg };
   }
 
@@ -74,13 +81,21 @@ export class PermissionService {
     return orgId !== undefined && (eff.byOrg.get(orgId)?.has(key) ?? false);
   }
 
-  async invalidateUser(userId: string): Promise<void> {
-    await this.redis.del(cacheKey(userId));
+  /** The cache key currently in use for the user (for tests and diagnostics). */
+  async currentCacheKey(userId: string): Promise<string> {
+    return cacheKey(userId, Number(await this.redis.get(epochKey(userId))) || 0);
   }
 
+  async invalidateUser(userId: string): Promise<void> {
+    await this.invalidateUsers([userId]);
+  }
+
+  /** Bumps each user epoch. Extra bumps are harmless (one cache miss), so this is safe to repeat or run from an outbox handler. */
   async invalidateUsers(userIds: string[]): Promise<void> {
-    const unique = [...new Set(userIds)];
-    if (unique.length > 0) await this.redis.del(...unique.map(cacheKey));
+    for (const userId of new Set(userIds)) {
+      await this.redis.incr(epochKey(userId));
+      await this.redis.expire(epochKey(userId), EPOCH_TTL_SEC).catch(() => undefined);
+    }
   }
 
   /** Drops the cached permissions of everyone currently holding the role. */

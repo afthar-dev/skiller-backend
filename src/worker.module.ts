@@ -2,6 +2,7 @@ import { Module, OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/c
 import { ConfigModule } from "./common/config/config.module";
 import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
+import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { QueueModule } from "./common/queue/queue.module";
@@ -10,7 +11,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule],
+  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, RbacWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(

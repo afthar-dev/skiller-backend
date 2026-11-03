@@ -124,12 +124,12 @@ describe("PermissionService", () => {
       const user2 = await mkUser();
       await grant(user2.id, role.id, { expiresAt: new Date(clock.now().getTime() + 60_000) });
       expect(await svc.has(user2.id, "user.view")).toBe(true); // now cached
-      const ttl = await redis.ttl(`perm:${user2.id}`);
+      const ttl = await redis.ttl((await svc.currentCacheKey(user2.id)));
       expect(ttl).toBeGreaterThan(0);
       expect(ttl).toBeLessThanOrEqual(60); // cache never outlives the earliest grant expiry
 
       clock.advanceSec(61);
-      await redis.del(`perm:${user2.id}`); // emulate the (shortened) TTL elapsing
+      await redis.del((await svc.currentCacheKey(user2.id))); // emulate the (shortened) TTL elapsing
       expect(await svc.has(user2.id, "user.view")).toBe(false);
     });
 
@@ -138,7 +138,7 @@ describe("PermissionService", () => {
       const role = await mkRole(["user.view"]);
       await grant(user.id, role.id);
       await svc.effective(user.id);
-      const ttl = await redis.ttl(`perm:${user.id}`);
+      const ttl = await redis.ttl((await svc.currentCacheKey(user.id)));
       expect(ttl).toBeGreaterThan(590);
       expect(ttl).toBeLessThanOrEqual(600);
     });
@@ -154,6 +154,28 @@ describe("PermissionService", () => {
       expect(await svc.has(user.id, "user.view")).toBe(true); // stale until invalidated
       await svc.invalidateUser(user.id);
       expect(await svc.has(user.id, "user.view")).toBe(false);
+    });
+
+    it("a reader that loaded the old grants before an invalidation cannot repopulate a stale cache (epoch-keyed)", async () => {
+      const role = await mkRole(["media.manage_any"]);
+      const user = await mkUser();
+      await grant(user.id, role.id);
+      const perm = await prisma.permission.findUniqueOrThrow({ where: { key: "media.manage_any" } });
+
+      // Interleave: the reader finishes its DB read (old grants), then the admin removes the permission and invalidates,
+      // and only then does the reader write its result to the cache.
+      const original = prisma.userRole.findMany.bind(prisma.userRole) as (args: unknown) => Promise<unknown>;
+      const spy = jest.spyOn(prisma.userRole, "findMany").mockImplementationOnce(((args: unknown) =>
+        original(args).then(async (rows) => {
+          await prisma.rolePermission.delete({ where: { roleId_permissionId: { roleId: role.id, permissionId: perm.id } } });
+          await svc.invalidateRole(role.id);
+          return rows;
+        })) as never);
+      const stale = await svc.has(user.id, "media.manage_any"); // the in-flight reader sees the old state
+      spy.mockRestore();
+      expect(stale).toBe(true);
+
+      expect(await svc.has(user.id, "media.manage_any")).toBe(false);
     });
 
     it("removing a permission from a role + invalidateRole flips `has` for every holder without waiting for the TTL", async () => {
@@ -174,7 +196,7 @@ describe("PermissionService", () => {
         expect(await svc.has(h.id, "media.manage_any")).toBe(false);
         expect(await svc.has(h.id, "user.view")).toBe(true);
       }
-      expect(await redis.exists(`perm:${bystander.id}`)).toBe(1); // untouched
+      expect(await redis.exists((await svc.currentCacheKey(bystander.id)))).toBe(1); // untouched
     });
   });
 });
