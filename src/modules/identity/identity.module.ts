@@ -1,8 +1,8 @@
 import { Global, Module } from "@nestjs/common";
+import { AccountService } from "./account.service";
 import { AuthController } from "./auth.controller";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
-import { MeController } from "./me.controller";
 import { OtpService } from "./otp.service";
 import { SessionService } from "./session.service";
 import { StepUpGuard } from "./step-up.guard";
@@ -13,9 +13,10 @@ import { UserStatusCache } from "./user-status.cache";
 // Global so any module can use @RequireStepUp() (StepUpGuard resolves StepUpService in the host module).
 @Global()
 @Module({
-  controllers: [AuthController, MeController],
+  controllers: [AuthController],
   providers: [
     OtpService,
+    AccountService,
     TokenService,
     SessionService,
     UserStatusCache,
@@ -24,6 +25,6 @@ import { UserStatusCache } from "./user-status.cache";
     AuthService,
     AuthGuard,
   ],
-  exports: [AuthGuard, OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard],
+  exports: [AccountService, AuthGuard, OtpService, TokenService, SessionService, UserStatusCache, StepUpService, StepUpGuard],
 })
 export class IdentityModule {}

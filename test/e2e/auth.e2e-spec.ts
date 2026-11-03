@@ -43,7 +43,7 @@ describe("auth", () => {
 
     const me = await http().get("/v1/me").set("Authorization", `Bearer ${res.body.accessToken}`);
     expect(me.status).toBe(200);
-    expect(me.body).toEqual({ id: res.body.user.id });
+    expect(me.body.user).toEqual({ id: res.body.user.id, email: email.toLowerCase(), status: "ACTIVE" });
 
     // user.registered went to the outbox in the same transaction as the user row
     const events = await prisma.outboxEvent.count({ where: { type: "user.registered", payload: { path: ["userId"], equals: res.body.user.id } } });

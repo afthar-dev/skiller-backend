@@ -52,6 +52,16 @@ export class RolesService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
+  /** Keys of the user's active platform-wide roles (org-scoped grants excluded). */
+  async platformRoleKeys(userId: string): Promise<string[]> {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId, orgId: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { role: { select: { key: true } } },
+    });
+    return rows.map((r) => r.role.key).sort();
+  }
+
   async list(): Promise<RoleView[]> {
     const roles = await this.prisma.role.findMany({ include: roleInclude, orderBy: { key: "asc" } });
     return roles.map(toRoleView);
@@ -224,13 +234,17 @@ export class RolesService {
    * Grants a system role without an acting user (e.g. `member` at sign-up). Pass the caller's transaction to make the grant
    * atomic with it; the caller is then responsible for any cache invalidation (a brand-new user has no cached permissions).
    */
-  async grantSystem(userId: string, roleKey: string, tx?: Prisma.TransactionClient): Promise<void> {
+  async grantSystem(userId: string, roleKey: string, tx?: Prisma.TransactionClient, orgId?: string): Promise<void> {
     const run = async (client: Prisma.TransactionClient) => {
-      const role = await client.role.findUnique({ where: { key: roleKey }, select: { id: true, key: true } });
+      const role = await client.role.findUnique({ where: { key: roleKey }, select: { id: true, key: true, scope: true } });
       if (!role) throw new AppError("ROLE_NOT_FOUND", 500, `System role "${roleKey}" is missing; run the database seed`);
-      const existing = await client.userRole.findFirst({ where: { userId, roleId: role.id, orgId: null }, select: { id: true } });
+      if ((role.scope === "ORG") !== (orgId !== undefined)) {
+        throw new AppError("ROLE_SCOPE_MISMATCH", 500, `System role "${roleKey}" does not match the requested scope`);
+      }
+      const scopeOrgId = orgId ?? null;
+      const existing = await client.userRole.findFirst({ where: { userId, roleId: role.id, orgId: scopeOrgId }, select: { id: true } });
       if (existing) return;
-      const row = await client.userRole.create({ data: { userId, roleId: role.id, orgId: null } });
+      const row = await client.userRole.create({ data: { userId, roleId: role.id, orgId: scopeOrgId } });
       await this.audit.record(client, {
         actorId: null,
         action: "role.grant_system",

@@ -73,6 +73,7 @@ model User {
 
   sessions Session[]
   roles    UserRole[]
+  profile  Profile?
 
   @@map("users")
 }
@@ -195,4 +196,106 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([actorId, createdAt])
   @@map("audit_logs")
+}
+
+// ─── users (profiles) ────────────────────────────────────────────────────
+
+// handle is stored lower-case, so a plain unique index gives case-insensitive uniqueness. Always normalise before write/lookup.
+model Profile {
+  userId         String    @id
+  handle         String    @unique
+  displayName    String
+  headline       String?
+  about          String?
+  avatarAssetId  String?
+  bannerAssetId  String?
+  location       String?
+  links          Json      @default("[]")
+  followersCount Int       @default(0)
+  followingCount Int       @default(0)
+  isCreator      Boolean   @default(false)
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experience Experience[]
+  education  Education[]
+  skills     ProfileSkill[]
+  portfolio  PortfolioItem[]
+  followers  Follow[]        @relation("FollowFollowee")
+  following  Follow[]        @relation("FollowFollower")
+
+  @@map("profiles")
+}
+
+model Experience {
+  id          String    @id @default(uuid(7))
+  userId      String
+  title       String
+  company     String
+  startDate   DateTime  @db.Date
+  endDate     DateTime? @db.Date
+  description String?
+  position    Int
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@map("experiences")
+}
+
+model Education {
+  id        String  @id @default(uuid(7))
+  userId    String
+  school    String
+  degree    String?
+  field     String?
+  startYear Int?
+  endYear   Int?
+  position  Int
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@map("educations")
+}
+
+model ProfileSkill {
+  userId   String
+  skill    String
+  position Int
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, skill])
+  @@map("profile_skills")
+}
+
+model PortfolioItem {
+  id           String  @id @default(uuid(7))
+  userId       String
+  title        String
+  url          String?
+  mediaAssetId String?
+  description  String?
+  position     Int
+
+  profile Profile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@map("portfolio_items")
+}
+
+model Follow {
+  followerId String
+  followeeId String
+  createdAt  DateTime @default(now())
+
+  follower Profile @relation("FollowFollower", fields: [followerId], references: [userId], onDelete: Cascade)
+  followee Profile @relation("FollowFollowee", fields: [followeeId], references: [userId], onDelete: Cascade)
+
+  @@id([followerId, followeeId])
+  @@index([followeeId])
+  @@map("follows")
 }

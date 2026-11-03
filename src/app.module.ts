@@ -12,11 +12,12 @@ import { RedisModule } from "./common/redis/redis.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { IdentityModule } from "./modules/identity/identity.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
+import { UsersModule } from "./modules/users/users.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule],
+  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },
