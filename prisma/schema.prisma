@@ -76,6 +76,8 @@ model User {
   profile   Profile?
   ownedOrgs Organization[]
 
+  // text_pattern_ops makes LIKE 'prefix%' index-backed regardless of collation (admin search).
+  @@index([email(ops: raw("text_pattern_ops"))], map: "users_email_pattern_idx")
   @@map("users")
 }
 
@@ -227,6 +229,7 @@ model Profile {
   followers  Follow[]        @relation("FollowFollowee")
   following  Follow[]        @relation("FollowFollower")
 
+  @@index([handle(ops: raw("text_pattern_ops"))], map: "profiles_handle_pattern_idx")
   @@map("profiles")
 }
 

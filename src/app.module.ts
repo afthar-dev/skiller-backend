@@ -14,13 +14,14 @@ import { IdentityModule } from "./modules/identity/identity.module";
 import { RbacModule } from "./modules/rbac/rbac.module";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { AdminModule } from "./modules/admin/admin.module";
 import { UsersModule } from "./modules/users/users.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { MediaModule } from "./modules/media/media.module";
 import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule],
+  imports: [ConfigModule, ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule, AdminModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },

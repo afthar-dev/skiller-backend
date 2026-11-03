@@ -130,6 +130,10 @@ export class SessionService {
     });
   }
 
+  async countActive(userId: string): Promise<number> {
+    return this.prisma.session.count({ where: { userId, revokedAt: null, expiresAt: { gt: this.clock.now() } } });
+  }
+
   async isRevoked(sessionId: string): Promise<boolean> {
     return (await this.redis.exists(revokedKey(sessionId))) === 1;
   }

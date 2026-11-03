@@ -9,6 +9,8 @@ export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
   const sync = await syncPermissions(prisma, permissionRegistry);
   const roles = await seedSystemRoles(prisma);
   await bootstrapSuperAdmin(prisma, superAdminEmail);
+  // Seeded flags start off; update: {} so a re-seed never overwrites what an admin changed.
+  await prisma.featureFlag.upsert({ where: { key: "gig_orders" }, create: { key: "gig_orders", enabled: false }, update: {} });
   return { ...sync, roles };
 }
 

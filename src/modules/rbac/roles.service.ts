@@ -63,6 +63,57 @@ export class RolesService {
     return rows.map((r) => r.role.key).sort();
   }
 
+  private activeGrant(now: Date): Prisma.UserRoleWhereInput {
+    return { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+  }
+
+  /** Users holding the active platform-wide role, newest first, strictly below `cursor` (user_roles.roleId index). */
+  async userIdsWithPlatformRole(roleKey: string, cursor: string | undefined, take: number): Promise<string[]> {
+    const rows = await this.prisma.userRole.findMany({
+      where: { orgId: null, role: { key: roleKey }, ...this.activeGrant(this.clock.now()), ...(cursor ? { userId: { lt: cursor } } : {}) },
+      select: { userId: true },
+      orderBy: { userId: "desc" },
+      take,
+    });
+    return rows.map((r) => r.userId);
+  }
+
+  /** The subset of `userIds` (order kept) holding the active platform-wide role. */
+  async filterByPlatformRole(userIds: string[], roleKey: string): Promise<string[]> {
+    if (userIds.length === 0) return [];
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId: { in: userIds }, orgId: null, role: { key: roleKey }, ...this.activeGrant(this.clock.now()) },
+      select: { userId: true },
+    });
+    const keep = new Set(rows.map((r) => r.userId));
+    return userIds.filter((id) => keep.has(id));
+  }
+
+  async platformRoleKeysMany(userIds: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>(userIds.map((id) => [id, []]));
+    if (userIds.length === 0) return out;
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId: { in: userIds }, orgId: null, ...this.activeGrant(this.clock.now()) },
+      select: { userId: true, role: { select: { key: true } } },
+    });
+    for (const r of rows) out.get(r.userId)?.push(r.role.key);
+    for (const keys of out.values()) keys.sort();
+    return out;
+  }
+
+  /** Every grant of the user (platform and org, including expired), for the admin user view. */
+  async listUserGrants(userId: string): Promise<UserRoleView[]> {
+    const rows = await this.prisma.userRole.findMany({ where: { userId }, include: { role: { select: { key: true } } }, orderBy: { createdAt: "asc" } });
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      roleKey: r.role.key,
+      orgId: r.orgId,
+      expiresAt: r.expiresAt?.toISOString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
   /** Whether the user holds any active role in the org. */
   async isOrgMember(orgId: string, userId: string, client: Prisma.TransactionClient | PrismaService = this.prisma): Promise<boolean> {
     const now = this.clock.now();

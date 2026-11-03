@@ -28,11 +28,12 @@ export class AuthGuard implements CanActivate {
 
     const { sub, sid } = this.tokens.verifyAccess(match[1]);
 
-    if (await this.sessions.isRevoked(sid)) throw new AppError("AUTH_SESSION_REVOKED", 401, "Session has been revoked");
-
+    // Status first: suspending also revokes the sessions, and the client must see 403 (suspended), not a generic 401.
     const status = await this.statuses.get(sub);
     if (!status) throw new AppError("AUTH_TOKEN_INVALID", 401, "Invalid access token");
     if (status !== "ACTIVE") throw new AppError("AUTH_ACCOUNT_SUSPENDED", 403, "Account is suspended");
+
+    if (await this.sessions.isRevoked(sid)) throw new AppError("AUTH_SESSION_REVOKED", 401, "Session has been revoked");
 
     req.user = { id: sub, sessionId: sid };
     return true;

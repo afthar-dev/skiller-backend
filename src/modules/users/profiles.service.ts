@@ -136,6 +136,17 @@ export class ProfilesService {
     return (await this.ensure(userId)).displayName;
   }
 
+  /** Index-backed prefix match (profiles_handle_pattern_idx, text_pattern_ops); `prefix` must be lower-case. Newest first, below `cursor`. */
+  async idsByHandlePrefix(prefix: string, cursor: string | undefined, take: number): Promise<string[]> {
+    const rows = await this.prisma.profile.findMany({
+      where: { handle: { startsWith: prefix }, ...(cursor ? { userId: { lt: cursor } } : {}) },
+      select: { userId: true },
+      orderBy: { userId: "desc" },
+      take,
+    });
+    return rows.map((r) => r.userId);
+  }
+
   async summaries(userIds: string[]): Promise<Map<string, ProfileSummary>> {
     const rows = await this.prisma.profile.findMany({ where: { userId: { in: userIds } } });
     return new Map(rows.map((r) => [r.userId, toSummary(r)]));
