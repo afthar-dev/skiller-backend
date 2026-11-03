@@ -6,10 +6,10 @@ import { REDIS } from "../../common/redis/redis.constants";
 
 export const PERMISSION_CACHE_TTL_SEC = 10 * 60;
 // Cache entries live under perm:{userId}:{epoch}. Invalidation bumps the epoch, so a reader that loaded the DB before the change
-// and writes after it lands on an old-epoch key nobody reads again (and expires on its own TTL).
+// and writes after it lands on an old-epoch key nobody reads again (and expires on its own TTL). Epoch keys deliberately have no
+// TTL: if one lapsed, the epoch would restart and a later bump could land on a number whose cache entry is still alive.
 const epochKey = (userId: string) => `perm:epoch:${userId}`;
 const cacheKey = (userId: string, epoch: number) => `perm:${userId}:${epoch}`;
-const EPOCH_TTL_SEC = 24 * 3600; // far longer than any cache entry, so a lapsed epoch can never revive a live key
 
 export interface EffectivePermissions {
   /** Keys from grants with no org (apply everywhere). */
@@ -94,7 +94,6 @@ export class PermissionService {
   async invalidateUsers(userIds: string[]): Promise<void> {
     for (const userId of new Set(userIds)) {
       await this.redis.incr(epochKey(userId));
-      await this.redis.expire(epochKey(userId), EPOCH_TTL_SEC).catch(() => undefined);
     }
   }
 

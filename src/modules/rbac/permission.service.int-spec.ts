@@ -178,6 +178,19 @@ describe("PermissionService", () => {
       expect(await svc.has(user.id, "media.manage_any")).toBe(false);
     });
 
+    it("epoch keys never expire, so a later bump can never land back on an epoch with a live cache entry", async () => {
+      const role = await mkRole(["user.view"]);
+      const user = await mkUser();
+      const ur = await grant(user.id, role.id);
+      expect(await svc.has(user.id, "user.view")).toBe(true); // cached under the current epoch
+      await svc.invalidateUser(user.id);
+      expect(await redis.ttl(`perm:epoch:${user.id}`)).toBe(-1); // exists, no TTL
+      await prisma.userRole.delete({ where: { id: ur.id } });
+      await svc.invalidateUser(user.id);
+      expect(await redis.ttl(`perm:epoch:${user.id}`)).toBe(-1);
+      expect(await svc.has(user.id, "user.view")).toBe(false);
+    });
+
     it("removing a permission from a role + invalidateRole flips `has` for every holder without waiting for the TTL", async () => {
       const role = await mkRole(["user.view", "media.manage_any"]);
       const holders = await Promise.all([mkUser(), mkUser()]);
