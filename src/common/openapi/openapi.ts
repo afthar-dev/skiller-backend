@@ -1,0 +1,32 @@
+import { INestApplication } from "@nestjs/common";
+import { DocumentBuilder, OpenAPIObject, SwaggerModule } from "@nestjs/swagger";
+import { errorResponseObject, errorResponseSchema } from "./error-response";
+
+const METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+/** Scans the app's routes into an OpenAPI 3 document; every operation gets the shared `default` error response. */
+export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
+  const config = new DocumentBuilder()
+    .setTitle("Skiller API")
+    .setDescription("Skiller platform backend. All routes are under /v1. Errors use the shared ErrorResponse envelope.")
+    .setVersion("1.0.0")
+    .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "JWT" })
+    .build();
+  const doc = SwaggerModule.createDocument(app, config, {
+    operationIdFactory: (controllerKey, methodKey) => `${controllerKey.replace(/Controller$/, "")}_${methodKey}`,
+  });
+
+  doc.components = { ...doc.components, schemas: { ...doc.components?.schemas, ErrorResponse: errorResponseSchema as never } };
+  for (const item of Object.values(doc.paths)) {
+    for (const method of METHODS) {
+      const op = (item as Record<string, { responses: Record<string, unknown> } | undefined>)[method];
+      if (op) op.responses.default ??= errorResponseObject("Error response (see `error.code`).");
+    }
+  }
+  return doc;
+}
+
+/** Swagger UI at /v1/docs (+ /v1/docs-json). Call before `app.init()`; only enabled outside production. */
+export function setupSwagger(app: INestApplication, doc: OpenAPIObject = buildOpenApiDocument(app)) {
+  SwaggerModule.setup("docs", app, doc, { useGlobalPrefix: true });
+}

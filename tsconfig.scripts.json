@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "./dist/release", "rootDir": "./", "incremental": false, "sourceMap": false },
+  "include": ["prisma/seed.ts", "scripts/sync-permissions.ts"],
+  "exclude": ["node_modules", "dist"]
+}

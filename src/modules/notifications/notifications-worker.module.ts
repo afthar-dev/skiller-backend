@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { AccountService } from "../identity/account.service";
+import { AccountService } from "../identity";
 import { NotificationEventHandlers } from "./notification-events.handler";
 import { NotificationsService } from "./notifications.service";
 

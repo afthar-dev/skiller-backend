@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { AccountService } from "../identity/account.service";
+import { AccountService } from "../identity";
 import { ProfileRegistrationHandler } from "./profile-registration.handler";
 import { ProfilesService } from "./profiles.service";
 

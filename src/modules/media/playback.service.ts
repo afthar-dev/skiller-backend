@@ -7,7 +7,7 @@ import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
 import { REDIS } from "../../common/redis/redis.constants";
-import { AccountService } from "../identity/account.service";
+import { AccountService } from "../identity";
 import { assetPrefix } from "./media.rules";
 import { PLAYBACK_ACCESS_POLICY, type PlaybackAccessPolicy } from "./playback-policy";
 import { PLAYBACK_TOKEN_TTL_SEC, signPlaybackToken } from "./playback-token";

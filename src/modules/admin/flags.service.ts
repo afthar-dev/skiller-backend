@@ -5,8 +5,8 @@ import type { Redis } from "ioredis";
 import { z } from "zod";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis/redis.constants";
-import { AuditService } from "../audit/audit.service";
-import type { MutationMeta } from "../rbac/roles.service";
+import { AuditService } from "../audit";
+import type { MutationMeta } from "../rbac";
 
 export const FLAG_CACHE_TTL_SEC = 60;
 const cacheKey = (key: string) => `flags:${key}`;

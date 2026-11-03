@@ -1,12 +1,13 @@
-import { Module, OnModuleInit } from "@nestjs/common";
-import { MediaModule } from "../media/media.module";
-import { OrgParamResolverRegistry } from "../rbac/org-param-resolver";
-import { UsersModule } from "../users/users.module";
+import { Module, OnModuleInit, forwardRef } from "@nestjs/common";
+import { MediaModule } from "../media";
+import { OrgParamResolverRegistry } from "../rbac";
+import { UsersModule } from "../users";
 import { OrganizationsController, OrgInvitesController } from "./organizations.controller";
 import { OrganizationsService } from "./organizations.service";
 
 @Module({
-  imports: [UsersModule, MediaModule],
+  // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
+  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule)],
   controllers: [OrganizationsController, OrgInvitesController],
   providers: [OrganizationsService],
   exports: [OrganizationsService],

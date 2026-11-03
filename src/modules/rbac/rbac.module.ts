@@ -4,7 +4,7 @@ import { AccessGuard } from "./access.guard";
 import { OrgParamResolverRegistry } from "./org-param-resolver";
 import { PermissionInvalidationHandler } from "./permission-invalidation.handler";
 import { PermissionGuard } from "./permission.guard";
-import { MEMBER_ROLE_GRANTER } from "../identity/member-role-granter";
+import { MEMBER_ROLE_GRANTER } from "../identity";
 import { PermissionService } from "./permission.service";
 import { RbacMemberRoleGranter } from "./rbac-member-role-granter";
 import { RolesController } from "./roles.controller";

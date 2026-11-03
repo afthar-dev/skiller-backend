@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fixturePath } from "../../../test/fixtures/make-fixtures";
-import { SettingsService } from "../admin/settings.service";
+import { SettingsService } from "../admin";
 import { createMediaWorkerHarness, type MediaWorkerHarness } from "../../../test/support/media-worker";
 import { ffmpegPath, ladderFor, probe, transcodeToHls } from "./ffmpeg";
 

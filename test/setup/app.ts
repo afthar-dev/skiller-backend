@@ -7,6 +7,7 @@ import { applyTestEnv } from "./env";
 export async function createTestApp(
   customize?: (builder: TestingModuleBuilder) => TestingModuleBuilder,
   extra: Omit<ModuleMetadata, "imports"> = {},
+  beforeInit?: (app: INestApplication) => void,
 ): Promise<INestApplication> {
   applyTestEnv({ DATABASE_URL: process.env.DATABASE_URL!, REDIS_URL: process.env.REDIS_URL! });
   const { AppModule } = await import("../../src/app.module");
@@ -16,6 +17,7 @@ export async function createTestApp(
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ rawBody: true });
   configureApp(app);
+  beforeInit?.(app);
   await app.init();
   return app;
 }

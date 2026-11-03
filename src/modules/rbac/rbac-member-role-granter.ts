@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { MemberRoleGranter } from "../identity/member-role-granter";
+import type { MemberRoleGranter } from "../identity";
 import { MEMBER_ROLE_KEY } from "./default-roles";
 import { RolesService } from "./roles.service";
 

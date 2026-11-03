@@ -12,6 +12,10 @@ import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { AuthService } from "./auth.service";
 import { OtpService, normalizeEmail } from "./otp.service";
 import { SESSION_TTL_MS, SessionMeta, SessionService } from "./session.service";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiJsonResponse, objectSchema, schemas } from "../../common/openapi/responses";
 
 export const REFRESH_COOKIE = "skiller_rt";
 
@@ -27,6 +31,7 @@ const emailKey = (req: Request) => {
 
 const metaOf = (req: Request): SessionMeta => ({ ip: req.ip ?? "unknown", userAgent: String(req.headers["user-agent"] ?? "unknown") });
 
+@ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
   constructor(
@@ -43,6 +48,10 @@ export class AuthController {
     { key: (req) => `otp:email:${emailKey(req)}`, limit: 5, windowSec: WINDOW_15_MIN },
     { key: (req) => `otp:ip:${req.ip}`, limit: 20, windowSec: WINDOW_15_MIN },
   )
+  @ApiOperation({ summary: "Send a sign-in code to an email address" })
+  @ApiZodBody(requestSchema)
+  @ApiErrorResponse(429, "Rate limited; see Retry-After.")
+  @ApiJsonResponse(202, "Challenge created.", objectSchema({ challengeId: schemas.str, expiresAt: schemas.isoDate }))
   async requestOtp(@Body() body: unknown, @Req() req: Request) {
     const { email } = requestSchema.parse(body);
     // Identical flow for known and unknown emails: nothing here looks the user up.
@@ -53,6 +62,10 @@ export class AuthController {
   @Public()
   @Post("otp/verify")
   @HttpCode(200)
+  @ApiOperation({ summary: "Verify a sign-in code; returns an access token and sets the refresh cookie" })
+  @ApiZodBody(verifySchema)
+  @ApiErrorResponse(401, "Wrong, expired or exhausted code.")
+  @ApiJsonResponse(200, "Signed in.", objectSchema({ accessToken: schemas.str, user: objectSchema({ id: schemas.str, email: schemas.str, isNew: { type: "boolean" } }) }))
   async verifyOtp(@Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const { challengeId, code } = verifySchema.parse(body);
     const result = await this.auth.verifyLogin(challengeId, code, metaOf(req));
@@ -63,6 +76,9 @@ export class AuthController {
   @Public()
   @Post("refresh")
   @HttpCode(200)
+  @ApiOperation({ summary: "Rotate the refresh cookie and return a new access token" })
+  @ApiErrorResponse(401, "Missing, expired or revoked refresh session.")
+  @ApiJsonResponse(200, "New access token; refresh cookie rotated.", objectSchema({ accessToken: schemas.str }))
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = (req.cookies as Record<string, string | undefined> | undefined)?.[REFRESH_COOKIE];
     if (!token) throw new AppError("AUTH_SESSION_EXPIRED", 401, "Session expired; please sign in again");
@@ -80,6 +96,7 @@ export class AuthController {
   @AuthenticatedOnly()
   @Post("logout")
   @HttpCode(204)
+  @ApiOperation({ summary: "Revoke the current session" })
   async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
     await this.sessions.revoke(user.sessionId, user.id);
     this.clearRefreshCookie(res);
@@ -88,6 +105,8 @@ export class AuthController {
   @AuthenticatedOnly()
   @Post("step-up/request")
   @HttpCode(202)
+  @ApiOperation({ summary: "Email a step-up code for sensitive actions" })
+  @ApiJsonResponse(202, "Step-up challenge created.", objectSchema({ challengeId: schemas.str }))
   async requestStepUp(@CurrentUser() user: AuthUser, @Req() req: Request) {
     return this.auth.requestStepUp(user.id, req.ip ?? "unknown");
   }
@@ -95,6 +114,8 @@ export class AuthController {
   @AuthenticatedOnly()
   @Post("step-up/verify")
   @HttpCode(204)
+  @ApiOperation({ summary: "Verify a step-up code (valid for 5 minutes on this session)" })
+  @ApiZodBody(verifySchema)
   async verifyStepUp(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     const { challengeId, code } = verifySchema.parse(body);
     await this.auth.verifyStepUp(user.id, user.sessionId, challengeId, code);
@@ -102,6 +123,7 @@ export class AuthController {
 
   @AuthenticatedOnly()
   @Get("sessions")
+  @ApiOperation({ summary: "List the caller's active sessions" })
   async listSessions(@CurrentUser() user: AuthUser) {
     const rows = await this.sessions.list(user.id);
     return {
@@ -120,6 +142,7 @@ export class AuthController {
   @AuthenticatedOnly()
   @Post("sessions/revoke-others")
   @HttpCode(204)
+  @ApiOperation({ summary: "Revoke every session except the current one" })
   async revokeOthers(@CurrentUser() user: AuthUser) {
     await this.sessions.revokeAllForUser(user.id, user.sessionId);
   }
@@ -127,6 +150,7 @@ export class AuthController {
   @AuthenticatedOnly()
   @Delete("sessions/:id")
   @HttpCode(204)
+  @ApiOperation({ summary: "Revoke one of the caller's sessions" })
   async revokeSession(@CurrentUser() user: AuthUser, @Param("id") id: string, @Res({ passthrough: true }) res: Response) {
     const ok = await this.sessions.revoke(id, user.id);
     if (!ok) throw new AppError("NOT_FOUND", 404, "Session not found");

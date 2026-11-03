@@ -4,8 +4,10 @@ import type { Redis } from "ioredis";
 import { AppError } from "./common/errors/app-error";
 import { PrismaService } from "./common/prisma/prisma.service";
 import { REDIS } from "./common/redis/redis.constants";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
 
 @Public()
+@ApiTags("Health")
 @Controller()
 export class HealthController {
   constructor(
@@ -14,11 +16,13 @@ export class HealthController {
   ) {}
 
   @Get("health")
+  @ApiOperation({ summary: "Liveness" })
   health() {
     return { status: "ok" };
   }
 
   @Get("ready")
+  @ApiOperation({ summary: "Readiness: database and Redis" })
   async ready() {
     const [database, redis] = await Promise.all([
       this.prisma.$queryRaw`SELECT 1`.then(() => true, () => false),

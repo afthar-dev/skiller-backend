@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { PermissionService } from "../rbac/permission.service";
-import { RolesService } from "../rbac/roles.service";
+import { PermissionService } from "../rbac";
+import { RolesService } from "../rbac";
 import { ProfilesService } from "./profiles.service";
 
 export const CREATOR_ROLE_KEY = "creator";

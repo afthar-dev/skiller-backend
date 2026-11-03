@@ -3,13 +3,13 @@ import type { UserStatus } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import type { PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { AccountService } from "../identity/account.service";
-import { SessionService } from "../identity/session.service";
-import { UserStatusCache } from "../identity/user-status.cache";
-import { AuditService } from "../audit/audit.service";
-import { SUPER_ADMIN_ROLE_KEY } from "../rbac/default-roles";
-import { RolesService, type MutationMeta } from "../rbac/roles.service";
-import { ProfilesService } from "../users/profiles.service";
+import { AccountService } from "../identity";
+import { SessionService } from "../identity";
+import { UserStatusCache } from "../identity";
+import { AuditService } from "../audit";
+import { SUPER_ADMIN_ROLE_KEY } from "../rbac";
+import { RolesService, type MutationMeta } from "../rbac";
+import { ProfilesService } from "../users";
 
 export interface UserSearch {
   q?: string;

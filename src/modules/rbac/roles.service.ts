@@ -5,7 +5,7 @@ import { AppError } from "../../common/errors/app-error";
 import { type PageQuery } from "../../common/http/pagination";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { AuditService } from "../audit/audit.service";
+import { AuditService } from "../audit";
 import { SUPER_ADMIN_ROLE_KEY } from "./default-roles";
 import { PermissionService } from "./permission.service";
 

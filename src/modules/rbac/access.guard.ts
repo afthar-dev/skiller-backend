@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
-import { AuthGuard } from "../identity/auth.guard";
+import { AuthGuard } from "../identity";
 import { PermissionGuard } from "./permission.guard";
 
 /**

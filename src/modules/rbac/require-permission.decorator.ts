@@ -1,4 +1,6 @@
-import { SetMetadata } from "@nestjs/common";
+import { applyDecorators, SetMetadata } from "@nestjs/common";
+import { ApiBearerAuth } from "@nestjs/swagger";
+import { ApiErrorResponse } from "../../common/openapi/error-response";
 
 export const REQUIRE_PERMISSION_KEY = "skiller:require-permission";
 
@@ -9,4 +11,9 @@ export interface RequirePermissionMeta {
 }
 
 export const RequirePermission = (key: string, opts: { orgParam?: string } = {}) =>
-  SetMetadata(REQUIRE_PERMISSION_KEY, { key, orgParam: opts.orgParam } satisfies RequirePermissionMeta);
+  applyDecorators(
+    SetMetadata(REQUIRE_PERMISSION_KEY, { key, orgParam: opts.orgParam } satisfies RequirePermissionMeta),
+    ApiBearerAuth(),
+    ApiErrorResponse(401, "Missing, invalid or expired access token."),
+    ApiErrorResponse(403, `Requires permission \`${key}\`.`),
+  );

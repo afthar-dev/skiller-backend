@@ -3,8 +3,8 @@ import type { Prisma } from "@prisma/client";
 import type { Redis } from "ioredis";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis/redis.constants";
-import { AuditService } from "../audit/audit.service";
-import type { MutationMeta } from "../rbac/roles.service";
+import { AuditService } from "../audit";
+import type { MutationMeta } from "../rbac";
 import { SETTING_KEYS, SETTINGS, type SettingKey, type SettingValue } from "./settings.registry";
 
 export const SETTINGS_CACHE_TTL_SEC = 60;

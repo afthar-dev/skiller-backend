@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { MediaAsset } from "@prisma/client";
-import { PermissionService } from "../rbac/permission.service";
+import { PermissionService } from "../rbac";
 
 /** Decides whether a user may get a playback token for an asset. Any registered policy returning true allows. */
 export interface PlaybackAccessPolicy {

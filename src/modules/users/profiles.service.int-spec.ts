@@ -5,7 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { ConfigModule } from "../../common/config/config.module";
 import { applyTestEnv } from "../../../test/setup/env";
 import * as handles from "./handles";
-import { AccountService } from "../identity/account.service";
+import { AccountService } from "../identity";
 import { ProfilesService } from "./profiles.service";
 
 describe("ProfilesService.ensure", () => {

@@ -6,6 +6,8 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { NOTIFICATION_TYPE_KEYS } from "./notification-types";
 import { NotificationsService } from "./notifications.service";
+import { ApiOperation, ApiTags, ApiQuery } from "@nestjs/swagger";
+import { ApiZodBody, ApiPagination } from "../../common/openapi/zod-schema";
 
 const preferencesBody = z
   .object({
@@ -21,39 +23,49 @@ const preferencesBody = z
   })
   .strict();
 
+@ApiTags("Notifications")
 @Controller()
 @AuthenticatedOnly()
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
 
   @Get("notifications")
+  @ApiOperation({ summary: "List notifications" })
+  @ApiPagination()
+  @ApiQuery({ name: "unread", required: false, type: Boolean })
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     return this.notifications.list(user.id, parsePage(query), query.unread === "true");
   }
 
   @Get("notifications/unread-count")
+  @ApiOperation({ summary: "Unread notification count" })
   unreadCount(@CurrentUser() user: AuthUser) {
     return this.notifications.unreadCount(user.id);
   }
 
   @Post("notifications/read-all")
   @HttpCode(200)
+  @ApiOperation({ summary: "Mark all notifications read" })
   readAll(@CurrentUser() user: AuthUser) {
     return this.notifications.markAllRead(user.id);
   }
 
   @Post("notifications/:id/read")
   @HttpCode(200)
+  @ApiOperation({ summary: "Mark one notification read" })
   read(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.notifications.markRead(user.id, id);
   }
 
   @Get("me/notification-preferences")
+  @ApiOperation({ summary: "Notification preferences per type" })
   preferences(@CurrentUser() user: AuthUser) {
     return this.notifications.listPreferences(user.id);
   }
 
   @Put("me/notification-preferences")
+  @ApiOperation({ summary: "Update notification preferences" })
+  @ApiZodBody(preferencesBody)
   updatePreferences(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return this.notifications.updatePreferences(user.id, preferencesBody.parse(body).items);
   }

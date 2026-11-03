@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { SettingsService } from "../admin/settings.service";
+import { SettingsService } from "../admin";
 import { Prisma, type MediaAsset } from "@prisma/client";
 import type { Queue } from "bullmq";
 import { v7 as uuidv7 } from "uuid";
@@ -13,8 +13,8 @@ import { REDIS } from "../../common/redis/redis.constants";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
-import { PermissionService } from "../rbac/permission.service";
-import { ProfilesService } from "../users/profiles.service";
+import { PermissionService } from "../rbac";
+import { ProfilesService } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
 import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { R2Client, isNoSuchUpload } from "./r2.client";

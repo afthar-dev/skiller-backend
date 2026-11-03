@@ -7,6 +7,8 @@ import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiErrorResponse } from "../../common/openapi/error-response";
 
 interface ResendEvent {
   type: string;
@@ -19,6 +21,7 @@ const SUPPRESSING: Record<string, "bounced" | "complained"> = {
 };
 
 @Public()
+@ApiTags("Webhooks")
 @Controller("webhooks")
 export class ResendWebhookController {
   constructor(
@@ -28,6 +31,8 @@ export class ResendWebhookController {
 
   @Post("resend")
   @HttpCode(200)
+  @ApiOperation({ summary: "Resend delivery webhook (Svix-signed)" })
+  @ApiErrorResponse(401, "Invalid signature.")
   async handle(@Req() req: RawBodyRequest<Request>) {
     const raw = req.rawBody;
     if (!raw) throw new Error("rawBody is not enabled; create the app with { rawBody: true }");

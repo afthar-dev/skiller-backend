@@ -1,5 +1,8 @@
 import { Module, OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
-import { ConfigModule } from "./common/config/config.module";
+import { LoggerModule } from "nestjs-pino";
+import { APP_CONFIG, ConfigModule } from "./common/config/config.module";
+import type { AppConfig } from "./common/config/config.schema";
+import { buildLoggerParams } from "./common/observability/logger";
 import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
@@ -16,7 +19,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule],
+  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(

@@ -1,5 +1,5 @@
 import { Module, forwardRef } from "@nestjs/common";
-import { MediaModule } from "../media/media.module";
+import { MediaModule } from "../media";
 import { CreatorService } from "./creator.service";
 import { FollowsService } from "./follows.service";
 import { MeController } from "./me.controller";

@@ -1,5 +1,5 @@
 import type { PrismaService } from "../../common/prisma/prisma.service";
-import type { AccountService } from "../identity/account.service";
+import type { AccountService } from "../identity";
 import { ProfilesService } from "./profiles.service";
 
 describe("ProfilesService module boundary", () => {

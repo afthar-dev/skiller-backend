@@ -3,9 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { AccountService } from "../identity/account.service";
-import { MailService } from "../mail/mail.service";
-import type { MailData, MailTemplate } from "../mail/mail.types";
+import { AccountService } from "../identity";
+import { MailService } from "../mail";
+import type { MailData, MailTemplate } from "../mail";
 import { defaultPreference, NOTIFICATION_TYPE_KEYS, type EffectivePreference, type NotificationType } from "./notification-types";
 
 export interface NotifyInput {

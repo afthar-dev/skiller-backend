@@ -7,7 +7,7 @@ import { ConfigModule } from "../../common/config/config.module";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaModule } from "../../common/prisma/prisma.module";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { MailService } from "../mail/mail.service";
+import { MailService } from "../mail";
 import { OtpService } from "./otp.service";
 
 const MIN = 60_000;

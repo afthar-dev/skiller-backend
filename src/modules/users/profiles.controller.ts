@@ -5,11 +5,14 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
-import { SessionService } from "../identity/session.service";
-import { TokenService } from "../identity/token.service";
+import { SessionService } from "../identity";
+import { TokenService } from "../identity";
 import { FollowsService } from "./follows.service";
 import { ProfilesService, toProfileView } from "./profiles.service";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiPagination } from "../../common/openapi/zod-schema";
 
+@ApiTags("Profiles")
 @Controller("profiles")
 export class ProfilesController {
   constructor(
@@ -33,6 +36,7 @@ export class ProfilesController {
 
   @Public()
   @Get(":handle")
+  @ApiOperation({ summary: "Public profile by handle (adds isFollowing for a signed-in viewer)" })
   async get(@Param("handle") handle: string, @Req() req: Request) {
     const profile = await this.profiles.getByHandle(handle);
     const viewerId = await this.optionalViewerId(req);
@@ -49,6 +53,7 @@ export class ProfilesController {
   @AuthenticatedOnly()
   @Post(":handle/follow")
   @HttpCode(204)
+  @ApiOperation({ summary: "Follow a profile" })
   async follow(@CurrentUser() user: AuthUser, @Param("handle") handle: string) {
     await this.follows.follow(user.id, handle);
   }
@@ -56,18 +61,23 @@ export class ProfilesController {
   @AuthenticatedOnly()
   @Delete(":handle/follow")
   @HttpCode(204)
+  @ApiOperation({ summary: "Unfollow a profile" })
   async unfollow(@CurrentUser() user: AuthUser, @Param("handle") handle: string) {
     await this.follows.unfollow(user.id, handle);
   }
 
   @Public()
   @Get(":handle/followers")
+  @ApiOperation({ summary: "List followers" })
+  @ApiPagination()
   followers(@Param("handle") handle: string, @Query() query: { cursor?: unknown; limit?: unknown }) {
     return this.follows.followers(handle, parsePage(query));
   }
 
   @Public()
   @Get(":handle/following")
+  @ApiOperation({ summary: "List followed profiles" })
+  @ApiPagination()
   following(@Param("handle") handle: string, @Query() query: { cursor?: unknown; limit?: unknown }) {
     return this.follows.following(handle, parsePage(query));
   }

@@ -1,5 +1,5 @@
 import { Module, OnModuleInit, forwardRef } from "@nestjs/common";
-import { UsersModule } from "../users/users.module";
+import { UsersModule } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
 import { MediaController } from "./media.controller";
 import { MediaService } from "./media.service";

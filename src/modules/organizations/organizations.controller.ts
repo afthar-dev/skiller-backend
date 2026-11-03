@@ -6,9 +6,11 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
-import { RequirePermission } from "../rbac/require-permission.decorator";
-import type { MutationMeta } from "../rbac/roles.service";
+import { RequirePermission } from "../rbac";
+import type { MutationMeta } from "../rbac";
 import { INVITABLE_ROLE_KEYS, OrganizationsService } from "./organizations.service";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiZodBody, ApiPagination } from "../../common/openapi/zod-schema";
 
 const slug = z
   .string()
@@ -26,36 +28,46 @@ const acceptSchema = z.object({ token: z.string().min(20).max(200) }).strict();
 
 const metaOf = (req: Request): MutationMeta => ({ ip: req.ip, requestId: (req as Request & { id?: string }).id });
 
+@ApiTags("Organizations")
 @Controller("orgs")
 export class OrganizationsController {
   constructor(private readonly orgs: OrganizationsService) {}
 
   @Post()
   @RequirePermission("org.create")
+  @ApiOperation({ summary: "Create an organization" })
+  @ApiZodBody(createSchema)
   async create(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     return this.orgs.create(user.id, createSchema.parse(body), metaOf(req));
   }
 
   @Public()
   @Get(":slug")
+  @ApiOperation({ summary: "Public organization by slug" })
   get(@Param("slug") slug: string) {
     return this.orgs.get(slug);
   }
 
   @Patch(":slug")
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "Update organization details" })
+  @ApiZodBody(updateSchema)
   update(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown, @Req() req: Request) {
     return this.orgs.update(user.id, slug, updateSchema.parse(body), metaOf(req));
   }
 
   @Post(":slug/invites")
   @RequirePermission("org.invite", { orgParam: "slug" })
+  @ApiOperation({ summary: "Invite someone by email" })
+  @ApiZodBody(inviteSchema)
   invite(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown, @Req() req: Request) {
     return this.orgs.invite(user.id, slug, inviteSchema.parse(body), metaOf(req));
   }
 
   @Get(":slug/members")
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "List members" })
+  @ApiPagination()
   members(@Param("slug") slug: string, @Query() query: { cursor?: unknown; limit?: unknown }) {
     return this.orgs.members(slug, parsePage(query));
   }
@@ -63,11 +75,13 @@ export class OrganizationsController {
   @Delete(":slug/members/:userId")
   @HttpCode(204)
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiOperation({ summary: "Remove a member" })
   async removeMember(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Param("userId") userId: string, @Req() req: Request) {
     await this.orgs.removeMember(user.id, slug, userId, metaOf(req));
   }
 }
 
+@ApiTags("Organizations")
 @Controller("org-invites")
 export class OrgInvitesController {
   constructor(private readonly orgs: OrganizationsService) {}
@@ -75,6 +89,8 @@ export class OrgInvitesController {
   @AuthenticatedOnly()
   @Post("accept")
   @HttpCode(200)
+  @ApiOperation({ summary: "Accept an organization invite token" })
+  @ApiZodBody(acceptSchema)
   accept(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     return this.orgs.accept(user.id, acceptSchema.parse(body).token, metaOf(req));
   }

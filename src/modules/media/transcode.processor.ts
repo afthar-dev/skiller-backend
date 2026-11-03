@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { SettingsService } from "../admin/settings.service";
+import { SettingsService } from "../admin";
 import type { MediaAsset } from "@prisma/client";
 import type { Job } from "bullmq";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";

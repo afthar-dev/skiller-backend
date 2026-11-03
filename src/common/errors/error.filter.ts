@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
+import { reportException } from "../observability/sentry";
 import { AppError } from "./app-error";
 
 interface ErrorBody {
@@ -35,6 +36,7 @@ export class ErrorFilter implements ExceptionFilter {
     const [status, error] = this.toError(exception);
 
     if (status >= 500) this.logger.error(exception);
+    reportException(exception, status, { requestId: request.id });
     const retryAfter = error.details.retryAfterSec;
     if (typeof retryAfter === "number") response.setHeader("Retry-After", String(retryAfter));
 

@@ -3,7 +3,7 @@ import { escapeLike } from "../../common/db/like";
 import { Prisma, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { AccountService } from "../identity/account.service";
+import { AccountService } from "../identity";
 import { defaultDisplayName, generateHandle, isReservedHandle, isValidHandle, normalizeHandle } from "./handles";
 
 export interface ProfileView {

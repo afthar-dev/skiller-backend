@@ -1,14 +1,17 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, Put } from "@nestjs/common";
+import { Body, Controller, forwardRef, Get, HttpCode, Inject, Patch, Post, Put } from "@nestjs/common";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
-import { AccountService } from "../identity/account.service";
-import { PermissionService } from "../rbac/permission.service";
-import { RolesService } from "../rbac/roles.service";
-import { MediaService } from "../media/media.service";
+import { AccountService } from "../identity";
+import { PermissionService } from "../rbac";
+import { RolesService } from "../rbac";
+import { MediaService } from "../media";
 import { CreatorService } from "./creator.service";
 import { ProfilesService, toProfileView } from "./profiles.service";
+import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiJsonResponse, objectSchema, profileViewSchema, schemas } from "../../common/openapi/responses";
 
 const httpUrl = z
   .string()
@@ -85,6 +88,7 @@ const portfolioList = z
 const creatorBody = z.object({ acceptTerms: z.literal(true) }).strict();
 
 @AuthenticatedOnly()
+@ApiTags("Me")
 @Controller("me")
 export class MeController {
   constructor(
@@ -93,10 +97,13 @@ export class MeController {
     private readonly roles: RolesService,
     private readonly permissions: PermissionService,
     private readonly creator: CreatorService,
-    private readonly media: MediaService,
+    // users and media import each other through their index files; forwardRef keeps this working whichever index loads first.
+    @Inject(forwardRef(() => MediaService)) private readonly media: MediaService,
   ) {}
 
   @Get()
+  @ApiOperation({ summary: "Current user, profile, roles and effective platform permissions" })
+  @ApiJsonResponse(200, "Current user.", objectSchema({ user: { type: "object", additionalProperties: true }, profile: profileViewSchema, roles: { type: "array", items: schemas.str }, permissions: { type: "array", items: schemas.str } }))
   async me(@CurrentUser() auth: AuthUser) {
     const [user, profile, roles, effective] = await Promise.all([
       this.accounts.get(auth.id),
@@ -109,6 +116,9 @@ export class MeController {
   }
 
   @Patch("profile")
+  @ApiOperation({ summary: "Update profile fields (avatar/banner by media asset id)" })
+  @ApiZodBody(profilePatch)
+  @ApiJsonResponse(200, "Updated profile.", profileViewSchema)
   updateProfile(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     const patch = profilePatch.parse(body);
     // Attaching happens in the profile update's own transaction: a media asset that is not usable rejects the whole PATCH.
@@ -125,27 +135,38 @@ export class MeController {
   }
 
   @Put("experience")
+  @ApiOperation({ summary: "Replace the experience list" })
+  @ApiZodBody(experienceList)
   async experience(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceExperience(auth.id, experienceList.parse(body).items) };
   }
 
   @Put("education")
+  @ApiOperation({ summary: "Replace the education list" })
+  @ApiZodBody(educationList)
   async education(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceEducation(auth.id, educationList.parse(body).items) };
   }
 
   @Put("skills")
+  @ApiOperation({ summary: "Replace the skills list" })
+  @ApiZodBody(skillList)
   async skills(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceSkills(auth.id, skillList.parse(body).items) };
   }
 
   @Put("portfolio")
+  @ApiOperation({ summary: "Replace the portfolio list" })
+  @ApiZodBody(portfolioList)
   async portfolio(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replacePortfolio(auth.id, portfolioList.parse(body).items) };
   }
 
   @Post("become-creator")
   @HttpCode(200)
+  @ApiOperation({ summary: "Accept the creator terms and gain the creator role" })
+  @ApiZodBody(creatorBody)
+  @ApiJsonResponse(200, "Creator status.", objectSchema({ isCreator: { type: "boolean" }, changed: { type: "boolean" } }))
   async becomeCreator(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     creatorBody.parse(body);
     const { changed } = await this.creator.becomeCreator(auth.id);
