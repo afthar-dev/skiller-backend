@@ -11,6 +11,7 @@ export function applyTestEnv(overrides: Record<string, string> = {}) {
     OTP_PEPPER: secret,
     PLAYBACK_SECRET: secret,
     CORS_ORIGINS: "http://localhost:5173",
+    WEB_BASE_URL: "https://app.skiller.test",
     COOKIE_DOMAIN: "localhost",
     R2_ACCOUNT_ID: "test",
     R2_ACCESS_KEY_ID: "minioadmin",

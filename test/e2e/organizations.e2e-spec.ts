@@ -223,7 +223,7 @@ describe("organizations and invites", () => {
   });
 
   describe("members", () => {
-    it("lists members; the owner can remove an instructor but never the owner", async () => {
+    it("lists one row per person with all their roles; the owner can remove an instructor but never the owner", async () => {
       const { owner, org } = await ownerWithOrg();
       const email = uniqueEmail("member");
       await invite(owner, org.slug, { email, roleKey: "org_instructor" });
@@ -232,14 +232,25 @@ describe("organizations and invites", () => {
 
       const list = await http().get(`/v1/orgs/${org.slug}/members`).set(auth(owner));
       expect(list.status).toBe(200);
-      expect(list.body.items.map((m: { userId: string; roleKey: string }) => [m.userId, m.roleKey]).sort()).toEqual(
-        [[owner.userId, "org_owner"], [member.userId, "org_instructor"]].sort(),
+      expect(list.body.items.map((m: { userId: string; roles: string[] }) => [m.userId, m.roles]).sort()).toEqual(
+        [[owner.userId, ["org_owner"]], [member.userId, ["org_instructor"]]].sort(),
       );
       expect(list.body.items[0]).toEqual(expect.objectContaining({ handle: expect.any(String), displayName: expect.any(String) }));
 
       const paged = await http().get(`/v1/orgs/${org.slug}/members?limit=1`).set(auth(owner));
       expect(paged.body.items).toHaveLength(1);
       expect(paged.body.nextCursor).toBeTruthy();
+      const next = await http().get(`/v1/orgs/${org.slug}/members?limit=1&cursor=${paged.body.nextCursor}`).set(auth(owner));
+      expect(next.body.items).toHaveLength(1);
+      expect(next.body.nextCursor).toBeNull();
+      expect(next.body.items[0].userId).not.toBe(paged.body.items[0].userId);
+
+      // a person holding two grants (added out of band) still appears once, with both roles
+      const learner = await prisma.role.findUniqueOrThrow({ where: { key: "org_learner" } });
+      await prisma.userRole.create({ data: { userId: member.userId, roleId: learner.id, orgId: org.id } });
+      const both = await http().get(`/v1/orgs/${org.slug}/members`).set(auth(owner));
+      expect(both.body.items).toHaveLength(2);
+      expect(both.body.items.find((m: { userId: string }) => m.userId === member.userId).roles.sort()).toEqual(["org_instructor", "org_learner"]);
 
       // instructors cannot list or remove
       expect((await http().get(`/v1/orgs/${org.slug}/members`).set(auth(member))).status).toBe(403);
@@ -253,6 +264,54 @@ describe("organizations and invites", () => {
       expect((await http().delete(`/v1/orgs/${org.slug}/members/${member.userId}`).set(auth(owner))).status).toBe(204);
       expect(await prisma.userRole.count({ where: { userId: member.userId, orgId: org.id } })).toBe(0);
       expect((await http().delete(`/v1/orgs/${org.slug}/members/${member.userId}`).set(auth(owner))).status).toBe(404);
+    });
+  });
+
+  describe("duplicate membership and link base", () => {
+    it("inviting someone who already holds a role in the org (owner included) is 409 ORG_ALREADY_MEMBER", async () => {
+      const { owner, org } = await ownerWithOrg();
+      const self = await invite(owner, org.slug, { email: owner.email.toUpperCase(), roleKey: "org_learner" });
+      expect(self.status).toBe(409);
+      expect(self.body.error.code).toBe("ORG_ALREADY_MEMBER");
+
+      const email = uniqueEmail("dupe");
+      await invite(owner, org.slug, { email, roleKey: "org_instructor" });
+      const member = await t.login(email);
+      await accept(member, await tokenFor(email));
+      const again = await invite(owner, org.slug, { email, roleKey: "org_learner" });
+      expect(again.status).toBe(409);
+      expect(again.body.error.code).toBe("ORG_ALREADY_MEMBER");
+      expect(await prisma.userRole.count({ where: { userId: member.userId, orgId: org.id } })).toBe(1);
+
+      // a member of a different org is still invitable
+      const { owner: other } = await ownerWithOrg();
+      expect((await invite(owner, org.slug, { email: other.email, roleKey: "org_learner" })).status).toBe(201);
+    });
+
+    it("accept re-checks membership inside the transaction: ORG_ALREADY_MEMBER, invite stays unused", async () => {
+      const { owner, org } = await ownerWithOrg();
+      const email = uniqueEmail("late-member");
+      await invite(owner, org.slug, { email, roleKey: "org_instructor" });
+      const token = await tokenFor(email);
+      const invitee = await t.login(email);
+      const learner = await prisma.role.findUniqueOrThrow({ where: { key: "org_learner" } });
+      await prisma.userRole.create({ data: { userId: invitee.userId, roleId: learner.id, orgId: org.id } });
+
+      const res = await accept(invitee, token);
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("ORG_ALREADY_MEMBER");
+      expect((await prisma.orgInvite.findFirstOrThrow({ where: { orgId: org.id, email } })).acceptedAt).toBeNull();
+      expect(await prisma.userRole.count({ where: { userId: invitee.userId, orgId: org.id } })).toBe(1);
+    });
+
+    it("the emailed link is absolute and built from WEB_BASE_URL", async () => {
+      const { owner, org } = await ownerWithOrg();
+      const email = uniqueEmail("link");
+      await invite(owner, org.slug, { email, roleKey: "org_learner" });
+      const token = await tokenFor(email);
+      const mail = t.mail.sent.filter((m) => m.to === email).pop()!;
+      expect(mail.text).toContain(`https://app.skiller.test/org-invites/accept?token=${token}`);
+      expect(mail.html).toContain(`https://app.skiller.test/org-invites/accept?token=${token}`);
     });
   });
 });

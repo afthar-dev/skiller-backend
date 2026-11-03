@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma, type RoleScope } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
-import { toPage, type PageQuery } from "../../common/http/pagination";
+import { type PageQuery } from "../../common/http/pagination";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -63,16 +63,32 @@ export class RolesService {
     return rows.map((r) => r.role.key).sort();
   }
 
-  /** Org members, one row per grant, paged by grant id (UUIDv7). */
-  async listOrgMembers(orgId: string, page: PageQuery) {
+  /** Whether the user holds any active role in the org. */
+  async isOrgMember(orgId: string, userId: string, client: Prisma.TransactionClient | PrismaService = this.prisma): Promise<boolean> {
     const now = this.clock.now();
-    const rows = await this.prisma.userRole.findMany({
-      where: { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], ...(page.cursor ? { id: { gt: page.cursor } } : {}) },
-      orderBy: { id: "asc" },
+    const count = await client.userRole.count({ where: { orgId, userId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } });
+    return count > 0;
+  }
+
+  /** Org members, one entry per person with all their active roles, paged by user id. */
+  async listOrgMembers(orgId: string, page: PageQuery): Promise<{ items: { userId: string; roles: string[] }[]; nextCursor: string | null }> {
+    const now = this.clock.now();
+    const active = { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } satisfies Prisma.UserRoleWhereInput;
+    const people = await this.prisma.userRole.findMany({
+      where: { ...active, ...(page.cursor ? { userId: { gt: page.cursor } } : {}) },
+      distinct: ["userId"],
+      orderBy: { userId: "asc" },
       take: page.limit + 1,
-      select: { id: true, userId: true, createdAt: true, role: { select: { key: true } } },
+      select: { userId: true },
     });
-    return toPage(rows.map((r) => ({ id: r.id, userId: r.userId, roleKey: r.role.key, joinedAt: r.createdAt.toISOString() })), page.limit);
+    const pageIds = people.slice(0, page.limit).map((p) => p.userId);
+    const grants = await this.prisma.userRole.findMany({ where: { ...active, userId: { in: pageIds } }, select: { userId: true, role: { select: { key: true } } } });
+    const byUser = new Map<string, string[]>();
+    for (const g of grants) byUser.set(g.userId, [...(byUser.get(g.userId) ?? []), g.role.key]);
+    return {
+      items: pageIds.map((userId) => ({ userId, roles: (byUser.get(userId) ?? []).sort() })),
+      nextCursor: people.length > page.limit ? pageIds[pageIds.length - 1] : null,
+    };
   }
 
   /** Removes every grant the user holds in the org. Returns false when they held none. */

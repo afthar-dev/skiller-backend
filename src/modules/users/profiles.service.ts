@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { AccountService } from "../identity/account.service";
 import { defaultDisplayName, generateHandle, isReservedHandle, isValidHandle, normalizeHandle } from "./handles";
 
 export interface ProfileView {
@@ -90,7 +91,10 @@ const dateOnly = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accounts: AccountService,
+  ) {}
 
   /**
    * Creates the user's profile if missing and returns it. Safe to call any number of times, concurrently and from the outbox
@@ -100,7 +104,7 @@ export class ProfilesService {
     const existing = await this.prisma.profile.findUnique({ where: { userId } });
     if (existing) return existing;
 
-    const address = email ?? (await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email;
+    const address = email ?? await this.accounts.findEmail(userId);
     if (!address) throw new AppError("NOT_FOUND", 404, "User not found");
 
     for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt++) {

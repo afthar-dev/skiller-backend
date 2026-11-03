@@ -11,6 +11,8 @@ const envSchema = z.object({
   OTP_PEPPER: secret("OTP_PEPPER"),
   PLAYBACK_SECRET: secret("PLAYBACK_SECRET"),
   CORS_ORIGINS: z.string().min(1),
+  // Public URL of the web app, used for links in emails.
+  WEB_BASE_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().min(1),
   R2_ACCOUNT_ID: z.string().min(1),
   R2_ACCESS_KEY_ID: z.string().min(1),
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     otpPepper: e.OTP_PEPPER,
     playbackSecret: e.PLAYBACK_SECRET,
     corsOrigins: e.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+    webBaseUrl: e.WEB_BASE_URL.replace(/\/+$/, ""),
     cookieDomain: e.COOKIE_DOMAIN,
     r2: {
       accountId: e.R2_ACCOUNT_ID,

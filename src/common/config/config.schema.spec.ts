@@ -22,6 +22,7 @@ const validEnv: NodeJS.ProcessEnv = {
   RESEND_FROM_ADDRESS: "Skiller <no-reply@skiller.in>",
   RESEND_WEBHOOK_SECRET: "whsec_test",
   SUPER_ADMIN_EMAIL: "admin@skiller.in",
+  WEB_BASE_URL: "https://app.skiller.in/",
 };
 
 describe("loadConfig", () => {
@@ -37,6 +38,14 @@ describe("loadConfig", () => {
     expect(config.port).toBe(4000);
     expect(config.r2.privateBucket).toBe("skiller-private");
     expect(config.sentryDsn).toBeUndefined();
+  });
+
+  it("WEB_BASE_URL is required, must be a URL, and is exposed without a trailing slash", () => {
+    expect(loadConfig(validEnv).webBaseUrl).toBe("https://app.skiller.in");
+    const missing = { ...validEnv };
+    delete missing.WEB_BASE_URL;
+    expect(() => loadConfig(missing)).toThrow(/WEB_BASE_URL/);
+    expect(() => loadConfig({ ...validEnv, WEB_BASE_URL: "not a url" })).toThrow(/WEB_BASE_URL/);
   });
 
   it("rejects short jwt secret", () => {

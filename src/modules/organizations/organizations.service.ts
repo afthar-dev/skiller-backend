@@ -74,6 +74,10 @@ export class OrganizationsService {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
+  private alreadyMember() {
+    return new AppError("ORG_ALREADY_MEMBER", 409, "This person is already a member of the organization");
+  }
+
   async idForSlug(slug: string): Promise<string | null> {
     const org = await this.prisma.organization.findUnique({ where: { slug: slug.toLowerCase() }, select: { id: true } });
     return org?.id ?? null;
@@ -131,6 +135,8 @@ export class OrganizationsService {
     await consumeRateLimit(this.redis, `org-invite:${actorId}`, INVITES_PER_HOUR, 3600);
 
     const email = input.email.trim().toLowerCase();
+    const existingUserId = await this.accounts.findIdByEmail(email);
+    if (existingUserId && (await this.roles.isOrgMember(org.id, existingUserId))) throw this.alreadyMember();
     const raw = randomBytes(32).toString("base64url");
     const expiresAt = new Date(this.clock.now().getTime() + INVITE_TTL_MS);
     const inviterName = await this.profiles.displayNameOf(actorId);
@@ -144,8 +150,7 @@ export class OrganizationsService {
       return created;
     });
 
-    const base = this.config.corsOrigins[0] ?? "";
-    await this.mail.send("org_invite", email, { orgName: org.name, inviterName, acceptUrl: `${base}/org-invites/accept?token=${raw}` });
+    await this.mail.send("org_invite", email, { orgName: org.name, inviterName, acceptUrl: `${this.config.webBaseUrl}/org-invites/accept?token=${raw}` });
     return { id: invite.id, email, roleKey: invite.roleKey, expiresAt: expiresAt.toISOString() };
   }
 
@@ -164,6 +169,9 @@ export class OrganizationsService {
 
     await this.prisma.$transaction(async (tx) => {
       // Single-use claim: concurrent accepts race on this UPDATE and only one sees count 1.
+      // Serialises accepts for one person+org so the membership check below cannot race a second accept.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`org-member:${invite.orgId}:${userId}`}))`;
+      if (await this.roles.isOrgMember(invite.orgId, userId, tx)) throw this.alreadyMember();
       const claimed = await tx.orgInvite.updateMany({ where: { id: invite.id, acceptedAt: null }, data: { acceptedAt: now } });
       if (claimed.count === 0) throw new AppError("INVITE_USED", 409, "This invitation has already been used");
       await this.roles.grantSystem(userId, invite.roleKey, tx, invite.orgId);
@@ -183,7 +191,7 @@ export class OrganizationsService {
       nextCursor: result.nextCursor,
       items: result.items.map((i) => {
         const p = profiles.get(i.userId);
-        return { id: i.id, userId: i.userId, roleKey: i.roleKey, joinedAt: i.joinedAt, handle: p?.handle ?? null, displayName: p?.displayName ?? null };
+        return { userId: i.userId, roles: i.roles, handle: p?.handle ?? null, displayName: p?.displayName ?? null };
       }),
     };
   }
