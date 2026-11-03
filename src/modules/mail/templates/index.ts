@@ -3,6 +3,7 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { MailData, MailTemplate } from "../mail.types";
 import { MediaFailed, mediaFailedSubject } from "./media-failed";
+import { OrderReceipt, orderReceiptSubject } from "./order-receipt";
 import { OrgInvite, orgInviteSubject } from "./org-invite";
 import { Otp, otpSubject } from "./otp";
 import { Welcome, welcomeSubject } from "./welcome";
@@ -49,6 +50,10 @@ function pick<T extends MailTemplate>(template: T, data: MailData[T]) {
     case "media_failed": {
       const d = data as MailData["media_failed"];
       return [mediaFailedSubject(d), createElement(MediaFailed, d)] as const;
+    }
+    case "order_receipt": {
+      const d = data as MailData["order_receipt"];
+      return [orderReceiptSubject(d), createElement(OrderReceipt, d)] as const;
     }
     default:
       throw new Error(`Unknown mail template: ${String(template)}`);

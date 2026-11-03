@@ -1,16 +1,25 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Response } from "express";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { AppError } from "../../common/errors/app-error";
-import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { parsePage } from "../../common/http/pagination";
+import { Idempotent } from "../../common/idempotency";
+import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
+import { PrismaService } from "../../common/prisma/prisma.service";
 import { OrganizationsService } from "../organizations";
 import { RequirePermission } from "../rbac";
 import { ProfilesService } from "../users";
+import { CheckoutService } from "./checkout.service";
+import { FulfilmentService } from "./fulfilment.service";
+import { OrdersService } from "./orders.service";
 import { PlansService } from "./plans.service";
+import { RAZORPAY_CLIENT, type RazorpayClient } from "./razorpay.client";
 import { SubscriptionsService } from "./subscriptions.service";
 import type { Owner } from "./entitlements.service";
 
@@ -123,5 +132,70 @@ export class OrgSubscriptionsController {
   @ApiZodBody(planBody)
   async change(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Param("id") id: string, @Body() body: unknown) {
     return this.subscriptions.change(await this.owner(slug), id, planBody.parse(body).planVersionId, user.id);
+  }
+}
+
+const checkoutBody = z.object({ itemType: z.string().trim().min(1).max(40), itemId: z.string().trim().min(1).max(100), couponCode: z.string().trim().min(1).max(64).optional() });
+const verifyBody = z.object({ orderId: z.string().uuid(), razorpayOrderId: z.string().min(1).max(100), razorpayPaymentId: z.string().min(1).max(100), signature: z.string().min(1).max(200) }).strict();
+
+/** One-off purchases through Razorpay Orders. Price, discount and commission are computed server-side; the body only names the item. */
+@ApiTags("Checkout")
+@Controller("checkout")
+export class CheckoutController {
+  constructor(
+    private readonly checkout: CheckoutService,
+    private readonly fulfilment: FulfilmentService,
+    private readonly prisma: PrismaService,
+    @Inject(RAZORPAY_CLIENT) private readonly razorpay: RazorpayClient,
+  ) {}
+
+  @AuthenticatedOnly()
+  @Idempotent()
+  @Post()
+  @HttpCode(201)
+  @ApiOperation({ summary: "Start buying an item: creates the order and the Razorpay order (requires Idempotency-Key)" })
+  @ApiZodBody(checkoutBody)
+  @ApiErrorResponse(409, "Idempotency conflict, item not purchasable, or coupon already used.")
+  create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    return this.checkout.create(user.id, checkoutBody.parse(body));
+  }
+
+  @AuthenticatedOnly()
+  @Post("verify")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Confirm a Razorpay payment (signature checked); 200 when the order is paid, 202 while the payment is not yet captured" })
+  @ApiZodBody(verifyBody)
+  async verify(@CurrentUser() user: AuthUser, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const input = verifyBody.parse(body);
+    const order = await this.prisma.order.findFirst({ where: { id: input.orderId, buyerId: user.id }, select: { id: true, razorpayOrderId: true } });
+    if (!order) throw new AppError("ORDER_NOT_FOUND", 404, "Order not found");
+    if (!this.razorpay.verifyPaymentSignature({ orderId: input.razorpayOrderId, paymentId: input.razorpayPaymentId, signature: input.signature })) {
+      throw new AppError("PAYMENT_SIGNATURE_INVALID", 400, "The payment signature is invalid");
+    }
+    if (order.razorpayOrderId !== input.razorpayOrderId) throw new AppError("PAYMENT_ORDER_MISMATCH", 422, "This payment does not belong to this order");
+    const result = await this.fulfilment.fulfil(order.id, input.razorpayPaymentId, "verify");
+    if (result.status !== "PAID") res.status(202);
+    return { orderId: result.orderId, status: result.status };
+  }
+}
+
+@ApiTags("Orders")
+@Controller("orders")
+export class OrdersController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @AuthenticatedOnly()
+  @Get()
+  @ApiOperation({ summary: "My orders, newest first" })
+  @ApiPagination()
+  list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
+    return this.orders.listFor(user.id, parsePage(query));
+  }
+
+  @AuthenticatedOnly()
+  @Get(":id")
+  @ApiOperation({ summary: "One of my orders" })
+  get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.orders.getFor(user.id, id);
   }
 }

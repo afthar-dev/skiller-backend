@@ -6,6 +6,7 @@ import { buildLoggerParams } from "./common/observability/logger";
 import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
 import { BillingWorkerModule } from "./modules/billing/billing-worker.module";
+import { OrderMaintenanceProcessor } from "./modules/billing/order-maintenance.processor";
 import { SubscriptionMaintenanceProcessor } from "./modules/billing/subscription-maintenance.processor";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
@@ -30,6 +31,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly outboxRelay: OutboxRelay,
     private readonly mediaCleanup: MediaCleanupProcessor,
     private readonly subscriptionMaintenance: SubscriptionMaintenanceProcessor,
+    private readonly orderMaintenance: OrderMaintenanceProcessor,
   ) {}
 
   async onApplicationBootstrap() {
@@ -37,6 +39,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.outboxRelay.schedule();
     await this.mediaCleanup.schedule();
     await this.subscriptionMaintenance.schedule();
+    await this.orderMaintenance.schedule();
   }
 
   async onApplicationShutdown() {

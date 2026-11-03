@@ -21,6 +21,20 @@ export type DomainEvent =
       paymentId?: string;
       /** Who to notify: the owner for USER subscriptions, the org owner/manager for ORG ones. */
       notifyUserId?: string;
+    }
+  | {
+      type: "order.paid";
+      orderId: string;
+      buyerId: string;
+      sellerOwnerType: "USER" | "ORG";
+      sellerOwnerId: string;
+      itemType: string;
+      itemId: string;
+      itemTitle: string;
+      /** Paise as a decimal string (events are JSON). */
+      totalPaise: string;
+      currency: string;
+      paidAt: string;
     };
 
 export type DomainEventType = DomainEvent["type"];

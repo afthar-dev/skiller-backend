@@ -4,6 +4,7 @@ import { AccessGuard } from "./access.guard";
 import { OrgParamResolverRegistry } from "./org-param-resolver";
 import { PermissionInvalidationHandler } from "./permission-invalidation.handler";
 import { PermissionGuard } from "./permission.guard";
+import { PlatformRoleDirectory } from "./platform-role-directory";
 import { MEMBER_ROLE_GRANTER } from "../identity";
 import { PermissionService } from "./permission.service";
 import { RbacMemberRoleGranter } from "./rbac-member-role-granter";
@@ -39,11 +40,12 @@ export class RouteGuardCheck implements OnApplicationBootstrap {
     OrgParamResolverRegistry,
     PermissionGuard,
     RolesService,
+    PlatformRoleDirectory,
     PermissionInvalidationHandler,
     RouteGuardCheck,
     { provide: APP_GUARD, useClass: AccessGuard },
     { provide: MEMBER_ROLE_GRANTER, useClass: RbacMemberRoleGranter },
   ],
-  exports: [PermissionService, OrgParamResolverRegistry, PermissionGuard, RolesService, MEMBER_ROLE_GRANTER],
+  exports: [PermissionService, OrgParamResolverRegistry, PermissionGuard, RolesService, PlatformRoleDirectory, MEMBER_ROLE_GRANTER],
 })
 export class RbacModule {}

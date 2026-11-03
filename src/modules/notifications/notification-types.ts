@@ -10,6 +10,9 @@ export const NOTIFICATION_TYPES = {
   "subscription.activated": { transactional: true },
   "subscription.payment_failed": { transactional: true },
   "subscription.expired": { transactional: true },
+  "order.receipt": { transactional: true },
+  "order.sale": { transactional: false },
+  "finance.alert": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

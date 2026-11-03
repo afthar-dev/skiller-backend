@@ -595,6 +595,7 @@ model PlanVersion {
 
   plan          Plan           @relation(fields: [planId], references: [id], onDelete: Restrict)
   subscriptions Subscription[]
+  orders        Order[]
 
   @@index([planId, interval, createdAt])
   @@map("plan_versions")
@@ -625,4 +626,168 @@ model Subscription {
   @@index([status, graceEndsAt])
   @@index([status, currentPeriodEnd])
   @@map("subscriptions")
+}
+
+// ─── orders, coupons, idempotency ────────────────────────────────────────
+// Orders snapshot everything that decides the money split (commission, GST, coupon funding, the seller's plan version), so a later
+// plan or setting change never re-prices a sale. An order has exactly one item in Phase 2; order_items keeps the shape open.
+
+enum OrderStatus {
+  CREATED
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum SellerOwnerType {
+  USER
+  ORG
+}
+
+enum CouponKind {
+  PERCENT
+  FLAT
+}
+
+enum CouponFunding {
+  CREATOR
+  PLATFORM
+}
+
+enum CouponScope {
+  ALL
+  SELLER
+  ITEM
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Order {
+  id                String          @id @default(uuid(7))
+  buyerId           String
+  status            OrderStatus     @default(CREATED)
+  currency          String          @default("INR")
+  /// Price before any coupon.
+  listPricePaise    BigInt
+  discountPaise     BigInt          @default(0)
+  /// What the buyer pays: list - discount. This is the Razorpay order amount.
+  totalPaise        BigInt
+  couponId          String?
+  couponFundedBy    CouponFunding?
+  sellerOwnerType   SellerOwnerType
+  sellerOwnerId     String
+  /// Snapshots taken at checkout.
+  commissionBps     Int
+  gstBps            Int
+  planVersionId     String
+  razorpayOrderId   String?         @unique
+  razorpayPaymentId String?         @unique
+  paidAt            DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  items             OrderItem[]
+  coupon            Coupon?         @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  planVersion       PlanVersion     @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  duplicatePayments DuplicatePayment[]
+
+  @@index([buyerId, id])
+  @@index([status, createdAt])
+  @@index([sellerOwnerType, sellerOwnerId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String @id @default(uuid(7))
+  orderId        String
+  itemType       String
+  itemId         String
+  title          String
+  unitPricePaise BigInt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([itemType, itemId])
+  @@map("order_items")
+}
+
+/// A second captured payment against an order that is already PAID. Kept for a manual refund; never posted to the ledger.
+model DuplicatePayment {
+  id                String    @id @default(uuid(7))
+  orderId           String
+  razorpayPaymentId String    @unique
+  amountPaise       BigInt
+  createdAt         DateTime  @default(now())
+  resolvedAt        DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([resolvedAt])
+  @@map("duplicate_payments")
+}
+
+model Coupon {
+  id        String        @id @default(uuid(7))
+  /// Upper-case, unique platform-wide.
+  code      String        @unique
+  kind      CouponKind
+  /// PERCENT: basis points (2000 = 20%). FLAT: paise.
+  value     BigInt
+  fundedBy  CouponFunding
+  /// The seller the coupon belongs to (CREATOR) or targets (PLATFORM with scope SELLER).
+  ownerType SellerOwnerType?
+  ownerId   String?
+  scope     CouponScope   @default(ALL)
+  itemType  String?
+  itemId    String?
+  maxUses   Int?
+  expiresAt DateTime?
+  isActive  Boolean       @default(true)
+  createdBy String?
+  createdAt DateTime      @default(now())
+
+  redemptions CouponRedemption[]
+  orders      Order[]
+
+  @@index([ownerType, ownerId])
+  @@map("coupons")
+}
+
+/// Counted when the order is fulfilled (paid), not at checkout. One per user per coupon.
+model CouponRedemption {
+  id        String   @id @default(uuid(7))
+  couponId  String
+  userId    String
+  orderId   String   @unique
+  createdAt DateTime @default(now())
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@unique([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+model IdempotencyRecord {
+  id          String            @id @default(uuid(7))
+  userId      String
+  /// "METHOD /path" of the concrete request, so the same key on another resource is a different record.
+  route       String
+  key         String
+  requestHash String
+  status      IdempotencyStatus @default(IN_PROGRESS)
+  statusCode  Int?
+  response    Json?
+  /// When the current attempt took the key; an IN_PROGRESS record older than the stale window is taken over.
+  startedAt   DateTime          @default(now())
+  createdAt   DateTime          @default(now())
+
+  @@unique([userId, route, key])
+  @@index([createdAt])
+  @@map("idempotency_records")
 }
