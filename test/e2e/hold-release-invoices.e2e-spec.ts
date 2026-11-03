@@ -24,7 +24,7 @@ describe("hold release and invoices", () => {
   const pay = (opts: Parameters<typeof paidOrder>[2] = {}) => paidOrder(t, fake, opts);
   // Settings are global to the shared database and cached in Redis: start from the defaults and leave no stored rows behind.
   const resetSettings = async () => {
-    const keys = ["hold_days", "platform_gstin"];
+    const keys = ["hold_days", "platform_gstin", "platform_legal_name", "platform_address", "platform_state_code", "sac_code"];
     await prisma.platformSetting.deleteMany({ where: { key: { in: keys } } });
     await t.app.get<Redis>(REDIS).del(...keys.map((k) => `settings:${k}`));
   };
@@ -146,6 +146,65 @@ describe("hold release and invoices", () => {
       expect(await entryLines(prisma, o.orderId, "hold_release")).not.toBeNull();
     });
 
+    it("keeps the hold while a refund is live (REQUESTED, APPROVED or PROCESSING) and releases on the next run once it is rejected", async () => {
+      for (const live of ["REQUESTED", "APPROVED", "PROCESSING"] as const) {
+        const o = await pay();
+        t.clock.advance(6.9 * DAY);
+        const refund = await prisma.refund.create({ data: { orderId: o.orderId, amountPaise: 100000n, status: live, reason: "x", requestedBy: o.buyer.userId } });
+        t.clock.advance(1.1 * DAY); // day 8
+        await release.releaseDue();
+        expect(await entryLines(prisma, o.orderId, "hold_release")).toBeNull();
+        await prisma.refund.update({ where: { id: refund.id }, data: { status: "REJECTED" } });
+        await release.releaseDue();
+        expect(await entryLines(prisma, o.orderId, "hold_release")).not.toBeNull();
+      }
+    });
+
+    it("a FAILED or PROCESSED refund history of an ordinary order does not hold it (FAILED releases; the order is REFUNDED once processed)", async () => {
+      const o = await pay();
+      await prisma.refund.create({ data: { orderId: o.orderId, amountPaise: 100000n, status: "FAILED", reason: "x", requestedBy: o.buyer.userId } });
+      t.clock.advance(8 * DAY);
+      await release.releaseDue();
+      expect(await entryLines(prisma, o.orderId, "hold_release")).not.toBeNull();
+    });
+
+    it("keeps the hold on an order whose delivery failed, until its refund is REJECTED", async () => {
+      const o = await pay();
+      await prisma.order.update({ where: { id: o.orderId }, data: { fulfilmentFailedAt: new Date(), fulfilmentError: "X: y" } });
+      t.clock.advance(8 * DAY);
+      await release.releaseDue();
+      expect(await entryLines(prisma, o.orderId, "hold_release")).toBeNull();
+      const failed = await prisma.refund.create({ data: { orderId: o.orderId, amountPaise: 100000n, status: "FAILED", reason: "x", requestedBy: "system" } });
+      await release.releaseDue();
+      expect(await entryLines(prisma, o.orderId, "hold_release")).toBeNull(); // a failed automatic refund still needs a human
+      await prisma.refund.update({ where: { id: failed.id }, data: { status: "REJECTED" } });
+      await release.releaseDue();
+      expect(await entryLines(prisma, o.orderId, "hold_release")).not.toBeNull();
+    });
+
+    it("re-checks for a live refund under the order lock (one created between selection and claim)", async () => {
+      const o = await pay();
+      t.clock.advance(8 * DAY);
+      // A refund request lands after the selector listed the order: simulate with a hook on the claim query.
+      const original = prisma.$transaction.bind(prisma);
+      let injected = false;
+      const spy = jest.spyOn(prisma, "$transaction").mockImplementation(((fn: unknown, opts?: unknown) => {
+        if (!injected && typeof fn === "function") {
+          injected = true;
+          return prisma.refund
+            .create({ data: { orderId: o.orderId, amountPaise: 100000n, status: "REQUESTED", reason: "late", requestedBy: o.buyer.userId } })
+            .then(() => (original as (a: unknown, b?: unknown) => Promise<unknown>)(fn, opts));
+        }
+        return (original as (a: unknown, b?: unknown) => Promise<unknown>)(fn, opts);
+      }) as never);
+      try {
+        await release.releaseDue();
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await entryLines(prisma, o.orderId, "hold_release")).toBeNull();
+    });
+
     it("queues an 'Earnings available' notification for the seller through order.hold_released (once, even if redelivered)", async () => {
       const o = await pay();
       t.clock.advance(8 * DAY);
@@ -165,13 +224,13 @@ describe("hold release and invoices", () => {
       const orders = await Promise.all([pay(), pay(), pay(), pay()]);
       const issued = await Promise.all(orders.map((o) => issuer.issueForOrder(o.orderId)));
       const numbers = issued.map((i) => i!.number).sort();
-      expect(numbers).toEqual([1, 2, 3, 4].map((n) => `SKL/2031-32/${String(n).padStart(6, "0")}`));
+      expect(numbers).toEqual([1, 2, 3, 4].map((n) => `SKL/31-32/${String(n).padStart(6, "0")}`));
 
       setClock(new Date("2032-03-31T18:31:00Z")); // 00:01 IST on 1 April 2032 -> FY 2032-33
       const next = await pay();
-      expect((await issuer.issueForOrder(next.orderId))!.number).toBe("SKL/2032-33/000001");
+      expect((await issuer.issueForOrder(next.orderId))!.number).toBe("SKL/32-33/000001");
       const again = await pay();
-      expect((await issuer.issueForOrder(again.orderId))!.number).toBe("SKL/2032-33/000002");
+      expect((await issuer.issueForOrder(again.orderId))!.number).toBe("SKL/32-33/000002");
     });
 
     it("issuing the same order twice returns the same invoice", async () => {
@@ -190,7 +249,8 @@ describe("hold release and invoices", () => {
       const inv = await prisma.invoice.findUniqueOrThrow({ where: { orderId: o.orderId } });
       const sale = (await entryLines(prisma, o.orderId, "sale"))!;
       expect(inv).toMatchObject({ buyerUserId: o.buyer.userId, sellerOwnerId: o.seller.userId, totalPaise: 100000n, taxPaise: sale.byKind.TAX_PAYABLE, objectKey: `invoices/${inv.id}.pdf` });
-      expect(inv.number).toMatch(/^SKL\/\d{4}-\d{2}\/\d{6}$/);
+      expect(inv.number).toHaveLength(16);
+      expect(inv.number).toMatch(/^SKL\/\d{2}-\d{2}\/\d{6}$/);
       expect(inv.uploadedAt).not.toBeNull();
       const details = inv.details as { lines: string[] };
       const text = details.lines.join("\n");
@@ -216,6 +276,25 @@ describe("hold release and invoices", () => {
         const text = (inv.details as { lines: string[] }).lines.join("\n");
         expect(text).toContain("GSTIN: 27AAPFU0939F1ZV");
         expect(text).not.toContain("applied for");
+      } finally {
+        await resetSettings();
+      }
+    });
+
+    it("print the platform legal name, address, state code, SAC and the place of supply from the settings", async () => {
+      await setSetting("platform_legal_name", "Skiller Learning Pvt Ltd");
+      await setSetting("platform_address", "12 Church Street, Bengaluru 560001");
+      await setSetting("platform_state_code", "29");
+      await setSetting("sac_code", "999293");
+      try {
+        const o = await pay();
+        await deliver("order.paid", o.orderId);
+        const inv = await prisma.invoice.findUniqueOrThrow({ where: { orderId: o.orderId } });
+        const text = (inv.details as { lines: string[] }).lines.join("\n");
+        expect(text).toContain("Skiller Learning Pvt Ltd");
+        expect(text).toContain("12 Church Street, Bengaluru 560001");
+        expect(text).toContain("SAC: 999293");
+        expect(text).toContain("Place of supply: State code 29");
       } finally {
         await resetSettings();
       }

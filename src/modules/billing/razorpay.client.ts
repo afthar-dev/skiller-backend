@@ -77,6 +77,8 @@ export interface RazorpayClient {
   fetchPayment(paymentId: string): Promise<RazorpayPayment>;
   /** `idempotencyKey` makes a repeated call (a retry after a timeout) return the first refund instead of refunding twice. */
   createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund>;
+  /** The refunds made on a payment (up to 100), with the notes they were created with. Used to find a refund whose creation was not recorded. */
+  listRefunds(paymentId: string): Promise<RazorpayRefund[]>;
   createPlan(input: CreatePlanInput): Promise<RazorpayPlan>;
   createSubscription(input: CreateSubscriptionInput): Promise<RazorpaySubscription>;
   cancelSubscription(subscriptionId: string, atCycleEnd: boolean): Promise<RazorpaySubscription>;
@@ -186,6 +188,12 @@ export class HttpRazorpayClient implements RazorpayClient {
   async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund> {
     const r = await this.call("POST", `/payments/${encodeURIComponent(paymentId)}/refund`, { amount: toApiAmount(input.amountPaise), notes: input.notes ?? {} }, input.idempotencyKey ? { "X-Refund-Idempotency": input.idempotencyKey } : {});
     return { id: String(r.id), paymentId: String(r.payment_id), amountPaise: num(r.amount), status: String(r.status), notes: notesOf(r.notes) };
+  }
+
+  async listRefunds(paymentId: string): Promise<RazorpayRefund[]> {
+    const res = await this.call("GET", `/payments/${encodeURIComponent(paymentId)}/refunds?count=100`);
+    const items = Array.isArray(res.items) ? (res.items as RawAmounts[]) : [];
+    return items.map((r) => ({ id: String(r.id), paymentId: String(r.payment_id), amountPaise: num(r.amount), status: String(r.status), notes: notesOf(r.notes) }));
   }
 
   async createPlan(input: CreatePlanInput): Promise<RazorpayPlan> {

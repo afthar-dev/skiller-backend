@@ -4,7 +4,8 @@ import request from "supertest";
 import { AppError } from "../../src/common/errors/app-error";
 import { EventBus } from "../../src/common/outbox/event-bus";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
-import { CouponsService, FakeRazorpayClient, HoldReleaseProcessor, RAZORPAY_CLIENT, RazorpayApiError, WebhookProcessor } from "../../src/modules/billing";
+import * as sentryModule from "../../src/common/observability/sentry";
+import { CouponsService, FakeRazorpayClient, HoldReleaseProcessor, InvoiceIssuer, RAZORPAY_CLIENT, RazorpayApiError, WebhookProcessor } from "../../src/modules/billing";
 import { RolesService } from "../../src/modules/rbac";
 import { AccountsService, LedgerService } from "../../src/modules/wallet";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
@@ -72,8 +73,8 @@ describe("refunds", () => {
   };
 
   /** Posts a refund.* webhook for a Razorpay refund and returns its stored row (not waiting for processing). */
-  async function sendRefundWebhook(type: "refund.processed" | "refund.failed", entity: { id: string; paymentId: string; amountPaise: bigint }) {
-    const hook = fake.webhook(type, { refund: { entity: { id: entity.id, payment_id: entity.paymentId, amount: Number(entity.amountPaise), status: type === "refund.processed" ? "processed" : "failed", notes: { nonce: randomUUID() } } } });
+  async function sendRefundWebhook(type: "refund.processed" | "refund.failed", entity: { id: string; paymentId: string; amountPaise: bigint; notes?: Record<string, string> }) {
+    const hook = fake.webhook(type, { refund: { entity: { id: entity.id, payment_id: entity.paymentId, amount: Number(entity.amountPaise), status: type === "refund.processed" ? "processed" : "failed", notes: { nonce: randomUUID(), ...(entity.notes ?? {}) } } } });
     let r = http().post("/v1/webhooks/razorpay");
     for (const [k, v] of Object.entries(hook.headers)) r = r.set(k, v);
     expect((await r.send(hook.body)).status).toBe(200);
@@ -96,6 +97,19 @@ describe("refunds", () => {
     const res = await approve(id);
     expect(res.status).toBe(200);
     return prisma.refund.findUniqueOrThrow({ where: { id } });
+  }
+
+  // hold_days is a global setting in a shared database: written straight to the table (SettingsService.set leaves audit rows other suites count) and removed after.
+  async function withHoldDays<T>(days: number, run: () => Promise<T>): Promise<T> {
+    const redis = t.app.get<import("ioredis").Redis>((await import("../../src/common/redis/redis.constants")).REDIS);
+    await prisma.platformSetting.upsert({ where: { key: "hold_days" }, create: { key: "hold_days", value: days }, update: { value: days } });
+    await redis.del("settings:hold_days");
+    try {
+      return await run();
+    } finally {
+      await prisma.platformSetting.deleteMany({ where: { key: "hold_days" } });
+      await redis.del("settings:hold_days");
+    }
   }
 
   const balances = (userId: string) => ledger.balancesFor("USER", userId);
@@ -289,10 +303,15 @@ describe("refunds", () => {
       const o = await pay();
       const sale = (await entryLines(prisma, o.orderId, "sale"))!;
       const share = sale.byKind.PENDING;
-      const asked = await requestRefund(o.buyer, o.orderId); // inside the 7 day window; finance decides after the hold ended
+      // hold_days 3: the hold ends on day 3, inside the 7 day refund window (a live refund would keep the hold)
+      const buyer = await withHoldDays(3, async () => {
+        t.clock.advance(4 * DAY);
+        await release.releaseDue();
+        expect(await entryLines(prisma, o.orderId, "hold_release")).not.toBeNull();
+        return t.login(o.buyer.email);
+      });
+      const asked = await requestRefund(buyer, o.orderId);
       expect(asked.status).toBe(201);
-      t.clock.advance(8 * DAY);
-      await release.releaseDue();
       const refund = await approvedRefund(o, asked.body.id);
       await deliverRefundWebhook("refund.processed", refund.id);
       const rev = (await entryLines(prisma, o.orderId, "refund"))!;
@@ -310,10 +329,13 @@ describe("refunds", () => {
     it("after release AND payout: the seller's AVAILABLE goes negative, the ledger still balances", async () => {
       const o = await pay();
       const share = (await entryLines(prisma, o.orderId, "sale"))!.byKind.PENDING;
-      const asked = await requestRefund(o.buyer, o.orderId);
+      await withHoldDays(3, async () => {
+        t.clock.advance(4 * DAY);
+        await release.releaseDue();
+      });
+      const buyer = await t.login(o.buyer.email);
+      const asked = await requestRefund(buyer, o.orderId);
       expect(asked.status).toBe(201);
-      t.clock.advance(8 * DAY);
-      await release.releaseDue();
       // the seller withdraws everything that was released (a payout moves AVAILABLE out to the gateway clearing account)
       const accounts = t.app.get(AccountsService);
       await prisma.$transaction(async (tx) => {
@@ -476,6 +498,167 @@ describe("refunds", () => {
       await t.app.get(RefundsProcessor).resumeStuck();
       expect(await prisma.refund.findUniqueOrThrow({ where: { id: stuck.id } })).toMatchObject({ status: "PROCESSING" });
       expect(await prisma.refund.count({ where: { orderId: o.orderId } })).toBe(1);
+    });
+  });
+  describe("recovering refunds Razorpay made that we did not record", () => {
+    it("a webhook is matched to our refund by notes.refundId when the Razorpay id was never stored, and the id is adopted", async () => {
+      const o = await pay();
+      const asked = await requestRefund(o.buyer, o.orderId);
+      await prisma.refund.update({ where: { id: asked.body.id }, data: { status: "APPROVED", decidedBy: "x" } }); // crashed between Razorpay success and storing PROCESSING
+      const rid = `rfnd_adopted_${randomUUID().slice(0, 8)}`;
+      const row = await sendRefundWebhook("refund.processed", { id: rid, paymentId: o.paymentId, amountPaise: 100000n, notes: { refundId: asked.body.id } });
+      await until(async () => (await prisma.webhookEvent.findUniqueOrThrow({ where: { id: row.id } })).processedAt);
+      expect(await prisma.refund.findUniqueOrThrow({ where: { id: asked.body.id } })).toMatchObject({ status: "PROCESSED", razorpayRefundId: rid });
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: o.orderId } })).toMatchObject({ status: "REFUNDED" });
+    });
+
+    it("notes.refundId is only trusted when the payment matches the refund's order", async () => {
+      const o = await pay();
+      const other = await pay();
+      const asked = await requestRefund(o.buyer, o.orderId);
+      await prisma.refund.update({ where: { id: asked.body.id }, data: { status: "APPROVED", decidedBy: "x" } });
+      const processor = t.app.get(WebhookProcessor);
+      const row = await sendRefundWebhook("refund.processed", { id: `rfnd_wrong_${randomUUID().slice(0, 8)}`, paymentId: other.paymentId, amountPaise: 100000n, notes: { refundId: asked.body.id } });
+      await expect(processor.process({ data: { webhookEventId: row.id } } as Job<{ webhookEventId: string }>)).rejects.toThrow(/unknown refund/i);
+      expect(await prisma.refund.findUniqueOrThrow({ where: { id: asked.body.id } })).toMatchObject({ status: "APPROVED", razorpayRefundId: null });
+    });
+
+    it("a refund made from the Razorpay dashboard (no id, no notes) is retried, then raises a finance alert and a Sentry report instead of being dropped quietly", async () => {
+      const processor = t.app.get(WebhookProcessor);
+      const sentry = jest.spyOn(sentryModule, "reportException").mockImplementation(() => undefined);
+      const o = await pay();
+      const ghostId = `rfnd_dashboard_${randomUUID().slice(0, 8)}`;
+      const row = await sendRefundWebhook("refund.processed", { id: ghostId, paymentId: o.paymentId, amountPaise: 100000n });
+      const job = { data: { webhookEventId: row.id } } as Job<{ webhookEventId: string }>;
+      await expect(processor.process(job)).rejects.toThrow(/unknown refund/i);
+      await processor.onExhausted(job, new Error("unknown refund"));
+      expect((await prisma.webhookEvent.findUniqueOrThrow({ where: { id: row.id } })).processedAt).not.toBeNull();
+      const alert = await until(async () =>
+        (await prisma.notification.findMany({ where: { userId: { in: financeAdmins }, type: "finance.alert" } })).find(
+          (n) => (n.data as { kind?: string; razorpayRefundId?: string } | null)?.kind === "REFUND_UNMATCHED" && (n.data as { razorpayRefundId?: string }).razorpayRefundId === ghostId,
+        ),
+      );
+      expect(alert.body).toContain(ghostId);
+      expect((alert.data as { orderId?: string }).orderId).toBe(o.orderId); // found through the payment id
+      expect(sentry).toHaveBeenCalled();
+      sentry.mockRestore();
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: o.orderId } })).toMatchObject({ status: "PAID" });
+    });
+
+    it("a 4xx from Razorpay on the start call adopts a refund Razorpay already made for this refund id instead of failing it", async () => {
+      const o = await pay();
+      const asked = await requestRefund(o.buyer, o.orderId);
+      const made = { id: `rfnd_made_${randomUUID().slice(0, 8)}`, paymentId: o.paymentId, amountPaise: 100000n, status: "processed", notes: { refundId: asked.body.id as string } };
+      fake.refunds.push(made);
+      fake.failNext.set("createRefund", new RazorpayApiError(400, "BAD_REQUEST_ERROR", "The refund amount provided is greater than amount captured"));
+      const res = await approve(asked.body.id);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("PROCESSING");
+      expect(await prisma.refund.findUniqueOrThrow({ where: { id: asked.body.id } })).toMatchObject({ status: "PROCESSING", razorpayRefundId: made.id, failureReason: null });
+    });
+
+    it("a 4xx only fails the refund after Razorpay was asked and has none for it; if that lookup itself fails the refund stays APPROVED (502)", async () => {
+      const o = await pay();
+      const asked = await requestRefund(o.buyer, o.orderId);
+      fake.failNext.set("createRefund", new RazorpayApiError(400, "BAD_REQUEST_ERROR", "nope"));
+      fake.failNext.set("listRefunds", new RazorpayApiError(503, null, "down"));
+      const down = await approve(asked.body.id);
+      expect(down.status).toBe(502);
+      expect(await prisma.refund.findUniqueOrThrow({ where: { id: asked.body.id } })).toMatchObject({ status: "APPROVED" });
+      fake.failNext.set("createRefund", new RazorpayApiError(400, "BAD_REQUEST_ERROR", "nope"));
+      const failed = await approve(asked.body.id);
+      expect(failed.body.status).toBe("FAILED");
+      expect(fake.callsTo("listRefunds").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("the call path never flips a refund that is already PROCESSING to FAILED (only the refund.failed webhook does)", async () => {
+      const o = await pay();
+      const asked = await requestRefund(o.buyer, o.orderId);
+      await prisma.refund.update({ where: { id: asked.body.id }, data: { status: "APPROVED", decidedBy: "x" } });
+      const spy = jest.spyOn(fake, "createRefund").mockImplementationOnce(async () => {
+        // a concurrent start (or the webhook adoption) got there first while this call was in flight
+        await prisma.refund.update({ where: { id: asked.body.id }, data: { status: "PROCESSING", razorpayRefundId: "rfnd_concurrent" } });
+        throw new RazorpayApiError(400, "BAD_REQUEST_ERROR", "already refunded");
+      });
+      try {
+        await approve(asked.body.id);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await prisma.refund.findUniqueOrThrow({ where: { id: asked.body.id } })).toMatchObject({ status: "PROCESSING", razorpayRefundId: "rfnd_concurrent" });
+    });
+  });
+
+  describe("GST credit notes", () => {
+    const issuer = () => t.app.get(InvoiceIssuer);
+    const setClock = (to: Date) => t.clock.advance(to.getTime() - t.clock.now().getTime());
+    const dispatchRefunded = async (orderId: string) => {
+      const row = (await prisma.outboxEvent.findMany({ where: { type: "order.refunded" } })).find((x) => (x.payload as { orderId?: string }).orderId === orderId)!;
+      await bus.dispatch({ type: "order.refunded" as const, ...(row.payload as object) } as Parameters<EventBus["dispatch"]>[0], row.id);
+      return row;
+    };
+    async function refundedWithEvent(o: Awaited<ReturnType<typeof pay>>) {
+      await issuer().issueForOrder(o.orderId);
+      const refund = await approvedRefund(o);
+      await deliverRefundWebhook("refund.processed", refund.id);
+      return { refund, row: await dispatchRefunded(o.orderId) };
+    }
+
+    it("order.refunded issues a credit note that mirrors the invoice with negative values, references its number and is stored privately", async () => {
+      const o = await pay({ pricePaise: 100000n });
+      const { refund, row } = await refundedWithEvent(o);
+      const inv = await prisma.invoice.findUniqueOrThrow({ where: { orderId: o.orderId } });
+      const cn = await prisma.creditNote.findUniqueOrThrow({ where: { refundId: refund.id } });
+      expect(cn.number).toMatch(/^SKC\/\d{2}-\d{2}\/\d{6}$/);
+      expect(cn.number).toHaveLength(16);
+      expect(cn).toMatchObject({ invoiceId: inv.id, orderId: o.orderId, buyerUserId: o.buyer.userId, sellerOwnerId: o.seller.userId, totalPaise: -inv.totalPaise, taxPaise: -inv.taxPaise, objectKey: `credit-notes/${cn.id}.pdf` });
+      expect(cn.uploadedAt).not.toBeNull();
+      const text = (cn.details as { lines: string[] }).lines.join("\n");
+      expect(text).toContain("CREDIT NOTE");
+      expect(text).toContain(`Against invoice: ${inv.number}`);
+      expect(text).toContain("-INR 1000.00");
+      // redelivery of the event issues nothing new
+      await bus.dispatch({ type: "order.refunded" as const, ...(row.payload as object) } as Parameters<EventBus["dispatch"]>[0], row.id);
+      expect(await prisma.creditNote.count({ where: { orderId: o.orderId } })).toBe(1);
+
+      const buyer = await t.login(o.buyer.email);
+      const dl = await http().get(`/v1/credit-notes/${cn.id}/download`).set(auth(buyer));
+      expect(dl.status).toBe(200);
+      expect(Buffer.from(await (await fetch(dl.body.url)).arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
+      const staff = await finance();
+      expect((await http().get(`/v1/credit-notes/${cn.id}/download`).set(auth(staff))).status).toBe(200);
+      const stranger = await t.login();
+      expect((await http().get(`/v1/credit-notes/${cn.id}/download`).set(auth(stranger))).status).toBe(404);
+      const view = await http().get(`/v1/orders/${o.orderId}`).set(auth(buyer));
+      expect(view.body.creditNoteId).toBe(cn.id);
+    });
+
+    it("also covers an automatically refunded undelivered order (its invoice was issued by the fulfilment_failed handler)", async () => {
+      testState.failOnPaid = new AppError("ITEM_GONE", 422, "The item was withdrawn");
+      const o = await pay();
+      const failedEvent = (await prisma.outboxEvent.findMany({ where: { type: "order.fulfilment_failed" } })).find((x) => (x.payload as { orderId?: string }).orderId === o.orderId)!;
+      await bus.dispatch({ type: "order.fulfilment_failed" as const, ...(failedEvent.payload as object) } as Parameters<EventBus["dispatch"]>[0], failedEvent.id);
+      const refund = await prisma.refund.findFirstOrThrow({ where: { orderId: o.orderId } });
+      await deliverRefundWebhook("refund.processed", refund.id);
+      expect(await prisma.invoice.count({ where: { orderId: o.orderId } })).toBe(1);
+      await dispatchRefunded(o.orderId);
+      expect(await prisma.creditNote.count({ where: { refundId: refund.id } })).toBe(1);
+    });
+
+    it("numbers credit notes gap-free per financial year in their own series, independent of invoice numbers", async () => {
+      setClock(new Date("2041-03-31T18:00:00Z")); // 23:30 IST, FY 40-41
+      const a = await pay();
+      const b = await pay();
+      await refundedWithEvent(a);
+      await refundedWithEvent(b);
+      const [na, nb] = await Promise.all([prisma.creditNote.findFirstOrThrow({ where: { orderId: a.orderId } }), prisma.creditNote.findFirstOrThrow({ where: { orderId: b.orderId } })]);
+      expect([na.number, nb.number]).toEqual(["SKC/40-41/000001", "SKC/40-41/000002"]);
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { orderId: a.orderId } })).number).toMatch(/^SKL\/40-41\//);
+
+      setClock(new Date("2041-03-31T18:31:00Z")); // 00:01 IST on 1 April -> FY 41-42
+      const c = await pay();
+      await refundedWithEvent(c);
+      expect((await prisma.creditNote.findFirstOrThrow({ where: { orderId: c.orderId } })).number).toBe("SKC/41-42/000001");
     });
   });
 });

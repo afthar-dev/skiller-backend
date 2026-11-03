@@ -3,7 +3,7 @@ import { reportException } from "../../common/observability/sentry";
 import { NotificationsService } from "../notifications";
 import { PlatformRoleDirectory } from "../rbac";
 
-export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED" | "REFUND_FAILED";
+export type FinanceAlertKind = "PAYMENT_AMOUNT_MISMATCH" | "DUPLICATE_PAYMENT" | "COUPON_OVER_LIMIT" | "COUPON_REDEMPTION_CONFLICT" | "FULFILMENT_FAILED" | "REFUND_FAILED" | "REFUND_UNMATCHED" | "REFUND_WEBHOOK_FAILED";
 
 export const FINANCE_ADMIN_ROLE = "finance_admin";
 const PAGE = 100;
@@ -21,10 +21,10 @@ export class FinanceAlerts {
     private readonly roles: PlatformRoleDirectory,
   ) {}
 
-  async raise(alert: { kind: FinanceAlertKind; orderId: string; message: string; dedupeKey: string; data?: Record<string, unknown> }): Promise<void> {
-    this.logger.error(`finance alert ${alert.kind} for order ${alert.orderId}: ${alert.message}`);
+  async raise(alert: { kind: FinanceAlertKind; orderId?: string; message: string; dedupeKey: string; data?: Record<string, unknown> }): Promise<void> {
+    this.logger.error(`finance alert ${alert.kind} for order ${alert.orderId ?? "(unknown)"}: ${alert.message}`);
     try {
-      reportException(new Error(`[finance] ${alert.kind}: ${alert.message} (order ${alert.orderId})`), 500);
+      reportException(new Error(`[finance] ${alert.kind}: ${alert.message} (order ${alert.orderId ?? "unknown"})`), 500);
       let cursor: string | undefined;
       for (;;) {
         const ids = await this.roles.userIdsWithRole(FINANCE_ADMIN_ROLE, cursor, PAGE);
@@ -33,7 +33,7 @@ export class FinanceAlerts {
             type: "finance.alert",
             title: "Payment needs attention",
             body: alert.message,
-            link: `/admin/orders/${alert.orderId}`,
+            link: alert.orderId ? `/admin/orders/${alert.orderId}` : "/admin/refunds",
             data: { ...alert.data, kind: alert.kind, orderId: alert.orderId },
             sourceEventId: `finance:${alert.dedupeKey}`,
           });
@@ -42,7 +42,7 @@ export class FinanceAlerts {
         cursor = ids[ids.length - 1];
       }
     } catch (err) {
-      this.logger.error(`could not deliver finance alert ${alert.kind} for order ${alert.orderId}: ${(err as Error).message}`);
+      this.logger.error(`could not deliver finance alert ${alert.kind} for order ${alert.orderId ?? "(unknown)"}: ${(err as Error).message}`);
     }
   }
 }

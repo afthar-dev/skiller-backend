@@ -7,8 +7,8 @@ import { SettingsService } from "../admin";
 import { AccountService } from "../identity";
 import { ObjectStorage } from "../media";
 import { ProfilesService } from "../users";
-import { financialYear, invoiceNumber } from "./fiscal-year";
-import { invoiceLines, renderInvoicePdf, type InvoiceDetails, type InvoiceFacts } from "./invoice-document";
+import { allocateNumber, invoiceKey, platformIdentity } from "./document-support";
+import { documentLines, renderInvoicePdf, type DocumentFacts, type InvoiceDetails } from "./invoice-document";
 import { toApi } from "./money";
 import { splitSale } from "./sale-split";
 import { SUBSCRIPTION_CHARGE_REF } from "./subscriptions.service";
@@ -18,7 +18,6 @@ export interface IssuedInvoice {
   number: string;
 }
 
-export const invoiceKey = (invoiceId: string) => `invoices/${invoiceId}.pdf`;
 const SUBSCRIPTION_CHARGE_DESCRIPTION = "Subscription charge";
 
 /** A new row plus the numbering facts the transaction needs; everything the PDF prints is decided before the transaction. */
@@ -32,7 +31,7 @@ interface NewInvoice {
   sellerOwnerId?: string;
   totalPaise: bigint;
   taxPaise: bigint;
-  facts: Omit<InvoiceFacts, "number" | "issuedAt">;
+  facts: Omit<DocumentFacts, "number" | "issuedAt" | "docType">;
 }
 
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
@@ -79,7 +78,7 @@ export class InvoiceIssuer {
       taxPaise: split.feeTaxPaise,
       facts: {
         kind: "ORDER",
-        platformGstin: await this.settings.get("platform_gstin"),
+        platform: await platformIdentity(this.settings),
         buyer,
         sellerName: await this.sellerName(order),
         itemTitle: item.title,
@@ -114,7 +113,7 @@ export class InvoiceIssuer {
     const buyer = buyerUserId ? await this.partyOfUser(buyerUserId) : { name: "Customer", email: "" };
     const interval = sub.planVersion.interval === "YEAR" ? "yearly" : "monthly";
     const created = await this.create({
-      at: this.clock.now(),
+      at: entry.createdAt, // the charge, not the moment this handler ran: a charge just before midnight on 31 March stays in its year
       paymentId: input.paymentId,
       subscriptionId: sub.id,
       buyerUserId,
@@ -122,7 +121,7 @@ export class InvoiceIssuer {
       taxPaise: tax,
       facts: {
         kind: "SUBSCRIPTION",
-        platformGstin: await this.settings.get("platform_gstin"),
+        platform: await platformIdentity(this.settings),
         buyer: sub.ownerType === "ORG" ? { name: await this.orgName(sub.ownerId), email: buyer.email } : buyer,
         sellerName: "Skiller",
         itemTitle: `${sub.planVersion.plan.name} plan (${interval})`,
@@ -166,15 +165,12 @@ export class InvoiceIssuer {
 
   /** Step 1. A concurrent duplicate loses on the unique key, rolls back (its number is not consumed) and returns the winner's row. */
   private async create(n: NewInvoice): Promise<Invoice> {
-    const fy = financialYear(n.at);
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`INSERT INTO invoice_counters ("fy", "lastNumber") VALUES (${fy}, 0) ON CONFLICT ("fy") DO NOTHING`;
-        const rows = await tx.$queryRaw<{ lastNumber: number }[]>`UPDATE invoice_counters SET "lastNumber" = "lastNumber" + 1 WHERE "fy" = ${fy} RETURNING "lastNumber"`;
-        const number = invoiceNumber(fy, rows[0].lastNumber);
+        const number = await allocateNumber(tx, "SKL", n.at);
         const id = uuidv7();
-        const facts: InvoiceFacts = { ...n.facts, number, issuedAt: n.at.toISOString() };
-        const details: InvoiceDetails = { ...facts, lines: invoiceLines(facts) };
+        const facts: DocumentFacts = { ...n.facts, docType: "INVOICE", number, issuedAt: n.at.toISOString() };
+        const details: InvoiceDetails = { ...facts, lines: documentLines(facts) };
         return tx.invoice.create({
           data: {
             id,

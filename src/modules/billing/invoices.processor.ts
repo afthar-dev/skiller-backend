@@ -4,6 +4,7 @@ import type { JobProcessor } from "../../common/queue/job-processor";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
+import { CreditNoteIssuer } from "./credit-note-issuer";
 import { InvoiceIssuer } from "./invoice-issuer";
 
 export const INVOICE_SWEEP_JOB = "invoices.complete";
@@ -23,6 +24,7 @@ export class InvoicesProcessor implements JobProcessor, OnModuleInit {
 
   constructor(
     private readonly issuer: InvoiceIssuer,
+    private readonly creditNotes: CreditNoteIssuer,
     private readonly registry: ProcessorRegistry,
     @InjectQueue(QueueNames.maintenance) private readonly maintenanceQueue: Queue,
   ) {}
@@ -37,8 +39,8 @@ export class InvoicesProcessor implements JobProcessor, OnModuleInit {
   }
 
   async process(_job: Job) {
-    const done = await this.issuer.completePending(INVOICE_SWEEP_MIN_AGE_MS);
-    if (done > 0) this.logger.log(`uploaded ${done} pending invoice PDF(s)`);
+    const done = (await this.issuer.completePending(INVOICE_SWEEP_MIN_AGE_MS)) + (await this.creditNotes.completePending(INVOICE_SWEEP_MIN_AGE_MS));
+    if (done > 0) this.logger.log(`uploaded ${done} pending invoice / credit note PDF(s)`);
     return done;
   }
 }

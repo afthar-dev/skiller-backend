@@ -20,6 +20,14 @@ export const LIVE_REFUND: RefundStatus[] = ["REQUESTED", "APPROVED", "PROCESSING
 /** An APPROVED refund with no Razorpay id for this long was not started (outage, crash): the retry job picks it up. */
 export const REFUND_RESUME_AFTER_MS = 2 * 60 * 1000;
 
+/** What a refund.* webhook says about the refund. */
+export interface RefundWebhookEntity {
+  id: string;
+  paymentId: string | null;
+  /** notes.refundId: our refund id, put there when the refund was created. */
+  refundIdNote: string | null;
+}
+
 export interface RefundView {
   id: string;
   orderId: string;
@@ -102,10 +110,24 @@ export class RefundsService {
     if (!paymentId) throw new AppError("REFUND_NO_PAYMENT", 500, "The order has no payment to refund", { refundId });
     try {
       const made = await this.razorpay.createRefund(paymentId, { amountPaise: refund.amountPaise, notes: { refundId: refund.id, orderId: refund.orderId }, idempotencyKey: refund.id });
-      await this.prisma.refund.updateMany({ where: { id: refund.id, status: "APPROVED" }, data: { status: "PROCESSING", razorpayRefundId: made.id } });
+      await this.prisma.refund.updateMany({ where: { id: refund.id, status: "APPROVED", razorpayRefundId: null }, data: { status: "PROCESSING", razorpayRefundId: made.id } });
     } catch (err) {
       if (err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
-        await this.fail(refund.id, err.message);
+        // A 4xx can also mean "this refund already exists" (a retry after a crash, an idempotency key not honoured). Ask Razorpay what it
+        // has for this payment before declaring failure; if even that lookup fails, treat it as an outage and retry later.
+        let existing: Awaited<ReturnType<RazorpayClient["listRefunds"]>>[number] | undefined;
+        try {
+          existing = (await this.razorpay.listRefunds(paymentId)).find((r) => r.notes.refundId === refund.id);
+        } catch (lookupErr) {
+          this.logger.error(`refund ${refund.id}: Razorpay refused (${err.message}) and the refund lookup failed (${(lookupErr as Error).message}); it stays APPROVED`);
+          throw new AppError("REFUND_GATEWAY_ERROR", 502, "The payment gateway is unavailable; the refund will be retried");
+        }
+        if (existing) {
+          this.logger.warn(`refund ${refund.id}: adopting Razorpay refund ${existing.id} that already exists for it`);
+          await this.prisma.refund.updateMany({ where: { id: refund.id, status: "APPROVED", razorpayRefundId: null }, data: { status: "PROCESSING", razorpayRefundId: existing.id } });
+        } else {
+          await this.failUnstarted(refund.id, err.message);
+        }
       } else {
         this.logger.error(`refund ${refund.id}: Razorpay is unavailable (${(err as Error).message}); it stays APPROVED for a retry`);
         throw new AppError("REFUND_GATEWAY_ERROR", 502, "The payment gateway is unavailable; the refund will be retried");
@@ -130,10 +152,22 @@ export class RefundsService {
     return started;
   }
 
-  /** Razorpay refused the refund for good: FAILED, and finance has to act (the order stays PAID and the sale stays booked). */
-  private async fail(refundId: string, why: string): Promise<void> {
+  /**
+   * The call path: Razorpay refused the refund for good. Only a refund that is still APPROVED and has no Razorpay id can fail here; a
+   * refund that is already PROCESSING is in flight and only the refund.failed webhook may fail it.
+   */
+  private async failUnstarted(refundId: string, why: string): Promise<void> {
+    const failed = await this.prisma.refund.updateMany({ where: { id: refundId, status: "APPROVED", razorpayRefundId: null }, data: { status: "FAILED", failureReason: why.slice(0, 500) } });
+    if (failed.count > 0) await this.alertFailed(refundId, why);
+  }
+
+  /** The refund.failed webhook: Razorpay reports that a refund it accepted did not go through. */
+  private async failFromWebhook(refundId: string, why: string): Promise<void> {
     const failed = await this.prisma.refund.updateMany({ where: { id: refundId, status: { in: ["APPROVED", "PROCESSING"] } }, data: { status: "FAILED", failureReason: why.slice(0, 500) } });
-    if (failed.count === 0) return;
+    if (failed.count > 0) await this.alertFailed(refundId, why);
+  }
+
+  private async alertFailed(refundId: string, why: string): Promise<void> {
     const refund = await this.prisma.refund.findUniqueOrThrow({ where: { id: refundId } });
     await this.alerts.raise({
       kind: "REFUND_FAILED",
@@ -151,9 +185,8 @@ export class RefundsService {
    * posts the reversal, undoes the delivery, closes the coupon use and marks the order REFUNDED. Idempotent: a repeat finds PROCESSED.
    * An unknown Razorpay refund id throws, so the queue retries the event (the id may simply not be stored yet).
    */
-  async onProcessed(razorpayRefundId: string): Promise<void> {
-    const known = await this.prisma.refund.findUnique({ where: { razorpayRefundId }, select: { id: true, orderId: true } });
-    if (!known) throw new Error(`unknown refund ${razorpayRefundId}: not stored yet, will retry`);
+  async onProcessed(entity: RefundWebhookEntity): Promise<void> {
+    const known = await this.locate(entity);
 
     await this.prisma.$transaction(
       async (tx) => {
@@ -202,10 +235,28 @@ export class RefundsService {
   }
 
   /** refund.failed: the refund did not happen. Unknown ids are retried like refund.processed. */
-  async onFailed(razorpayRefundId: string): Promise<void> {
-    const known = await this.prisma.refund.findUnique({ where: { razorpayRefundId }, select: { id: true } });
-    if (!known) throw new Error(`unknown refund ${razorpayRefundId}: not stored yet, will retry`);
-    await this.fail(known.id, "Razorpay reported that the refund failed");
+  async onFailed(entity: RefundWebhookEntity): Promise<void> {
+    const known = await this.locate(entity);
+    await this.failFromWebhook(known.id, "Razorpay reported that the refund failed");
+  }
+
+  /**
+   * Finds our refund for a webhook: by the Razorpay refund id, or - when the id was never stored (a crash between Razorpay accepting the
+   * refund and us recording it) - by the refundId we put in the refund's notes, trusted only if the payment is the refund's order's and
+   * the refund has no Razorpay id yet. A match adopts the id. Anything else is unknown and throws, so the queue retries.
+   */
+  private async locate(entity: RefundWebhookEntity): Promise<{ id: string; orderId: string }> {
+    const byId = await this.prisma.refund.findUnique({ where: { razorpayRefundId: entity.id }, select: { id: true, orderId: true } });
+    if (byId) return byId;
+    if (entity.refundIdNote && entity.paymentId) {
+      const candidate = await this.prisma.refund.findUnique({ where: { id: entity.refundIdNote }, include: { order: { select: { razorpayPaymentId: true } } } });
+      if (candidate && !candidate.razorpayRefundId && ["APPROVED", "FAILED"].includes(candidate.status) && candidate.order.razorpayPaymentId === entity.paymentId) {
+        const adopted = await this.prisma.refund.updateMany({ where: { id: candidate.id, razorpayRefundId: null }, data: { razorpayRefundId: entity.id } });
+        if (adopted.count === 1) this.logger.warn(`refund ${candidate.id}: adopted Razorpay refund ${entity.id} from the webhook notes`);
+        return { id: candidate.id, orderId: candidate.orderId };
+      }
+    }
+    throw new Error(`unknown refund ${entity.id}: not stored yet, will retry`);
   }
 
   /**

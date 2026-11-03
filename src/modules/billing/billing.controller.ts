@@ -216,6 +216,20 @@ export class InvoicesController {
   }
 }
 
+@ApiTags("Invoices")
+@Controller("credit-notes")
+export class CreditNotesController {
+  constructor(private readonly invoices: InvoicesService) {}
+
+  @AuthenticatedOnly()
+  @Get(":id/download")
+  @ApiOperation({ summary: "A 5 minute signed URL for the GST credit note PDF of a refunded order (buyer, seller, or billing.view_any; anyone else gets 404)" })
+  @ApiErrorResponse(409, "The PDF is not ready yet.")
+  download(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.invoices.creditNoteUrl(user.id, id);
+  }
+}
+
 const refundRequestBody = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
 
 @ApiTags("Orders")

@@ -8,13 +8,14 @@ import { ObjectStorageModule } from "../media";
 import { UsersModule } from "../users";
 import { WalletModule } from "../wallet";
 import { AdminBillingController, AdminRefundsController } from "./admin-billing.controller";
-import { CheckoutController, InvoicesController, OrderRefundsController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
+import { CheckoutController, CreditNotesController, InvoicesController, OrderRefundsController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
 import { CheckoutService } from "./checkout.service";
 import { CouponsService } from "./coupons.service";
 import { EntitlementsModule } from "./entitlements.module";
 import { FinanceAlerts } from "./finance-alerts.service";
 import { FulfilmentService } from "./fulfilment.service";
 import { HoldReleaseProcessor } from "./hold-release.processor";
+import { CreditNoteIssuer } from "./credit-note-issuer";
 import { InvoiceHandlers } from "./invoice-handlers";
 import { InvoiceIssuer } from "./invoice-issuer";
 import { InvoicesProcessor } from "./invoices.processor";
@@ -59,6 +60,7 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   OrderMaintenanceProcessor,
   HoldReleaseProcessor,
   InvoiceIssuer,
+  CreditNoteIssuer,
   InvoiceHandlers,
   InvoicesProcessor,
   DefaultRefundEligibility,
@@ -73,7 +75,7 @@ export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, WebhookDispatcher, Subscri
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
-  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, AdminBillingController, AdminRefundsController],
+  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, CreditNotesController, AdminBillingController, AdminRefundsController],
   providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
 })

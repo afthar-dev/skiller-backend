@@ -28,6 +28,8 @@ COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/prisma ./prisma
+# Invoice and credit note PDFs embed these fonts (Noto Sans, Noto Sans Devanagari; SIL OFL 1.1), loaded from <app root>/assets/fonts at runtime.
+COPY assets ./assets
 USER node
 EXPOSE 4000
 CMD ["node", "dist/main.js"]

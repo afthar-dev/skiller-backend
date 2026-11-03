@@ -82,6 +82,11 @@ export class FakeRazorpayClient implements RazorpayClient {
     return refund;
   }
 
+  async listRefunds(paymentId: string): Promise<RazorpayRefund[]> {
+    this.record("listRefunds", paymentId);
+    return this.refunds.filter((r) => r.paymentId === paymentId);
+  }
+
   async createPlan(input: CreatePlanInput): Promise<RazorpayPlan> {
     this.record("createPlan", input);
     const plan: RazorpayPlan = { id: id("plan"), period: input.period, interval: input.interval, name: input.name, amountPaise: input.amountPaise };

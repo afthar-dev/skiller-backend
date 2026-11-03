@@ -11,7 +11,7 @@ import { toApi } from "./money";
 export const ORDER_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const EXPIRY_BATCH = 500;
 
-type OrderRow = Order & { items: OrderItem[]; coupon: Pick<Coupon, "code"> | null; invoice: { id: string } | null };
+type OrderRow = Order & { items: OrderItem[]; coupon: Pick<Coupon, "code"> | null; invoice: { id: string } | null; refunds: { creditNote: { id: string } | null }[] };
 
 export interface OrderView {
   id: string;
@@ -27,9 +27,11 @@ export interface OrderView {
   paidAt: string | null;
   /** The tax invoice, once issued (GET /v1/invoices/:id/download). */
   invoiceId: string | null;
+  /** The GST credit note, once the order is refunded. */
+  creditNoteId: string | null;
 }
 
-const include = { items: true, coupon: { select: { code: true } }, invoice: { select: { id: true } } } as const;
+const include = { items: true, coupon: { select: { code: true } }, invoice: { select: { id: true } }, refunds: { where: { creditNote: { isNot: null } }, select: { creditNote: { select: { id: true } } }, take: 1 } } as const;
 
 export const toOrderView = (o: OrderRow): OrderView => ({
   id: o.id,
@@ -44,6 +46,7 @@ export const toOrderView = (o: OrderRow): OrderView => ({
   createdAt: o.createdAt.toISOString(),
   paidAt: o.paidAt?.toISOString() ?? null,
   invoiceId: o.invoice?.id ?? null,
+  creditNoteId: o.refunds[0]?.creditNote?.id ?? null,
 });
 
 @Injectable()

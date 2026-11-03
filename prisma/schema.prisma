@@ -832,15 +832,17 @@ model Invoice {
   uploadedAt      DateTime?
   createdAt       DateTime         @default(now())
 
-  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order       Order?       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  creditNotes CreditNote[]
 
   @@index([buyerUserId, id])
   @@index([uploadedAt, createdAt])
   @@map("invoices")
 }
 
-/// Last number issued per financial year ("2026-27"). Locked FOR UPDATE while a number is allocated.
+/// Last number issued per series and financial year ("SKL/26-27" invoices, "SKC/26-27" credit notes). Locked FOR UPDATE while a number is allocated.
 model InvoiceCounter {
+  /// Series and financial year, e.g. "SKL/26-27".
   fy         String @id
   lastNumber Int    @default(0)
 
@@ -872,9 +874,37 @@ model Refund {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  creditNote CreditNote?
 
   @@index([orderId])
   @@index([status, createdAt])
   @@map("refunds")
+}
+
+/// GST credit note for a refunded order, in its own gap-free series (SKC/yy-yy/nnnnnn). Amounts are negative: they mirror the invoice.
+model CreditNote {
+  id              String           @id @default(uuid(7))
+  number          String           @unique
+  /// One credit note per refund (full refunds only).
+  refundId        String           @unique
+  invoiceId       String
+  orderId         String
+  buyerUserId     String?
+  sellerOwnerType SellerOwnerType?
+  sellerOwnerId   String?
+  objectKey       String
+  totalPaise      BigInt
+  taxPaise        BigInt
+  details         Json
+  issuedAt        DateTime
+  uploadedAt      DateTime?
+  createdAt       DateTime         @default(now())
+
+  refund  Refund  @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([buyerUserId, id])
+  @@index([uploadedAt, createdAt])
+  @@map("credit_notes")
 }

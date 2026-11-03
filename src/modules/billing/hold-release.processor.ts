@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { Job, Queue } from "bullmq";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { OutboxService } from "../../common/outbox/outbox.service";
@@ -69,6 +70,8 @@ export class HoldReleaseProcessor implements JobProcessor, OnModuleInit {
       const due = await this.prisma.$queryRaw<{ id: string }[]>`SELECT o."id" FROM "orders" o
         WHERE o."status" = 'PAID' AND o."paidAt" <= ${cutoff} AND o."id" > ${after}
           AND NOT EXISTS (SELECT 1 FROM "journal_entries" j WHERE j."refType" = ${ORDER_LEDGER_REF} AND j."refId" = o."id" AND j."description" = ${HOLD_RELEASE_DESCRIPTION})
+          AND NOT EXISTS (SELECT 1 FROM "refunds" r WHERE r."orderId" = o."id" AND r."status" IN ('REQUESTED', 'APPROVED', 'PROCESSING'))
+          AND (o."fulfilmentFailedAt" IS NULL OR EXISTS (SELECT 1 FROM "refunds" r WHERE r."orderId" = o."id" AND r."status" = 'REJECTED'))
         ORDER BY o."id" LIMIT ${CHUNK}`;
       for (const { id } of due) {
         try {
@@ -85,11 +88,20 @@ export class HoldReleaseProcessor implements JobProcessor, OnModuleInit {
     return released;
   }
 
+  /** A live refund holds the seller share where it is; so does a failed delivery, unless its refund was rejected (nothing will be refunded). */
+  private async isHeld(tx: Prisma.TransactionClient, order: { id: string; fulfilmentFailedAt: Date | null }): Promise<boolean> {
+    if (await tx.refund.count({ where: { orderId: order.id, status: { in: ["REQUESTED", "APPROVED", "PROCESSING"] } } })) return true;
+    if (!order.fulfilmentFailedAt) return false;
+    return (await tx.refund.count({ where: { orderId: order.id, status: "REJECTED" } })) === 0;
+  }
+
   private async releaseOne(orderId: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "orders" WHERE "id" = ${orderId} AND "status" = 'PAID' FOR UPDATE SKIP LOCKED`;
       if (locked.length === 0) return false; // refunded, or held by a refund / another worker: not ours to release now
       const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: { select: { title: true } } } });
+      // Decided under the order lock, where a refund request (which takes the same lock) cannot slip in: the hold stays while money may go back.
+      if (await this.isHeld(tx, order)) return false;
       const sale = await tx.journalEntry.findUnique({
         where: { refType_refId_description: { refType: ORDER_LEDGER_REF, refId: orderId, description: SALE_DESCRIPTION } },
         include: { lines: { include: { account: { select: { kind: true, ownerType: true, ownerId: true } } } } },

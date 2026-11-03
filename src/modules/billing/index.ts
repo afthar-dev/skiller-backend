@@ -37,6 +37,7 @@ export { splitSale, saleLines } from "./sale-split";
 export type { SaleInput, SaleSplit } from "./sale-split";
 export { ORDER_LEDGER_REF, SALE_DESCRIPTION } from "./fulfilment.service";
 export { HoldReleaseProcessor } from "./hold-release.processor";
+export { CreditNoteIssuer } from "./credit-note-issuer";
 export { InvoiceIssuer } from "./invoice-issuer";
 export type { IssuedInvoice } from "./invoice-issuer";
 export { RefundEligibilityRegistry, REFUND_WINDOW_DAYS } from "./refund-eligibility";
