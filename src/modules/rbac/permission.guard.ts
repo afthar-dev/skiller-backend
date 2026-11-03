@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AppError } from "../../common/errors/app-error";
+import { OrgParamResolverRegistry } from "./org-param-resolver";
 import { PermissionService } from "./permission.service";
 import { REQUIRE_PERMISSION_KEY, type RequirePermissionMeta } from "./require-permission.decorator";
 
@@ -15,6 +16,7 @@ export class PermissionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly permissions: PermissionService,
+    private readonly orgParams: OrgParamResolverRegistry,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -28,7 +30,7 @@ export class PermissionGuard implements CanActivate {
     if (meta.orgParam) {
       const raw = req.params[meta.orgParam];
       if (typeof raw !== "string" || raw.length === 0) throw new AppError("FORBIDDEN", 403, "You do not have permission to do this");
-      orgId = raw;
+      orgId = await this.orgParams.resolve(meta.orgParam, raw);
     }
 
     if (!(await this.permissions.has(req.user.id, meta.key, orgId))) {

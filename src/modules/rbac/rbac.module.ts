@@ -1,6 +1,7 @@
 import { Global, Injectable, Module, OnApplicationBootstrap } from "@nestjs/common";
 import { APP_GUARD, ApplicationConfig, DiscoveryModule, DiscoveryService } from "@nestjs/core";
 import { AccessGuard } from "./access.guard";
+import { OrgParamResolverRegistry } from "./org-param-resolver";
 import { PermissionInvalidationHandler } from "./permission-invalidation.handler";
 import { PermissionGuard } from "./permission.guard";
 import { MEMBER_ROLE_GRANTER } from "../identity/member-role-granter";
@@ -35,6 +36,7 @@ export class RouteGuardCheck implements OnApplicationBootstrap {
   controllers: [RolesController],
   providers: [
     PermissionService,
+    OrgParamResolverRegistry,
     PermissionGuard,
     RolesService,
     PermissionInvalidationHandler,
@@ -42,6 +44,6 @@ export class RouteGuardCheck implements OnApplicationBootstrap {
     { provide: APP_GUARD, useClass: AccessGuard },
     { provide: MEMBER_ROLE_GRANTER, useClass: RbacMemberRoleGranter },
   ],
-  exports: [PermissionService, PermissionGuard, RolesService, MEMBER_ROLE_GRANTER],
+  exports: [PermissionService, OrgParamResolverRegistry, PermissionGuard, RolesService, MEMBER_ROLE_GRANTER],
 })
 export class RbacModule {}

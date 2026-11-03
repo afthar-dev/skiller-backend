@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Prisma, type RoleScope } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
+import { toPage, type PageQuery } from "../../common/http/pagination";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -60,6 +61,34 @@ export class RolesService {
       select: { role: { select: { key: true } } },
     });
     return rows.map((r) => r.role.key).sort();
+  }
+
+  /** Org members, one row per grant, paged by grant id (UUIDv7). */
+  async listOrgMembers(orgId: string, page: PageQuery) {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }], ...(page.cursor ? { id: { gt: page.cursor } } : {}) },
+      orderBy: { id: "asc" },
+      take: page.limit + 1,
+      select: { id: true, userId: true, createdAt: true, role: { select: { key: true } } },
+    });
+    return toPage(rows.map((r) => ({ id: r.id, userId: r.userId, roleKey: r.role.key, joinedAt: r.createdAt.toISOString() })), page.limit);
+  }
+
+  /** Removes every grant the user holds in the org. Returns false when they held none. */
+  async removeOrgMember(actorId: string, orgId: string, userId: string, meta: MutationMeta = {}): Promise<boolean> {
+    const removed = await this.prisma.$transaction(async (tx) => {
+      const grants = await tx.userRole.findMany({ where: { orgId, userId }, include: { role: { select: { key: true } } } });
+      if (grants.length === 0) return false;
+      await this.enqueueInvalidation(tx, [userId]);
+      await tx.userRole.deleteMany({ where: { id: { in: grants.map((g) => g.id) } } });
+      for (const g of grants) {
+        await this.audit.record(tx, { actorId, action: "role.revoke", targetType: "user_role", targetId: g.id, before: this.userRoleShape(g, g.role.key), after: null, ...meta });
+      }
+      return true;
+    });
+    if (removed) await this.invalidateWithRetry(() => this.permissions.invalidateUser(userId), `user ${userId}`);
+    return removed;
   }
 
   async list(): Promise<RoleView[]> {

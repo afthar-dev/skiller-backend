@@ -71,9 +71,10 @@ model User {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  sessions Session[]
-  roles    UserRole[]
-  profile  Profile?
+  sessions  Session[]
+  roles     UserRole[]
+  profile   Profile?
+  ownedOrgs Organization[]
 
   @@map("users")
 }
@@ -298,4 +299,42 @@ model Follow {
   @@id([followerId, followeeId])
   @@index([followeeId])
   @@map("follows")
+}
+
+// ─── organizations ───────────────────────────────────────────────────────
+// Membership is UserRole rows with orgId (no members table). UserRole.orgId has no FK on purpose: RBAC does not know this table.
+
+model Organization {
+  id          String   @id @default(uuid(7))
+  slug        String   @unique // stored lower-case
+  name        String
+  logoAssetId String?
+  about       String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner   User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  invites OrgInvite[]
+
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+// tokenHash is the SHA-256 (hex) of the raw token; the raw token only ever exists in the invite email.
+model OrgInvite {
+  id          String    @id @default(uuid(7))
+  orgId       String
+  email       String // lower-case
+  roleKey     String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  invitedById String
+  createdAt   DateTime  @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, email])
+  @@map("org_invites")
 }
