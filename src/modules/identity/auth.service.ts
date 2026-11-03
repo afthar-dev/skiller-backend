@@ -6,6 +6,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { MEMBER_ROLE_GRANTER, type MemberRoleGranter } from "./member-role-granter";
 import { OtpService } from "./otp.service";
 import { SessionMeta, SessionService } from "./session.service";
+import { StepUpService } from "./step-up.service";
 import { TokenService } from "./token.service";
 import { UserStatusCache } from "./user-status.cache";
 
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly tokens: TokenService,
     private readonly statuses: UserStatusCache,
+    private readonly stepUp: StepUpService,
     private readonly outbox: OutboxService,
     @Inject(MEMBER_ROLE_GRANTER) private readonly roles: MemberRoleGranter,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -58,6 +60,19 @@ export class AuthService {
     const status = await this.statuses.get(rotated.userId);
     if (status !== "ACTIVE") throw this.suspended();
     return { accessToken: this.tokens.signAccess({ sub: rotated.userId, sid: rotated.sessionId }), refreshToken: rotated.refreshToken };
+  }
+
+  async requestStepUp(userId: string, ip: string): Promise<{ challengeId: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (!user) throw new AppError("AUTH_TOKEN_INVALID", 401, "Invalid access token");
+    const { challengeId } = await this.otp.request({ email: user.email, purpose: "STEP_UP", ip, userId });
+    return { challengeId };
+  }
+
+  async verifyStepUp(userId: string, sessionId: string, challengeId: string, code: string): Promise<void> {
+    // Bound to purpose STEP_UP and to this user inside the single UPDATE: a LOGIN challenge or someone else's never matches.
+    await this.otp.verify(challengeId, code, { purpose: "STEP_UP", userId });
+    await this.stepUp.grant(sessionId);
   }
 
   private suspended() {

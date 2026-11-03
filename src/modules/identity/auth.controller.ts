@@ -83,6 +83,20 @@ export class AuthController {
     this.clearRefreshCookie(res);
   }
 
+  @Post("step-up/request")
+  @HttpCode(202)
+  @RateLimit({ key: (req) => `stepup:ip:${req.ip}`, limit: 20, windowSec: WINDOW_15_MIN })
+  async requestStepUp(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.auth.requestStepUp(user.id, req.ip ?? "unknown");
+  }
+
+  @Post("step-up/verify")
+  @HttpCode(204)
+  async verifyStepUp(@CurrentUser() user: AuthUser, @Body() body: unknown) {
+    const { challengeId, code } = verifySchema.parse(body);
+    await this.auth.verifyStepUp(user.id, user.sessionId, challengeId, code);
+  }
+
   @Get("sessions")
   async listSessions(@CurrentUser() user: AuthUser) {
     const rows = await this.sessions.list(user.id);
