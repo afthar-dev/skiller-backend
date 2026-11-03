@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import type { Job, Queue } from "bullmq";
 import { randomUUID } from "node:crypto";
+import { removeAllSchedulers } from "../../../test/support/schedulers";
 import { applyTestEnv } from "../../../test/setup/env";
 import { ConfigModule } from "../config/config.module";
 import { EventBus } from "../outbox/event-bus";
@@ -43,6 +44,7 @@ describe("queue isolation", () => {
 
   afterAll(async () => {
     release();
+    await removeAllSchedulers(moduleRef);
     await runner?.stop();
     await moduleRef?.close();
   });

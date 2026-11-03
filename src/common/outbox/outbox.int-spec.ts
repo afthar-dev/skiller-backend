@@ -5,6 +5,7 @@ import { applyTestEnv } from "../../../test/setup/env";
 import { ConfigModule } from "../config/config.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
+import { removeAllSchedulers } from "../../../test/support/schedulers";
 import { queueToken, QueueNames } from "../queue/queue.constants";
 import { QueueModule } from "../queue/queue.module";
 import { QueueWorkerRunner } from "../queue/queue-worker.runner";
@@ -55,6 +56,7 @@ describe("outbox", () => {
   });
 
   afterAll(async () => {
+    await removeAllSchedulers(moduleRef);
     await runner?.stop();
     await moduleRef?.close();
   });

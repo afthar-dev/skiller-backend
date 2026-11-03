@@ -1,4 +1,5 @@
 import type { INestApplicationContext } from "@nestjs/common";
+import { removeAllSchedulers } from "../test/support/schedulers";
 import { applyTestEnv } from "../test/setup/env";
 import type { DomainEventType } from "./common/outbox/events";
 
@@ -19,7 +20,10 @@ const HANDLED: Record<DomainEventType, boolean> = {
 describe("WorkerModule boot (src/worker.ts path)", () => {
   let app: INestApplicationContext;
 
-  afterAll(() => app?.close());
+  afterAll(async () => {
+    if (app) await removeAllSchedulers(app); // createWorker() schedules the outbox relay and media cleanup in the shared Redis
+    await app?.close();
+  });
 
   it("createWorker() compiles the real module graph, registers every outbox handler and starts every queue worker", async () => {
     applyTestEnv({ DATABASE_URL: process.env.DATABASE_URL!, REDIS_URL: process.env.REDIS_URL! });
