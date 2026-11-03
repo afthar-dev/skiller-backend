@@ -40,6 +40,10 @@ model OutboxEvent {
   deadAt      DateTime?
   lastError   String?
 
+  /// Relay claim: set (with a per-cycle token) when a relay picks the row up; reclaimable if publishedAt stays null for 60 s.
+  claimedAt   DateTime?
+  claimToken  String?
+
   @@index([publishedAt])
   @@index([deadAt])
   @@map("outbox_events")

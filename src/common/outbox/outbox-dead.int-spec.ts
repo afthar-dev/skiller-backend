@@ -48,15 +48,26 @@ describe("outbox dead letters", () => {
 
     // Same job options as production except for the attempt count / delay, so the test does not wait minutes.
     const queue = moduleRef.get<Queue>(queueToken(QueueNames.outbox));
-    const original = queue.add.bind(queue);
-    const spy = jest.spyOn(queue, "add").mockImplementation((name, data, opts) => original(name, data, { ...opts, attempts: 3, backoff: { type: "capped-exponential", delay: 10 } }));
+    const find = () => prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
+    const id = (await find()).id;
+    const original = queue.addBulk.bind(queue);
+    const spy = jest
+      .spyOn(queue, "addBulk")
+      .mockImplementation((jobs) =>
+        original(jobs.map((j) => (j.opts?.jobId === id ? { ...j, opts: { ...j.opts, attempts: 3, backoff: { type: "capped-exponential", delay: 10 } } } : j))),
+      );
     try {
-      await moduleRef.get(OutboxRelay).relayOnce();
+      // The shared DB may hold a backlog from other suites; keep relaying (100 oldest rows per batch) until our own event went out.
+      const relay = moduleRef.get(OutboxRelay);
+      const relayDeadline = Date.now() + 30_000;
+      while (!(await find()).publishedAt) {
+        if (Date.now() > relayDeadline) throw new Error("event never relayed");
+        await relay.relayOnce();
+      }
     } finally {
       spy.mockRestore();
     }
 
-    const find = () => prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
     const deadline = Date.now() + 15_000;
     while (!(await find()).deadAt && Date.now() < deadline) await sleep(50);
 

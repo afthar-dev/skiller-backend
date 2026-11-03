@@ -24,6 +24,15 @@ async function waitFor(cond: () => boolean, timeoutMs = 15_000) {
   }
 }
 
+/** Other suites share the DB, so a single 100-row batch may not contain our event: relay until it is published. */
+async function relayUntilPublished(prisma: PrismaService, id: string, relay: () => Promise<unknown>) {
+  const start = Date.now();
+  while (!(await prisma.outboxEvent.findUniqueOrThrow({ where: { id } })).publishedAt) {
+    if (Date.now() - start > 30_000) throw new Error(`event ${id} never published`);
+    await relay();
+  }
+}
+
 describe("outbox", () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
@@ -80,15 +89,17 @@ describe("outbox", () => {
   it("delivers a committed event exactly once even when the relay runs twice concurrently", async () => {
     const userId = randomUUID();
     await prisma.$transaction((tx) => outbox.enqueue(tx, { type: "user.registered", userId, email: "ok@example.com" }));
+    const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
 
-    await Promise.all([relay.relayOnce(), relay.relayOnce()]);
+    await relayUntilPublished(prisma, row.id, () => Promise.all([relay.relayOnce(), relay.relayOnce()]));
     await waitFor(() => seen.includes(userId));
     await relay.relayOnce();
     await sleep(700);
 
     expect(seen.filter((u) => u === userId)).toHaveLength(1);
-    const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
-    expect(row.publishedAt).not.toBeNull();
+    const after = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: row.id } });
+    expect(after.publishedAt).not.toBeNull();
+    expect(after.attempts).toBe(1);
   });
 
   it("relay lock: concurrent relays enqueue each event exactly once and publish it once", async () => {
@@ -96,26 +107,49 @@ describe("outbox", () => {
     await prisma.$transaction((tx) => outbox.enqueue(tx, { type: "user.registered", userId, email: "lock@example.com" }));
     const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
 
-    // Slow add() keeps the first relay's transaction (and row lock) open while the second one reads.
+    // Slow only OUR job so the two relays overlap on it; claimed rows must be invisible to the other relay meanwhile.
     const queue = moduleRef.get<Queue>(queueToken(QueueNames.outbox));
-    const original = queue.add.bind(queue);
-    const spy = jest.spyOn(queue, "add").mockImplementation(async (...args: Parameters<Queue["add"]>) => {
-      await sleep(300);
-      return original(...args);
+    const originalBulk = queue.addBulk.bind(queue);
+    const originalAdd = queue.add.bind(queue);
+    const bulkSpy = jest.spyOn(queue, "addBulk").mockImplementation(async (jobs: Parameters<Queue["addBulk"]>[0]) => {
+      if (jobs.some((j) => j.opts?.jobId === row.id)) await sleep(300);
+      return originalBulk(jobs);
+    });
+    const addSpy = jest.spyOn(queue, "add").mockImplementation(async (...args: Parameters<Queue["add"]>) => {
+      if (args[2]?.jobId === row.id) await sleep(300);
+      return originalAdd(...args);
     });
     try {
-      const counts = await Promise.all([relay.relayOnce(), relay.relayOnce()]);
-      const adds = spy.mock.calls.filter((c) => c[2]?.jobId === row.id);
-      expect(adds).toHaveLength(1);
-      expect(counts[0] + counts[1]).toBe(1);
+      await relayUntilPublished(prisma, row.id, () => Promise.all([relay.relayOnce(), relay.relayOnce()]));
+      const ours = [...bulkSpy.mock.calls.flatMap((c) => c[0]), ...addSpy.mock.calls.map((c) => ({ opts: c[2] }))].filter((j) => j.opts?.jobId === row.id);
+      expect(ours).toHaveLength(1);
     } finally {
-      spy.mockRestore();
+      bulkSpy.mockRestore();
+      addSpy.mockRestore();
     }
 
     const after = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: row.id } });
     expect(after.publishedAt).not.toBeNull();
     expect(after.attempts).toBe(1);
+    expect(after.claimToken).not.toBeNull();
     await waitFor(() => seen.includes(userId));
+    expect(seen.filter((u) => u === userId)).toHaveLength(1);
+  });
+
+  it("reclaims a row whose relay crashed after claiming it (claim older than 60 s), and not before", async () => {
+    const userId = randomUUID();
+    await prisma.$transaction((tx) => outbox.enqueue(tx, { type: "user.registered", userId, email: "crash@example.com" }));
+    const row = await prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
+    const claimedAt = (agoMs: number) => prisma.outboxEvent.update({ where: { id: row.id }, data: { claimedAt: new Date(Date.now() - agoMs), claimToken: "dead-relay" } });
+
+    await claimedAt(10_000); // fresh claim by a (possibly live) relay: untouchable
+    for (let i = 0; i < 3; i++) await relay.relayOnce();
+    expect((await prisma.outboxEvent.findUniqueOrThrow({ where: { id: row.id } })).publishedAt).toBeNull();
+
+    await claimedAt(61_000); // stale: some relay takes it over
+    await relayUntilPublished(prisma, row.id, () => relay.relayOnce());
+    await waitFor(() => seen.includes(userId));
+    expect(seen.filter((u) => u === userId)).toHaveLength(1);
   });
 
   it("retries when a handler fails", async () => {

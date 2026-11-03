@@ -49,7 +49,7 @@ describe("QueueWorkerRunner", () => {
   });
 
   it("relay and event dispatch share the outbox queue", () => {
-    const relay = new OutboxRelay(nul, nul, nul);
+    const relay = new OutboxRelay(nul, nul, nul, nul);
     const dispatch = new OutboxProcessor(nul, nul, nul);
     expect(relay.queue).toBe("outbox");
     expect(dispatch.queue).toBe("outbox");
