@@ -39,3 +39,13 @@ model OutboxEvent {
   @@index([publishedAt])
   @@map("outbox_events")
 }
+
+// ─── mail ────────────────────────────────────────────────────────────────
+
+model EmailSuppression {
+  email     String   @id
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@map("email_suppressions")
+}

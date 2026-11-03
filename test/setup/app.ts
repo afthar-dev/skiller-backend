@@ -10,7 +10,7 @@ export async function createTestApp(customize?: (builder: TestingModuleBuilder) 
   let builder = Test.createTestingModule({ imports: [AppModule] });
   if (customize) builder = customize(builder);
   const moduleRef = await builder.compile();
-  const app = configureApp(moduleRef.createNestApplication());
+  const app = configureApp(moduleRef.createNestApplication({ rawBody: true }));
   await app.init();
   return app;
 }

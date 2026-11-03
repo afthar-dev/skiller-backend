@@ -6,7 +6,7 @@ import { APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 
 async function main() {
-  const app = configureApp(await NestFactory.create(AppModule));
+  const app = configureApp(await NestFactory.create(AppModule, { rawBody: true }));
   const config = app.get<AppConfig>(APP_CONFIG);
   await app.listen(config.port);
 }
