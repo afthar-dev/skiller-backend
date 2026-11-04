@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { escapeLike } from "../../common/db/like";
 import { Prisma, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
@@ -97,6 +98,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accounts: AccountService,
+    @Optional() private readonly outbox?: OutboxService,
   ) {}
 
   /**
@@ -184,8 +186,12 @@ export class ProfilesService {
     try {
       return toProfileView(
         await this.prisma.$transaction(async (tx) => {
-          if (inTx) await inTx(tx, await tx.profile.findUniqueOrThrow({ where: { userId } }));
-          return tx.profile.update({ where: { userId }, data });
+          const current = await tx.profile.findUniqueOrThrow({ where: { userId } });
+          if (inTx) await inTx(tx, current);
+          const row = await tx.profile.update({ where: { userId }, data });
+          // Courses copy the creator's name for search: tell them (the handler reads the current name).
+          if (row.displayName !== current.displayName) await this.outbox?.enqueue(tx, { type: "user.profile_updated", userId });
+          return row;
         }),
       );
     } catch (err) {

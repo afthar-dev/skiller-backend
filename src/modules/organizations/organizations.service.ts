@@ -136,6 +136,7 @@ export class OrganizationsService {
         if (current.logoAssetId) await this.media.detach(tx, current.logoAssetId);
       }
       const row = await tx.organization.update({ where: { id: current.id }, data });
+      if (row.name !== current.name) await this.outbox.enqueue(tx, { type: "org.renamed", orgId: current.id });
       await this.audit.record(tx, { actorId, action: "org.update", targetType: "organization", targetId: current.id, before: toView(current), after: toView(row), ...meta });
       return row;
     });

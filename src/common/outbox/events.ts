@@ -4,6 +4,10 @@ export type DomainEvent =
   | { type: "media.ready"; assetId: string; ownerId: string; purpose: string }
   | { type: "media.failed"; assetId: string; ownerId: string; reason: string; fileName?: string }
   | { type: "org.created"; orgId: string; ownerId: string }
+  /** An organization changed its name (consumers read the current name, not the event). */
+  | { type: "org.renamed"; orgId: string }
+  /** A user changed their display name (consumers read the current name, not the event). */
+  | { type: "user.profile_updated"; userId: string }
   /** A member lost an organization role (all of them, or one): consumers re-check what the role gave access to. */
   | { type: "org.member_removed"; orgId: string; userId: string }
   | { type: "course.published"; courseId: string; ownerType: "USER" | "ORG"; ownerId: string; slug: string; title: string }

@@ -6,6 +6,8 @@ import { UsersModule } from "../users";
 import { AdminCategoriesController, CategoriesController } from "./categories.controller";
 import { CategoriesService } from "./categories.service";
 import { AdminCoursesController } from "./admin-courses.controller";
+import { CatalogController } from "./catalog.controller";
+import { CatalogService } from "./catalog.service";
 import { CertificatesController } from "./certificates.controller";
 import { CourseMedia } from "./course-media";
 import { CoursePlaybackPolicy } from "./course-playback.policy";
@@ -35,8 +37,8 @@ import { StudioCoursesController } from "./studio-courses.controller";
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule, forwardRef(() => OrganizationsWorkerModule)],
-  controllers: [StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController, CertificatesController, ReviewsController, StudioReviewsController, AdminContentController, QaController],
-  providers: [CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, ReviewsService, QaService, ContentModerationService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
+  controllers: [CatalogController, StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController, CertificatesController, ReviewsController, StudioReviewsController, AdminContentController, QaController],
+  providers: [CatalogService, CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, ReviewsService, QaService, ContentModerationService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
   exports: [CoursePolicy, CoursesService, CategoriesService, EnrolmentsService],
 })
 export class CoursesModule {}

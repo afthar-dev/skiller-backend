@@ -78,6 +78,7 @@ export const toPublicCourseView = (c: Course) => ({
   id: c.id,
   ownerType: c.ownerType,
   ownerId: c.ownerId,
+  ownerName: c.ownerName,
   slug: c.slug,
   title: c.title,
   subtitle: c.subtitle,
@@ -94,3 +95,9 @@ export const toPublicCourseView = (c: Course) => ({
   ratingCount: c.ratingCount,
   enrolmentCount: c.enrolmentCount,
 });
+
+/** A course in a catalog listing: the public view without the long description. */
+export const toCatalogCard = (c: Course) => {
+  const { description: _description, ...card } = toPublicCourseView(c);
+  return card;
+};

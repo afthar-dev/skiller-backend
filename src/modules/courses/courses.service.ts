@@ -3,7 +3,10 @@ import { Prisma, type Course, type CourseLevel, type CourseOwnerType } from "@pr
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { OrganizationDirectory } from "../organizations";
+import { ProfilesService } from "../users";
 import { CourseMedia } from "./course-media";
+import { refreshCourseSearch } from "./course-search";
 import { lockCourse, lockCourseForEdit } from "./course-lock";
 import { assertSafeMarkdown } from "./markdown";
 import { assertValidCoursePrice, firstFreeSlug, randomSlug, slugify } from "./course-rules";
@@ -46,6 +49,8 @@ export class CoursesService {
     private readonly prisma: PrismaService,
     private readonly policy: CoursePolicy,
     private readonly media: CourseMedia,
+    private readonly profiles: ProfilesService,
+    private readonly orgs: OrganizationDirectory,
   ) {}
 
   /** The public page of a PUBLISHED, unflagged course; anything else does not exist for the public. */
@@ -60,13 +65,16 @@ export class CoursesService {
     await this.policy.assertCanCreateFor(user, input.ownerType, ownerId);
     assertValidCoursePrice(input.pricePaise);
     await this.assertCategory(input.categoryId);
+    const ownerName = input.ownerType === "ORG" ? await this.orgs.nameOf(ownerId) : await this.profiles.displayNameOf(ownerId);
 
     const base = slugify(input.title) || randomSlug("course");
     for (let attempt = 0; ; attempt++) {
       const slug = await this.freeSlug(base, attempt);
       try {
-        const course = await this.prisma.course.create({
+        const course = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.course.create({
           data: {
+            ownerName,
             ownerType: input.ownerType,
             ownerId,
             slug,
@@ -80,6 +88,9 @@ export class CoursesService {
             pricePaise: input.pricePaise,
             createdById: user.id,
           },
+          });
+          await refreshCourseSearch(tx, created.id);
+          return created;
         });
         return toCourseView(course);
       } catch (err) {
@@ -140,7 +151,9 @@ export class CoursesService {
           if (course.promoVideoAssetId) await this.media.detach(tx, course.promoVideoAssetId);
           data.promoVideoAssetId = patch.promoVideoAssetId;
         }
-        return toCourseView(await tx.course.update({ where: { id }, data }));
+        const updated = await tx.course.update({ where: { id }, data });
+        if (patch.title !== undefined || patch.subtitle !== undefined || patch.description !== undefined || patch.tags !== undefined) await refreshCourseSearch(tx, id);
+        return toCourseView(updated);
       });
     } catch (err) {
       if (isUniqueViolation(err, "slug")) throw new AppError("COURSE_SLUG_TAKEN", 409, "This course address is already in use");
