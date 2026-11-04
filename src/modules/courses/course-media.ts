@@ -8,7 +8,7 @@ const notUsable = () => new AppError("MEDIA_NOT_USABLE", 422, "This media cannot
 
 /**
  * Attaching media to a course. Ruling: for a USER course the asset must belong to the course owner; for an ORG course it must
- * belong to an author (org_owner / org_instructor) of the owning organization, whichever author uploaded it.
+ * have been uploaded for the owning organization (`orgId`, so it counts against the org's storage) by an author (org_owner / org_instructor) of it, whichever author.
  */
 @Injectable()
 export class CourseMedia {
@@ -21,7 +21,8 @@ export class CourseMedia {
   async attach(tx: Prisma.TransactionClient, course: Pick<Course, "ownerType" | "ownerId">, assetId: string, purpose: MediaPurpose): Promise<{ durationSec: number | null }> {
     const info = await this.media.assetInfo(assetId);
     if (!info || info.purpose !== purpose || info.status !== "READY") throw notUsable();
-    const ownerOk = course.ownerType === "USER" ? info.ownerId === course.ownerId : await this.policy.isOrgAuthor(info.ownerId, course.ownerId);
+    // An ORG course takes only media uploaded for that organization (it is what counts against the org's storage_gb); a USER course only personal uploads.
+    const ownerOk = course.ownerType === "USER" ? info.ownerId === course.ownerId && info.orgId === null : info.orgId === course.ownerId && (await this.policy.isOrgAuthor(info.ownerId, course.ownerId));
     if (!ownerOk) throw notUsable();
     await this.media.attach(tx, assetId, info.ownerId, purpose);
     return { durationSec: info.durationSec === null ? null : Math.round(info.durationSec) };

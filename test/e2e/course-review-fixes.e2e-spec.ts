@@ -26,13 +26,13 @@ describe("course review fixes", () => {
     await t.app.get(PermissionService).invalidateUser(userId);
     return grant;
   }
-  const thumb = (ownerId: string) => prisma.mediaAsset.create({ data: { ownerId, purpose: "THUMBNAIL", bucket: "PUBLIC", status: "READY", objectKey: `incoming/${uniq()}/source`, mime: "image/png", declaredSize: 10n } });
+  const thumb = (ownerId: string, orgId: string | null = null) => prisma.mediaAsset.create({ data: { ownerId, orgId, purpose: "THUMBNAIL", bucket: "PUBLIC", status: "READY", objectKey: `incoming/${uniq()}/source`, mime: "image/png", declaredSize: 10n } });
   /** A complete course ready to submit; thumbOwner owns the thumbnail (the org owner for org courses). */
   async function completeCourse(author: Session, over: Record<string, unknown> = {}, thumbOwner: Session = author) {
     const res = await http().post("/v1/studio/courses").set(auth(author)).send({ title: `Fixes ${uniq()}`, description: "A course", categoryId, language: "en", ...over });
     expect(res.status).toBe(201);
     const course = res.body as { id: string; slug: string };
-    expect((await http().patch(base(course.id)).set(auth(author)).send({ thumbnailAssetId: (await thumb(thumbOwner.userId)).id })).status).toBe(200);
+    expect((await http().patch(base(course.id)).set(auth(author)).send({ thumbnailAssetId: (await thumb(thumbOwner.userId, (over.orgId as string | undefined) ?? null)).id })).status).toBe(200);
     const section = (await http().post(`${base(course.id)}/sections`).set(auth(author)).send({ title: "S" })).body;
     const lesson = (await http().post(`${base(course.id)}/lessons`).set(auth(author)).send({ sectionId: section.id, title: "L", type: "ARTICLE" })).body;
     return { ...course, sectionId: section.id as string, lessonId: lesson.id as string };

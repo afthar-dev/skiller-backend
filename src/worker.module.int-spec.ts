@@ -62,6 +62,16 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(QueueWorkerRunner).startedQueues.sort()).toEqual(Object.values(QueueNames).sort());
   });
 
+  it("Phase 3: the worker consumes every course event and runs every course job (certificate issuance on course.completed, certificate revocation on order.refunded, seat revocation, search rebuilds on renames, seats sweep, progress recompute, popularity refresh)", async () => {
+    const { QueueNames } = await import("./common/queue/queue.constants");
+    const { ProcessorRegistry } = await import("./common/queue/processor-registry");
+    const { EventBus } = await import("./common/outbox/event-bus");
+    const registered = app.get(EventBus).registeredTypes();
+    for (const type of ["course.completed", "order.refunded", "org.member_removed", "org.renamed", "user.profile_updated", "order.paid"]) expect(registered).toContain(type);
+    const jobs = app.get(ProcessorRegistry).for(QueueNames.maintenance).flatMap((p) => p.jobNames);
+    for (const name of ["courses.seats.sweep", "courses.progress.recompute", "courses.popularity.refresh"]) expect(jobs).toContain(name);
+  });
+
   it("registers the COURSE sellable and its refund rule in the worker: webhook-first fulfilment runs here", async () => {
     const { SellableRegistry, RefundEligibilityRegistry } = await import("./modules/billing");
     const provider = app.get(SellableRegistry).find("COURSE");

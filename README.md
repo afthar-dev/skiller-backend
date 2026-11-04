@@ -192,6 +192,38 @@ Do not take real money until every box is ticked.
 | `pnpm db:sync-permissions` | Upsert permission keys declared in code (dev, via ts-node). |
 | `pnpm openapi:export` | Regenerate `openapi.json`. Needs no database. Commit the result; CI fails if it is stale. |
 
+## Courses
+
+The `courses` module owns every course table (categories, courses, sections, lessons, enrolments, progress, quizzes, certificates, reviews, Q&A). It plugs into billing through the `COURSE` sellable (registered in both the API and the worker), the course refund rule and the media playback policy.
+
+**Lifecycle.** `DRAFT -> IN_REVIEW -> PUBLISHED -> ARCHIVED`. An author submits a complete draft (`POST /v1/studio/courses/:id/submit`; `COURSE_NOT_PUBLISHABLE` lists what is missing, and the owner's `max_published_courses` is checked at submit and again at approval). Content is locked while a course is in review (`/withdraw` returns it to draft). A moderator (`course.review`) approves or rejects with a reason; a rejected course goes back to the queue when resubmitted. After the first approval the slug is locked and edits to a published course go live directly. Archiving is terminal: the course leaves the catalog and is not for sale, but learners who already enrolled keep access. Owners are a creator (USER) or an organization (ORG); `org_owner` and `org_instructor` author an org course, and course media for an ORG course must be uploaded with `orgId` (see Organization storage).
+
+**Moderation.** Moderators can flag any published course (hidden from the catalog and closed to new sales; enrolled learners keep access) and unflag it, with a reason; every action is audited and the author is notified. A moderator cannot review or hide content on a course they author (`COURSE_REVIEW_SELF`). Reviews, questions and answers can be hidden and unhidden by moderators (`/v1/admin/{reviews,questions,answers}/:id/{hide,unhide}`).
+
+**Markdown rendering rule for clients.** See "Rendering course Markdown" under Notes for the frontend: render with markdown-it `html: false` and the exported link validator (`createMarkdownRenderer()` / `isSafeLinkDestination` from `src/modules/courses/index.ts`).
+
+**Playback.** Lesson videos are private HLS. The player asks `GET /v1/media/:id/playback` (enrolled learners, free-preview lessons and authors only; refunded learners lose access at once). The returned token lasts 10 minutes: refresh it by calling the route again before `expiresAt` and after any 401/403 from the edge gate.
+
+**Organization seats.** An `org_learner` of an organization enrols free in that organization's courses (`POST /v1/courses/:slug/enrol`, source `ORG_SEAT`) without checkout. Removing the member (`org.member_removed`) or letting the learner grant expire (daily `courses.seats.sweep`) revokes only `ORG_SEAT` enrolments, never purchases.
+
+**Certificates.** Issued when every required lesson is complete and every quiz passed (`course.completed` event, handled in the worker). If the learner's display name is still the one derived from their email, the certificate is created `PENDING_NAME` (no PDF, not verifiable) and the learner is notified; `POST /v1/me/certificates/:id/name { name }` confirms the name (sanitised, then immutable) and issues the PDF. Public verification: `GET /v1/certificates/:code` (rate limited). A certificate is revoked when the purchase is refunded or the organization seat ends.
+
+**Refund rule.** A course order is refundable within 7 days of purchase and while less than 30% of the required lessons are completed. Refund removes the enrolment (progress is kept for analytics but hidden), hides the learner's review and revokes the certificate.
+
+**Creator analytics.** `GET /v1/studio/courses/:id/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD` (authors only). IST calendar days, inclusive, at most 366 days, default the last 30 days. Returns enrolments per day by source, revenue (`soldPaise`, `refundedPaise`, `netPaise`: the seller share actually posted to the ledger for this course's orders in the range, read through `BillingReports.sellerRevenueForItem`), completion rate (completed / active enrolments), rating (`avg` is null below 3 ratings) and, for owners whose `analytics_level` is `standard` or `advanced`, per-lesson drop-off and watch time in curriculum order. On `basic` those are omitted and `upgradeRequired` is `true`. Completion, drop-off and watch time describe the course as it stands (live enrolments only), not the range.
+
+**Organization storage.** Course media for an ORG course counts against the organization's `storage_gb`, not the uploader's. The upload session takes an optional `orgId` (`POST /v1/media/uploads`); the caller must be `org_owner` or `org_instructor` there, and the purpose must be `course_lesson`, `course_resource`, `course_promo` or `thumbnail`. Usage = declared size of every non-FAILED asset with that `orgId` (pending uploads included), whichever author uploaded it. An ORG course accepts only assets uploaded for that organization, a USER course only personal ones (`MEDIA_NOT_USABLE` otherwise). Personal uploads keep counting against the uploader.
+
+### Hand-written database objects (`prisma migrate dev` must never drop or recreate these)
+
+Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in every `migrate dev`. Delete those statements from the generated SQL, or the migration silently removes a uniqueness rule or an index the queries depend on. `scripts/check-schema-drift.mjs` knows the pattern, search and `ratingShown` ones and fails the build on any other drift.
+
+- `profiles_handle_pattern_idx`, `users_email_pattern_idx`: `text_pattern_ops` prefix-search indexes.
+- `user_roles_userId_roleId_orgId_key`, `ledger_accounts_owner_kind_key`: unique indexes `NULLS NOT DISTINCT` (a platform-wide grant / platform account has a NULL owner and must still be unique).
+- Partial unique indexes: `subscriptions_one_free_active_key`, `coupon_redemptions_live_user_key`, `refunds_order_live_key`, `payout_accounts_owner_live_key`, `certificates_live_key`.
+- Search: extension `pg_trgm`; `courses_search_vector_idx` (GIN on `searchVector`, `fastupdate = off`), `courses_title_trgm_idx` (GIN trigram on `title`).
+- Catalog: partial indexes `courses_pub_popular_idx`, `courses_pub_newest_idx`, `courses_pub_rating_idx` (published, unflagged courses), `enrolments_created_active_idx` (active enrolments by `createdAt`), and the stored generated column `courses."ratingShown"` (drop the `ALTER COLUMN "ratingShown"` Prisma proposes).
+
 ## API contract
 
 `openapi.json` at the repo root is the contract for frontend client generation (OpenAPI 3, all paths under `/v1`). Every operation documents the shared `ErrorResponse` (`{ error: { code, message, details }, requestId }`) as its `default` response, and 401 where authentication is required. Swagger UI is served at `/v1/docs` when `NODE_ENV` is not `production`.

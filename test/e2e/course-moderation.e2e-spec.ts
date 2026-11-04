@@ -47,7 +47,7 @@ describe("course moderation and publishing", () => {
   /** A course that passes every publishing check. */
   async function completeCourse(s: Session, over: Record<string, unknown> = {}) {
     const course = await newCourse(s, over);
-    const thumb = await asset(s.userId, "THUMBNAIL");
+    const thumb = await asset(s.userId, "THUMBNAIL", { orgId: (over.orgId as string | undefined) ?? null });
     expect((await http().patch(base(course.id)).set(auth(s)).send({ thumbnailAssetId: thumb.id })).status).toBe(200);
     const section = (await http().post(`${base(course.id)}/sections`).set(auth(s)).send({ title: "Intro" })).body;
     const lesson = await http().post(`${base(course.id)}/lessons`).set(auth(s)).send({ sectionId: section.id, title: "Read me", type: "ARTICLE", articleBody: "hello" });
@@ -125,7 +125,7 @@ describe("course moderation and publishing", () => {
       const org = await prisma.organization.create({ data: { slug: `org-${uniq()}`, name: "Org", ownerId: owner.userId } });
       await grantRole(owner.userId, "org_owner", org.id);
       await grantRole(instructor.userId, "org_instructor", org.id);
-      const thumb = await asset(owner.userId, "THUMBNAIL");
+      const thumb = await asset(owner.userId, "THUMBNAIL", { orgId: org.id });
       const course = await newCourse(instructor, { ownerType: "ORG", orgId: org.id });
       expect((await http().patch(base(course.id)).set(auth(owner)).send({ thumbnailAssetId: thumb.id })).status).toBe(200);
       const section = (await http().post(`${base(course.id)}/sections`).set(auth(instructor)).send({ title: "S" })).body;

@@ -6,7 +6,9 @@
 // Those known false positives (a DROP INDEX / CREATE INDEX pair per index) are ignored; anything else fails the build.
 import { spawnSync } from "node:child_process";
 
-const KNOWN_RAW_OPS_INDEXES = ["profiles_handle_pattern_idx", "users_email_pattern_idx"];
+// Hand-written objects Prisma cannot express (see README, Courses: hand-written database objects). The generated column shows up as a column drift.
+const KNOWN_RAW_OPS_INDEXES = ["profiles_handle_pattern_idx", "users_email_pattern_idx", "courses_search_vector_idx", "courses_title_trgm_idx"];
+const KNOWN_RAW_COLUMNS = ["ratingShown"];
 const url = process.env.DATABASE_URL;
 if (!url) {
   console.error("DATABASE_URL (shadow database) is required");
@@ -31,7 +33,7 @@ const statements = run.stdout
   .map((block) => block.trim())
   .filter((block) => block && block !== "-- This is an empty migration.");
 
-const unexpected = statements.filter((block) => !KNOWN_RAW_OPS_INDEXES.some((name) => block.includes(`"${name}"`)));
+const unexpected = statements.filter((block) => !KNOWN_RAW_OPS_INDEXES.some((name) => block.includes(`"${name}"`)) && !KNOWN_RAW_COLUMNS.some((name) => block.includes(`"${name}"`)));
 if (unexpected.length > 0) {
   console.error("Schema drift: prisma/schema.prisma differs from prisma/migrations. Run `pnpm db:migrate:new <name>`. Pending changes:\n");
   console.error(unexpected.join("\n\n"));

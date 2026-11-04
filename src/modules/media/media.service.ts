@@ -14,7 +14,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
 import { EntitlementsService } from "../billing";
-import { PermissionService } from "../rbac";
+import { PermissionService, PlatformRoleDirectory } from "../rbac";
 import { ProfilesService } from "../users";
 import { MediaLifecycle } from "./media-lifecycle";
 import { effectiveMaxBytes } from "./media-limits";
@@ -41,12 +41,19 @@ export interface CreateUploadInput {
   filename: string;
   mime: string;
   size: number;
+  /** Upload for an organization's course: counts against the organization's storage_gb and needs an org_owner / org_instructor role there. */
+  orgId?: string;
 }
 
 export interface UploadPart {
   partNumber: number;
   etag: string;
 }
+
+const COUNTED_STATUSES: MediaAsset["status"][] = ["PENDING", "UPLOADED", "PROCESSING", "READY"];
+/** Purposes an organization's course can use (lesson videos, resources, trailer, thumbnail). */
+const ORG_UPLOAD_PURPOSES: ReadonlySet<MediaAsset["purpose"]> = new Set(["COURSE_LESSON", "COURSE_RESOURCE", "COURSE_PROMO", "THUMBNAIL"]);
+const ORG_UPLOAD_ROLES = ["org_owner", "org_instructor"];
 
 @Injectable()
 export class MediaService {
@@ -56,6 +63,7 @@ export class MediaService {
     private readonly lifecycle: MediaLifecycle,
     private readonly profiles: ProfilesService,
     private readonly permissions: PermissionService,
+    private readonly roles: PlatformRoleDirectory,
     private readonly settings: SettingsService,
     private readonly entitlements: EntitlementsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
@@ -66,21 +74,27 @@ export class MediaService {
   ) {}
 
   async createUpload(userId: string, input: CreateUploadInput): Promise<{ assetId: string; partSize: number; partUrls: string[]; putHeaders?: Record<string, string> }> {
-    const { purpose } = input;
-    if (requiresCreator(purpose) && !(await this.profiles.isCreator(userId))) {
+    const { purpose, orgId } = input;
+    if (orgId) {
+      if (!ORG_UPLOAD_PURPOSES.has(purpose)) throw new AppError("VALIDATION_FAILED", 400, "Request validation failed", { fields: { orgId: ["only course media can be uploaded for an organization"] } });
+      const roles = await this.roles.roleKeysInOrg(userId, orgId);
+      if (!roles.some((r) => ORG_UPLOAD_ROLES.includes(r))) throw new AppError("FORBIDDEN", 403, "Only organization owners and instructors can upload course media for the organization");
+    } else if (requiresCreator(purpose) && !(await this.profiles.isCreator(userId))) {
       throw new AppError("CREATOR_REQUIRED", 403, "Only creators can upload this kind of media");
     }
     const maxBytes = await effectiveMaxBytes(this.settings, purpose);
     const rule = validateUpload(purpose, input.mime, input.size, { maxBytes });
     await this.enforceCaps(userId);
-    // Plan storage quota: everything the user has stored or is uploading (PENDING included, FAILED excluded) plus this file.
-    await this.entitlements.check({ ownerType: "USER", ownerId: userId }, "storage_gb", (await this.storageUsedBytes(userId)) + input.size);
+    // Plan storage quota: everything the owner has stored or is uploading (PENDING included, FAILED excluded) plus this file. Uploads made for an
+    // organization are the organization's (its plan, its usage); everything else is the uploader's.
+    if (orgId) await this.entitlements.check({ ownerType: "ORG", ownerId: orgId }, "storage_gb", (await this.orgStorageUsedBytes(orgId)) + input.size);
+    else await this.entitlements.check({ ownerType: "USER", ownerId: userId }, "storage_gb", (await this.storageUsedBytes(userId)) + input.size);
     const id = uuidv7();
     const objectKey = sourceKeyOf(id);
     const mime = input.mime.toLowerCase();
 
     await this.prisma.mediaAsset.create({
-      data: { id, ownerId: userId, purpose, bucket: rule.bucket, objectKey, filename: input.filename.slice(0, 255), mime: input.mime.toLowerCase(), declaredSize: BigInt(input.size) },
+      data: { id, ownerId: userId, orgId: orgId ?? null, purpose, bucket: rule.bucket, objectKey, filename: input.filename.slice(0, 255), mime: input.mime.toLowerCase(), declaredSize: BigInt(input.size) },
     });
     try {
       if (rule.kind === "image") {
@@ -105,11 +119,21 @@ export class MediaService {
   }
 
   /**
-   * Bytes counted against the owner's plan storage: declared sizes of every asset that is not FAILED. Course-lesson videos are
-   * uploaded (and owned) by the creator, so they count for the creator. Billing shows this through the UsageRegistry.
+   * Bytes counted against a user's plan storage: declared sizes of every asset they uploaded that is not FAILED and was not made for an
+   * organization (those belong to the organization). Billing shows this through the UsageRegistry.
    */
   async storageUsedBytes(userId: string): Promise<number> {
-    const sum = await this.prisma.mediaAsset.aggregate({ where: { ownerId: userId, status: { in: ["PENDING", "UPLOADED", "PROCESSING", "READY"] } }, _sum: { declaredSize: true } });
+    const sum = await this.prisma.mediaAsset.aggregate({ where: { ownerId: userId, orgId: null, status: { in: COUNTED_STATUSES } }, _sum: { declaredSize: true } });
+    return Number(sum._sum.declaredSize ?? 0n);
+  }
+
+  /**
+   * Bytes counted against an organization's plan storage: every non-FAILED asset uploaded for the organization (`orgId`), whichever of its
+   * authors uploaded it and whether or not it is attached yet. An ORG course accepts only such assets, so course media of an organization
+   * is exactly what is counted here.
+   */
+  async orgStorageUsedBytes(orgId: string): Promise<number> {
+    const sum = await this.prisma.mediaAsset.aggregate({ where: { orgId, status: { in: COUNTED_STATUSES } }, _sum: { declaredSize: true } });
     return Number(sum._sum.declaredSize ?? 0n);
   }
 
@@ -190,8 +214,8 @@ export class MediaService {
   }
 
   /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
-  async assetInfo(assetId: string): Promise<{ ownerId: string; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
-    return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, purpose: true, status: true, durationSec: true } });
+  async assetInfo(assetId: string): Promise<{ ownerId: string; orgId: string | null; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
+    return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, orgId: true, purpose: true, status: true, durationSec: true } });
   }
 
   /** Where a READY private file (a course resource) lives, for a caller that has already decided the user may download it. */

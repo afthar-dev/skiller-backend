@@ -260,9 +260,9 @@ describe("course curriculum", () => {
       }
       const course = await newCourse(instructor, { ownerType: "ORG", orgId: org.id });
       const s = await addSection(instructor, course.id);
-      const byOwner = await asset(owner.userId, "COURSE_LESSON");
+      const byOwner = await asset(owner.userId, "COURSE_LESSON", { orgId: org.id });
       expect((await addLesson(instructor, course.id, s.id, { type: "VIDEO", videoAssetId: byOwner.id })).status).toBe(201);
-      const byOutsider = await asset(outsider.userId, "COURSE_LESSON");
+      const byOutsider = await asset(outsider.userId, "COURSE_LESSON", { orgId: org.id });
       const denied = await addLesson(instructor, course.id, s.id, { type: "VIDEO", videoAssetId: byOutsider.id });
       expect(denied.status).toBe(422);
       expect(denied.body.error.code).toBe("MEDIA_NOT_USABLE");

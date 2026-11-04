@@ -35,6 +35,6 @@ export class MediaModule implements OnModuleInit {
 
   onModuleInit() {
     this.policies.register(this.ownerOrAdmin);
-    this.usage.register("storage_gb", async (owner) => (owner.ownerType === "USER" ? this.media.storageUsedBytes(owner.ownerId) : null));
+    this.usage.register("storage_gb", async (owner) => (owner.ownerType === "USER" ? this.media.storageUsedBytes(owner.ownerId) : this.media.orgStorageUsedBytes(owner.ownerId)));
   }
 }

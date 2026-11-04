@@ -2229,6 +2229,10 @@
                   "size": {
                     "type": "integer",
                     "minimum": 1
+                  },
+                  "orgId": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
@@ -8885,6 +8889,66 @@
         "summary": "Search and browse published courses. q is full-text over title, subtitle, tags, description and the creator's name, with fuzzy title matching when nothing matches as written; filters combine; sort relevance (popular without q), newest, rating or popular (enrolments of the last 30 days); price filters in paise",
         "tags": [
           "Courses"
+        ]
+      }
+    },
+    "/v1/studio/courses/{id}/analytics": {
+      "get": {
+        "operationId": "StudioAnalytics_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last IST day, inclusive, YYYY-MM-DD (default: today). At most 366 days from `from`.",
+            "schema": {}
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First IST day, YYYY-MM-DD (default: 29 days before `to`)",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Enrolments per IST day, revenue (seller share), completion rate and rating; per-lesson drop-off and watch time on standard/advanced plans",
+        "tags": [
+          "Course studio"
         ]
       }
     },

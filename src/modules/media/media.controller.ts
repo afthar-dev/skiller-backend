@@ -17,6 +17,7 @@ const createSchema = z
     filename: z.string().trim().min(1).max(255),
     mime: z.string().trim().min(1).max(100),
     size: z.number().int().min(1),
+    orgId: z.string().uuid().optional(),
   })
   .strict();
 

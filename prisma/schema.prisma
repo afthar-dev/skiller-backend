@@ -397,6 +397,8 @@ model MediaAsset {
   posterKey     String?
   failureReason String?
   sourceEtag    String?
+  /// The organization this upload was made for (course media of an ORG course): counts against the organization's storage_gb, not the uploader's. Null for personal uploads.
+  orgId         String?
   attachedAt    DateTime?
   detachedAt    DateTime?
   createdAt     DateTime     @default(now())
@@ -405,6 +407,7 @@ model MediaAsset {
   @@index([ownerId, createdAt])
   @@index([attachedAt, createdAt])
   @@index([ownerId, status])
+  @@index([orgId, status])
   @@map("media_assets")
 }
 
