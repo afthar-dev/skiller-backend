@@ -21,10 +21,22 @@ export class MediaAttachments {
   }
 
   async attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
+    await this.claim(tx, assetId, ownerId, purpose, ["READY"]);
+  }
+
+  /**
+   * Like attach(), for a consumer that is created while the video is still being processed (a reel): the asset may be UPLOADED, PROCESSING or
+   * READY. The attachment protects it from the orphan cleanup for as long as the consumer lives; if processing fails the consumer detaches it.
+   */
+  async reserve(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
+    await this.claim(tx, assetId, ownerId, purpose, ["UPLOADED", "PROCESSING", "READY"]);
+  }
+
+  private async claim(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"], statuses: MediaAsset["status"][]): Promise<void> {
     // Row lock: concurrent attaches / detaches of one asset serialise, so "exactly one attachment" holds.
     await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
     const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
-    if (!asset || asset.ownerId !== ownerId || asset.purpose !== purpose || asset.status !== "READY") {
+    if (!asset || asset.ownerId !== ownerId || asset.purpose !== purpose || !statuses.includes(asset.status)) {
       throw new AppError("MEDIA_NOT_USABLE", 422, "This media cannot be used here: it must be your own, fully processed upload of the right type");
     }
     // An asset belongs to exactly one target. Callers re-saving the same target skip attach/detach when the id is unchanged.

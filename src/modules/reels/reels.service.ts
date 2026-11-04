@@ -48,20 +48,23 @@ export class ReelsService {
 
   /**
    * Starts a reel from one of the creator's own REEL uploads. A video that is already READY is published at once (subject to the daily limit);
-   * one that is still processing leaves a PROCESSING reel that the media.ready handler publishes. The video is attached when the reel decides to
-   * go ahead, so an upload that never finishes is cleaned up like any other orphan.
+   * one that is still processing leaves a PROCESSING reel that the media.ready handler publishes. The video is reserved (attached) for the reel
+   * in the same transaction as the reel, so the hourly orphan cleanup never takes it while it processes; a failed video is released again.
    */
   async create(userId: string, input: CreateReelInput): Promise<ReelView> {
     const info = await this.media.assetInfo(input.mediaAssetId);
-    if (!info || info.ownerId !== userId || info.orgId !== null || info.purpose !== "REEL" || info.status === "FAILED") throw mediaNotUsable();
+    if (!info || info.ownerId !== userId || info.orgId !== null || info.purpose !== "REEL" || info.status === "FAILED" || info.status === "PENDING") throw mediaNotUsable();
     if (input.linkedCourseId && !(await this.courses.isLinkableBy(input.linkedCourseId, userId))) throw courseNotLinkable();
     const caption = sanitizePlainText(input.caption, CAPTION_MAX);
 
     let reel: Reel;
     try {
-      reel = await this.prisma.reel.create({
-        data: { creatorId: userId, mediaAssetId: input.mediaAssetId, caption, hashtags: extractHashtags(caption), linkedCourseId: input.linkedCourseId ?? null, commentsEnabled: input.commentsEnabled ?? true },
-      });
+      reel = await this.prisma.$transaction(async (tx) => {
+        await this.media.reserve(tx, input.mediaAssetId, userId, "REEL");
+        return tx.reel.create({
+          data: { creatorId: userId, mediaAssetId: input.mediaAssetId, caption, hashtags: extractHashtags(caption), linkedCourseId: input.linkedCourseId ?? null, commentsEnabled: input.commentsEnabled ?? true },
+        });
+      }, TX_OPTIONS);
     } catch (err) {
       if (isUniqueViolation(err)) throw mediaNotUsable(409);
       throw err;

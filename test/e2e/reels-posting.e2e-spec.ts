@@ -5,6 +5,7 @@ import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
 import { givePlan } from "../support/billing";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { createMediaWorkerHarness } from "../support/media-worker";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 const uniq = () => randomUUID().replace(/-/g, "").slice(0, 10);
@@ -114,7 +115,7 @@ describe("reel posting", () => {
       expect(res.body.status).toBe("PROCESSING");
       expect(res.body.publishedAt).toBeNull();
       expect(await tagCount(tag)).toBe(0);
-      expect((await assetRow(a.id)).attachedAt).toBeNull();
+      expect((await assetRow(a.id)).attachedAt).not.toBeNull(); // reserved for the reel while it processes
       // Only the owner sees an unpublished reel.
       expect((await http().get(`/v1/reels/${res.body.id}`)).status).toBe(404);
       expect((await http().get(`/v1/reels/${res.body.id}`).set(auth(me))).body.status).toBe("PROCESSING");
@@ -140,10 +141,36 @@ describe("reel posting", () => {
       await bus.dispatch({ type: "media.failed", assetId: a.id, ownerId: me.userId, reason: "INVALID_MEDIA" }, `fail-${a.id}`);
       await bus.dispatch({ type: "media.failed", assetId: a.id, ownerId: me.userId, reason: "INVALID_MEDIA" }, `fail-${a.id}`);
       expect(await reelRow(res.body.id)).toMatchObject({ status: "FAILED", failureReason: "INVALID_MEDIA" });
+      expect(await assetRow(a.id)).toMatchObject({ attachedAt: null, detachedAt: expect.any(Date) }); // released for cleanup
       expect(await prisma.notification.count({ where: { userId: me.userId, type: "reel.failed", data: { path: ["reelId"], equals: res.body.id } } })).toBe(1);
       await bus.dispatch({ type: "media.ready", assetId: a.id, ownerId: me.userId, purpose: "reel" }, `late-${a.id}`);
       expect((await reelRow(res.body.id)).status).toBe("FAILED");
       expect(await tagCount("never")).toBe(0);
+    });
+
+    it("keeps the video of a reel that is still processing out of the hourly orphan cleanup", async () => {
+      const me = await creator();
+      const a = await asset(me.userId, { status: "PROCESSING" });
+      const res = await post(me, { mediaAssetId: a.id, caption: "slow encode" });
+      expect(res.status).toBe(201);
+      await prisma.mediaAsset.update({ where: { id: a.id }, data: { createdAt: new Date(Date.now() - 25 * 3600_000) } });
+      const h = await createMediaWorkerHarness();
+      try {
+        await h.cleanup.process(h.fakeJob({}));
+      } finally {
+        await h.close();
+      }
+      expect(await prisma.mediaAsset.count({ where: { id: a.id } })).toBe(1);
+      await markReady(a.id, me.userId);
+      expect((await reelRow(res.body.id)).status).toBe("PUBLISHED");
+      expect((await assetRow(a.id)).attachedAt).not.toBeNull();
+    });
+
+    it("a video that is not uploaded yet cannot back a reel", async () => {
+      const me = await creator();
+      const a = await prisma.mediaAsset.create({ data: { ownerId: me.userId, purpose: "REEL", bucket: "PUBLIC", status: "PENDING", objectKey: `incoming/${uniq()}/source`, mime: "video/mp4", declaredSize: 10n } });
+      const res = await post(me, { mediaAssetId: a.id, caption: "x" });
+      expect([res.status, res.body.error?.code]).toEqual([422, "MEDIA_NOT_USABLE"]);
     });
 
     it("ignores media events for assets that are not reels", async () => {

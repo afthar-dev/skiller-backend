@@ -1,7 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { Reel } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
-import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService, istDateOf, istDayRange } from "../billing";
 import { MediaAttachments } from "../media";
@@ -43,15 +42,12 @@ export class ReelPublisher {
     const now = this.clock.now();
     const { from, to } = istDayRange(istDateOf(now));
 
-    let outcome: PublishOutcome;
-    try {
-      outcome = await this.prisma.$transaction(async (tx): Promise<PublishOutcome> => {
+    // The video was reserved for the reel when it was created (ReelsService.create), so the orphan cleanup never sees it.
+    const outcome = await this.prisma.$transaction(async (tx): Promise<PublishOutcome> => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reels-publish:${reel.creatorId}`}))`;
         const locked = await tx.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "reels" WHERE "id" = ${reelId} FOR UPDATE`;
         const status = locked[0]?.status;
         if (status !== "PROCESSING" && status !== "LIMIT_REACHED") return "noop";
-        // The video is protected from the orphan cleanup as soon as the reel decides about it, whatever the limit says.
-        if (status === "PROCESSING") await this.media.attach(tx, reel.mediaAssetId, reel.creatorId, "REEL");
         const used = await tx.reel.count({ where: { creatorId: reel.creatorId, publishedAt: { gte: from, lt: to } } });
         if (limit !== null && used >= limit) {
           if (status === "LIMIT_REACHED") return "limit_again";
@@ -63,10 +59,6 @@ export class ReelPublisher {
         await adjustHashtags(tx, { add: current.hashtags }, now);
         return "published";
       }, TX_OPTIONS);
-    } catch (err) {
-      if (err instanceof AppError && err.code === "MEDIA_NOT_USABLE") return this.fail(reel, "MEDIA_NOT_USABLE", opts.eventId);
-      throw err;
-    }
 
     const fresh = await this.prisma.reel.findUniqueOrThrow({ where: { id: reelId } });
     if (outcome === "published" && opts.eventId) {
@@ -86,7 +78,15 @@ export class ReelPublisher {
 
   /** PROCESSING -> FAILED, once; tells the creator. A reel in any other state is left alone. */
   async fail(reel: Pick<Reel, "id" | "creatorId">, reason: string, eventId?: string): Promise<{ reel: Reel; outcome: PublishOutcome }> {
-    const changed = await this.prisma.reel.updateMany({ where: { id: reel.id, status: "PROCESSING" }, data: { status: "FAILED", failureReason: reason } });
+    // The video reserved for the reel is released in the same transaction, so the cleanup deletes it like any abandoned upload.
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const res = await tx.reel.updateMany({ where: { id: reel.id, status: "PROCESSING" }, data: { status: "FAILED", failureReason: reason } });
+      if (res.count === 1) {
+        const row = await tx.reel.findUniqueOrThrow({ where: { id: reel.id }, select: { mediaAssetId: true } });
+        await this.media.detach(tx, row.mediaAssetId);
+      }
+      return res;
+    }, TX_OPTIONS);
     if (changed.count === 1) {
       await this.notifier.notifyUser(reel.creatorId, {
         type: "reel.failed",
