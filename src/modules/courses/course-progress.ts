@@ -1,4 +1,3 @@
-import { Injectable } from "@nestjs/common";
 
 export const COURSE_PROGRESS_READER = Symbol("COURSE_PROGRESS_READER");
 
@@ -10,13 +9,3 @@ export interface CourseProgressReader {
   completedRequiredPct(userId: string, courseId: string): Promise<number>;
 }
 
-/**
- * The reader bound until lesson progress is tracked: nobody has completed anything yet. The progress feature replaces this
- * binding (same token) with one that reads its own tables.
- */
-@Injectable()
-export class NoCourseProgress implements CourseProgressReader {
-  async completedRequiredPct(): Promise<number> {
-    return 0;
-  }
-}

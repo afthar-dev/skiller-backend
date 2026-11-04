@@ -5,6 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
 import { lockCourseForEdit } from "./course-lock";
 import { CoursePolicy } from "./course.policy";
+import { ProgressService } from "./progress.service";
 import { assertSafeMarkdown } from "./markdown";
 
 export const MAX_SECTIONS_PER_COURSE = 50;
@@ -81,6 +82,7 @@ export class CurriculumService {
     private readonly prisma: PrismaService,
     private readonly policy: CoursePolicy,
     private readonly media: CourseMedia,
+    private readonly progress: ProgressService,
   ) {}
 
   async authorView(user: { id: string }, courseId: string): Promise<{ sections: SectionView[] }> {
@@ -119,6 +121,7 @@ export class CurriculumService {
       for (const lesson of section.lessons) await this.releaseLessonMedia(tx, lesson);
       await tx.courseSection.delete({ where: { id: sectionId } });
       await tx.courseSection.updateMany({ where: { courseId, position: { gt: section.position } }, data: { position: { decrement: 1 } } });
+      if (section.lessons.length > 0) await this.progress.recomputeCourse(tx, courseId);
     });
   }
 
@@ -151,6 +154,7 @@ export class CurriculumService {
           resourceAssetId: input.resourceAssetId ?? null,
         },
       });
+      await this.progress.recomputeCourse(tx, courseId);
       return toLessonView(row);
     });
   }
@@ -178,7 +182,9 @@ export class CurriculumService {
         if (lesson.resourceAssetId) await this.media.detach(tx, lesson.resourceAssetId);
         data.resourceAssetId = patch.resourceAssetId;
       }
-      return toLessonView(await tx.lesson.update({ where: { id: lessonId }, data }));
+      const updated = await tx.lesson.update({ where: { id: lessonId }, data });
+      if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) await this.progress.recomputeCourse(tx, courseId);
+      return toLessonView(updated);
     });
   }
 
@@ -191,6 +197,7 @@ export class CurriculumService {
       await this.releaseLessonMedia(tx, lesson);
       await tx.lesson.delete({ where: { id: lessonId } });
       await tx.lesson.updateMany({ where: { sectionId: lesson.sectionId, position: { gt: lesson.position } }, data: { position: { decrement: 1 } } });
+      await this.progress.recomputeCourse(tx, courseId);
     });
   }
 

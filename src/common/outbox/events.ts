@@ -7,6 +7,8 @@ export type DomainEvent =
   /** A member lost an organization role (all of them, or one): consumers re-check what the role gave access to. */
   | { type: "org.member_removed"; orgId: string; userId: string }
   | { type: "course.published"; courseId: string; ownerType: "USER" | "ORG"; ownerId: string; slug: string; title: string }
+  /** A learner finished every required lesson of a course and passed every quiz in it (emitted once per enrolment). */
+  | { type: "course.completed"; userId: string; courseId: string }
   | { type: "org.member_invited"; orgId: string; email: string; inviteId: string }
   | { type: "role.granted"; userId: string; roleKey: string; grantedBy: string }
   | { type: "rbac.permissions_changed"; userIds: string[] }
