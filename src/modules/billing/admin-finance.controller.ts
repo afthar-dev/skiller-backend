@@ -7,6 +7,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
@@ -34,6 +35,7 @@ export class AdminFinanceController {
 
   @Get("summary")
   @RequirePermission("finance.view")
+  @ApiResult(200, "FinanceSummary")
   @ApiOperation({ summary: "GMV, platform revenue, tax payable, refunds, payouts and paid subscribers for a range of IST days (default: the last 30). Amounts are decimal strings of paise and equal the ledger sums." })
   @ApiZodQuery(summaryQuery)
   @ApiErrorResponse(400, "FINANCE_RANGE_INVALID: bad dates, from after to, or more than 366 days.")
@@ -44,6 +46,7 @@ export class AdminFinanceController {
 
   @Get("reconciliation")
   @RequirePermission("finance.view")
+  @ApiPageResult("ReconciliationRun")
   @ApiOperation({ summary: "Nightly reconciliation runs, newest day first (details list every mismatch)" })
   @ApiPagination()
   listRuns(@Query() query: Record<string, unknown>) {
@@ -54,6 +57,7 @@ export class AdminFinanceController {
   @HttpCode(200)
   @RequirePermission("finance.reconcile")
   @RequireStepUp()
+  @ApiResult(200, "ReconciliationRun")
   @ApiOperation({ summary: "Reconcile one IST day now (the same checks as the 02:00 job; rerunning a day updates its run). Step-up required, audited." })
   @ApiZodBody(runBody)
   @ApiErrorResponse(400, "RECONCILIATION_DATE_INVALID: not a calendar day.")
@@ -110,6 +114,7 @@ export class AdminOrdersController {
 
   @Get("orders")
   @RequirePermission("billing.view_any")
+  @ApiPageResult("AdminOrder")
   @ApiOperation({ summary: "Every order, newest first, filtered by status, buyer, seller, Razorpay payment id or IST day range" })
   @ApiZodQuery(ordersQuery)
   @ApiPagination()

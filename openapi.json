@@ -4215,7 +4215,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanList"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -4757,6 +4764,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutStarted"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4898,6 +4915,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4944,6 +4987,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5011,6 +5064,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refund"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5170,6 +5233,16 @@
         "operationId": "AdminBilling_list",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5530,9 +5603,79 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "PROCESSING",
+                "PROCESSED",
+                "REJECTED",
+                "FAILED"
+              ]
+            }
+          },
+          {
+            "name": "orderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Refund"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5569,7 +5712,7 @@
             "bearer": []
           }
         ],
-        "summary": "Refunds, newest first, optionally by status",
+        "summary": "Refunds, newest first, optionally by status, order and IST day range",
         "tags": [
           "Admin"
         ]
@@ -5589,6 +5732,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refund"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5683,6 +5836,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refund"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5732,6 +5895,1300 @@
         "summary": "Reject a refund request; the buyer is told (step-up required, audited)",
         "tags": [
           "Admin"
+        ]
+      }
+    },
+    "/v1/admin/finance/summary": {
+      "get": {
+        "operationId": "AdminFinance_summary",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "FINANCE_RANGE_INVALID: bad dates, from after to, or more than 366 days.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `finance.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "GMV, platform revenue, tax payable, refunds, payouts and paid subscribers for a range of IST days (default: the last 30). Amounts are decimal strings of paise and equal the ledger sums.",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/finance/reconciliation": {
+      "get": {
+        "operationId": "AdminFinance_listRuns",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReconciliationRun"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `finance.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Nightly reconciliation runs, newest day first (details list every mismatch)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/finance/reconciliation/run": {
+      "post": {
+        "operationId": "AdminFinance_run",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "required": [
+                  "date"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "RECONCILIATION_DATE_INVALID: not a calendar day.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `finance.reconcile`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reconcile one IST day now (the same checks as the 02:00 job; rerunning a day updates its run). Step-up required, audited.",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/orders": {
+      "get": {
+        "operationId": "AdminOrders_listOrders",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CREATED",
+                "PAID",
+                "FAILED",
+                "EXPIRED",
+                "REFUNDED",
+                "PARTIALLY_REFUNDED"
+              ]
+            }
+          },
+          {
+            "name": "buyerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "sellerOwnerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "razorpayPaymentId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminOrder"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.view_any`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every order, newest first, filtered by status, buyer, seller, Razorpay payment id or IST day range",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/subscriptions": {
+      "get": {
+        "operationId": "AdminOrders_listSubscriptions",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INCOMPLETE",
+                "TRIALING",
+                "ACTIVE",
+                "PAST_DUE",
+                "CANCELLED",
+                "EXPIRED"
+              ]
+            }
+          },
+          {
+            "name": "ownerType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USER",
+                "ORG"
+              ]
+            }
+          },
+          {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "planKey",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.view_any`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every subscription, newest first, filtered by status, owner, plan or IST day range",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/coupons": {
+      "get": {
+        "operationId": "AdminCoupons_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Coupon"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.coupons.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Platform-funded coupons, newest first (`active=true|false`, `code=` prefix)",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminCoupons_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 32
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PERCENT",
+                      "FLAT"
+                    ]
+                  },
+                  "value": {
+                    "type": "string",
+                    "pattern": "^[1-9]\\d{0,14}$"
+                  },
+                  "itemType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "maxUses": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "ALL",
+                      "SELLER",
+                      "ITEM"
+                    ]
+                  },
+                  "ownerType": {
+                    "type": "string",
+                    "enum": [
+                      "USER",
+                      "ORG"
+                    ]
+                  },
+                  "ownerId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "code",
+                  "kind",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coupon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.coupons.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "COUPON_CODE_TAKEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "COUPON_INVALID: the combination of scope, owner and item is not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a platform-funded coupon: for everything, one seller, or one item (step-up required, audited)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/coupons/{id}": {
+      "patch": {
+        "operationId": "AdminCoupons_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isActive": {
+                    "type": "boolean"
+                  },
+                  "maxUses": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000,
+                    "nullable": true
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coupon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.coupons.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Switch a platform coupon on or off, or change its use limit or expiry (code, kind and value never change; step-up required, audited)",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminCoupons_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `billing.coupons.manage`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "COUPON_IN_USE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a platform coupon that was never used (step-up required, audited). A used coupon is switched off instead.",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/coupons/mine": {
+      "get": {
+        "operationId": "CreatorCoupons_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Coupon"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My coupons, newest first",
+        "tags": [
+          "Coupons"
+        ]
+      },
+      "post": {
+        "operationId": "CreatorCoupons_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 32
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "PERCENT",
+                      "FLAT"
+                    ]
+                  },
+                  "value": {
+                    "type": "string",
+                    "pattern": "^[1-9]\\d{0,14}$"
+                  },
+                  "itemType": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "maxUses": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "SELLER",
+                      "ITEM"
+                    ]
+                  }
+                },
+                "required": [
+                  "code",
+                  "kind",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coupon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CREATOR_REQUIRED, or ENTITLEMENT_LIMIT_REACHED when the plan has no creator coupons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "COUPON_CODE_TAKEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a coupon for my items. Discounts come out of my share; the plan must include creator coupons",
+        "tags": [
+          "Coupons"
+        ]
+      }
+    },
+    "/v1/coupons/mine/{id}": {
+      "patch": {
+        "operationId": "CreatorCoupons_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isActive": {
+                    "type": "boolean"
+                  },
+                  "maxUses": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000,
+                    "nullable": true
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "nullable": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Coupon"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Switch one of my coupons on or off, or change its use limit or expiry",
+        "tags": [
+          "Coupons"
+        ]
+      },
+      "delete": {
+        "operationId": "CreatorCoupons_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "COUPON_IN_USE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete one of my coupons that was never used (a used one is switched off instead)",
+        "tags": [
+          "Coupons"
         ]
       }
     },
@@ -5897,6 +7354,16 @@
         "operationId": "Wallet_me",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5953,6 +7420,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LedgerLine"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6009,6 +7502,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Payout"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6064,6 +7583,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6305,6 +7834,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wallet"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6379,6 +7918,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LedgerLine"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6453,6 +8018,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Payout"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6527,6 +8118,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6635,6 +8236,110 @@
         ]
       }
     },
+    "/v1/admin/payout-accounts/{id}/clear-flag": {
+      "post": {
+        "operationId": "AdminWallet_clearFlag",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "flag": {
+                    "type": "string",
+                    "enum": [
+                      "DUPLICATE_PAN",
+                      "NAME_MISMATCH"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "flag"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `payout.approve`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PAYOUT_ACCOUNT_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PAYOUT_ACCOUNT_FLAG_NOT_SET: the account does not carry that flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clear a review flag (DUPLICATE_PAN or NAME_MISMATCH) after finance checked the account, so payouts to it go through again (step-up required, audited)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/v1/admin/payouts": {
       "get": {
         "operationId": "AdminWallet_list",
@@ -6656,9 +8361,93 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REQUESTED",
+                "APPROVED",
+                "PROCESSING",
+                "PAID",
+                "REJECTED",
+                "REVERSED",
+                "FAILED",
+                "MANUAL_REVIEW"
+              ]
+            }
+          },
+          {
+            "name": "ownerType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USER",
+                "ORG"
+              ]
+            }
+          },
+          {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Payout"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6695,7 +8484,7 @@
             "bearer": []
           }
         ],
-        "summary": "Payouts, newest first, optionally by status and owner",
+        "summary": "Payouts, newest first, optionally by status, owner and IST day range",
         "tags": [
           "Admin"
         ]
@@ -6715,6 +8504,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6771,6 +8570,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6855,6 +8664,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6925,6 +8744,737 @@
       }
     },
     "schemas": {
+      "Money": {
+        "type": "string",
+        "pattern": "^-?[0-9]+$",
+        "example": "123400",
+        "description": "Integer paise (1/100 rupee) as a decimal string. Never a JSON number: amounts can exceed 2^53."
+      },
+      "CheckoutStarted": {
+        "type": "object",
+        "required": [
+          "orderId",
+          "razorpayOrderId",
+          "amountPaise",
+          "currency",
+          "keyId"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string"
+          },
+          "razorpayOrderId": {
+            "type": "string"
+          },
+          "amountPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "example": "INR"
+          },
+          "keyId": {
+            "type": "string"
+          }
+        }
+      },
+      "OrderItem": {
+        "type": "object",
+        "required": [
+          "itemType",
+          "itemId",
+          "title",
+          "unitPricePaise"
+        ],
+        "properties": {
+          "itemType": {
+            "type": "string"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unitPricePaise": {
+            "$ref": "#/components/schemas/Money"
+          }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "currency",
+          "listPricePaise",
+          "discountPaise",
+          "totalPaise",
+          "couponCode",
+          "razorpayOrderId",
+          "items",
+          "createdAt",
+          "paidAt",
+          "invoiceId",
+          "creditNoteId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CREATED",
+              "PAID",
+              "FAILED",
+              "EXPIRED",
+              "REFUNDED",
+              "PARTIALLY_REFUNDED"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "listPricePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "discountPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "totalPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "couponCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "razorpayOrderId": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrderItem"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "invoiceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "creditNoteId": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AdminOrder": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Order"
+          },
+          {
+            "type": "object",
+            "required": [
+              "buyerId",
+              "sellerOwnerType",
+              "sellerOwnerId",
+              "commissionBps",
+              "razorpayPaymentId",
+              "fulfilmentFailedAt"
+            ],
+            "properties": {
+              "buyerId": {
+                "type": "string"
+              },
+              "sellerOwnerType": {
+                "type": "string",
+                "enum": [
+                  "USER",
+                  "ORG"
+                ]
+              },
+              "sellerOwnerId": {
+                "type": "string"
+              },
+              "commissionBps": {
+                "type": "integer"
+              },
+              "razorpayPaymentId": {
+                "type": "string",
+                "nullable": true
+              },
+              "fulfilmentFailedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "Wallet": {
+        "type": "object",
+        "required": [
+          "currency",
+          "balances",
+          "lifetimeEarnedPaise",
+          "lifetimeWithdrawnPaise",
+          "minPayoutPaise",
+          "tdsBps"
+        ],
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "balances": {
+            "type": "object",
+            "required": [
+              "available",
+              "pending",
+              "payoutLocked"
+            ],
+            "properties": {
+              "available": {
+                "$ref": "#/components/schemas/Money"
+              },
+              "pending": {
+                "$ref": "#/components/schemas/Money"
+              },
+              "payoutLocked": {
+                "$ref": "#/components/schemas/Money"
+              }
+            }
+          },
+          "lifetimeEarnedPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "lifetimeWithdrawnPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "minPayoutPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "tdsBps": {
+            "type": "integer"
+          }
+        }
+      },
+      "LedgerLine": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "amountPaise",
+          "refType",
+          "refId",
+          "description",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "AVAILABLE",
+              "PENDING",
+              "PAYOUT_LOCKED"
+            ]
+          },
+          "amountPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "refType": {
+            "type": "string"
+          },
+          "refId": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Payout": {
+        "type": "object",
+        "required": [
+          "id",
+          "ownerType",
+          "ownerId",
+          "status",
+          "mode",
+          "amountPaise",
+          "tdsPaise",
+          "tdsBps",
+          "netPaise",
+          "currency",
+          "utr",
+          "failureReason",
+          "requestedBy",
+          "approvedBy",
+          "createdAt",
+          "approvedAt",
+          "paidAt",
+          "destination"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ownerType": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ORG"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "APPROVED",
+              "PROCESSING",
+              "PAID",
+              "REJECTED",
+              "REVERSED",
+              "FAILED",
+              "MANUAL_REVIEW"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "IMPS",
+              "UPI",
+              "NEFT"
+            ]
+          },
+          "amountPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "tdsPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "tdsBps": {
+            "type": "integer"
+          },
+          "netPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "utr": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "approvedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "destination": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          }
+        }
+      },
+      "Refund": {
+        "type": "object",
+        "required": [
+          "id",
+          "orderId",
+          "status",
+          "amountPaise",
+          "currency",
+          "reason",
+          "requestedBy",
+          "decidedBy",
+          "failureReason",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REQUESTED",
+              "APPROVED",
+              "PROCESSING",
+              "PROCESSED",
+              "REJECTED",
+              "FAILED"
+            ]
+          },
+          "amountPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "decidedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PlanVersion": {
+        "type": "object",
+        "required": [
+          "id",
+          "planId",
+          "pricePaise",
+          "currency",
+          "interval",
+          "commissionBps",
+          "limits",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "pricePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string",
+            "enum": [
+              "MONTH",
+              "YEAR"
+            ]
+          },
+          "commissionBps": {
+            "type": "integer"
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats (null = unlimited)."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Plan": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "audience",
+          "isActive",
+          "versions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "CREATOR",
+              "ORG"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanVersion"
+            }
+          }
+        }
+      },
+      "PlanList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            }
+          }
+        }
+      },
+      "Coupon": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "kind",
+          "value",
+          "fundedBy",
+          "scope",
+          "ownerType",
+          "ownerId",
+          "itemType",
+          "itemId",
+          "maxUses",
+          "expiresAt",
+          "isActive",
+          "usedCount",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PERCENT",
+              "FLAT"
+            ]
+          },
+          "value": {
+            "$ref": "#/components/schemas/Money",
+            "description": "PERCENT: basis points (2000 = 20%). FLAT: paise."
+          },
+          "fundedBy": {
+            "type": "string",
+            "enum": [
+              "PLATFORM",
+              "CREATOR"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "SELLER",
+              "ITEM"
+            ]
+          },
+          "ownerType": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "USER",
+              "ORG",
+              null
+            ]
+          },
+          "ownerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemType": {
+            "type": "string",
+            "nullable": true
+          },
+          "itemId": {
+            "type": "string",
+            "nullable": true
+          },
+          "maxUses": {
+            "type": "integer",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "usedCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FinanceSummary": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "currency",
+          "gmvPaise",
+          "orderCount",
+          "platformRevenuePaise",
+          "taxPayablePaise",
+          "refundsProcessedPaise",
+          "refundCount",
+          "payoutsPaidPaise",
+          "payoutsPaidCount",
+          "payoutsPendingPaise",
+          "payoutsPendingCount",
+          "activePaidSubscribers"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "gmvPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "orderCount": {
+            "type": "integer"
+          },
+          "platformRevenuePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "taxPayablePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "refundsProcessedPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "refundCount": {
+            "type": "integer"
+          },
+          "payoutsPaidPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "payoutsPaidCount": {
+            "type": "integer"
+          },
+          "payoutsPendingPaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "payoutsPendingCount": {
+            "type": "integer"
+          },
+          "activePaidSubscribers": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReconciliationRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "date",
+          "status",
+          "details",
+          "startedAt",
+          "finishedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "example": "2026-11-03",
+            "description": "IST calendar day."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "MISMATCH",
+              "ERROR"
+            ]
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per check: counts and the mismatching items (amounts are Money strings)."
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [

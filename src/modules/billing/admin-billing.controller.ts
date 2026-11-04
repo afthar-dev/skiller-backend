@@ -6,6 +6,7 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
@@ -41,6 +42,7 @@ export class AdminBillingController {
 
   @Get()
   @RequirePermission("billing.plans.manage")
+  @ApiResult(200, "PlanList")
   @ApiOperation({ summary: "All plans with every version" })
   list() {
     return this.plans.listAll();
@@ -76,6 +78,7 @@ export class AdminRefundsController {
 
   @Get()
   @RequirePermission("billing.refund")
+  @ApiPageResult("Refund")
   @ApiOperation({ summary: "Refunds, newest first, optionally by status, order and IST day range" })
   @ApiZodQuery(refundListSchema)
   @ApiPagination()
@@ -88,6 +91,7 @@ export class AdminRefundsController {
   @HttpCode(200)
   @RequirePermission("billing.refund")
   @RequireStepUp()
+  @ApiResult(200, "Refund")
   @ApiOperation({ summary: "Approve a refund request and start the Razorpay refund (step-up required, audited). Repeating it retries a start that failed." })
   @ApiErrorResponse(409, "REFUND_NOT_PENDING: the refund was already decided.")
   @ApiErrorResponse(502, "REFUND_GATEWAY_ERROR: Razorpay is unavailable; approve again to retry.")
@@ -99,6 +103,7 @@ export class AdminRefundsController {
   @HttpCode(200)
   @RequirePermission("billing.refund")
   @RequireStepUp()
+  @ApiResult(200, "Refund")
   @ApiOperation({ summary: "Reject a refund request; the buyer is told (step-up required, audited)" })
   @ApiZodBody(rejectSchema)
   @ApiErrorResponse(409, "REFUND_NOT_PENDING: the refund was already decided.")

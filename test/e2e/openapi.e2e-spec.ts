@@ -59,6 +59,33 @@ describe("openapi", () => {
     expect(post.requestBody?.content["application/json"].schema.properties).toHaveProperty("purpose");
   });
 
+  it("documents the money routes and defines Money as an integer-paise string", () => {
+    for (const path of ["/v1/checkout", "/v1/wallet/me", "/v1/wallet/payouts", "/v1/admin/finance/summary", "/v1/admin/finance/reconciliation/run", "/v1/admin/coupons", "/v1/coupons/mine", "/v1/webhooks/razorpay", "/v1/webhooks/razorpayx"]) {
+      expect(doc.paths[path]).toBeDefined();
+    }
+    expect(doc.components?.schemas?.Money).toMatchObject({ type: "string", pattern: "^-?[0-9]+$" });
+  });
+
+  it("documents every money field as a string: *Paise properties are Money or a string, never a number", () => {
+    const offenders: string[] = [];
+    const walk = (node: unknown, where: string) => {
+      if (Array.isArray(node)) return node.forEach((n, i) => walk(n, `${where}[${i}]`));
+      if (!node || typeof node !== "object") return;
+      const obj = node as Record<string, unknown>;
+      const props = obj.properties as Record<string, { type?: string; $ref?: string; allOf?: unknown }> | undefined;
+      for (const [name, prop] of Object.entries(props ?? {})) {
+        if (/(Paise|^available|^pending|^payoutLocked)$/.test(name) && prop.type !== "string" && prop.$ref !== "#/components/schemas/Money") offenders.push(`${where}.${name}`);
+      }
+      for (const [k, v] of Object.entries(obj)) walk(v, `${where}.${k}`);
+    };
+    walk(doc, "doc");
+    expect(offenders).toEqual([]);
+    const wallet = doc.components?.schemas?.Wallet as { properties: { balances: { properties: Record<string, unknown> } } };
+    expect(wallet.properties.balances.properties.available).toEqual({ $ref: "#/components/schemas/Money" });
+    const me = (doc.paths["/v1/wallet/me"]?.get as { responses: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }> }).responses["200"];
+    expect(me.content?.["application/json"]?.schema?.$ref).toBe("#/components/schemas/Wallet");
+  });
+
   it("serves swagger UI at /v1/docs when enabled", async () => {
     const res = await request(app.getHttpServer()).get("/v1/docs-json");
     expect(res.status).toBe(200);

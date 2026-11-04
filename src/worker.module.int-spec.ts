@@ -50,11 +50,50 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(QueueWorkerRunner).startedQueues.sort()).toEqual(Object.values(QueueNames).sort());
   });
 
-  it("schedules the checkout housekeeping jobs and registers payment webhook handlers", async () => {
+  it("schedules every repeatable job: outbox relay, media cleanup, order expiry, idempotency cleanup, grace expiry, hold release, invoices, refunds, payouts re-drive, reconciliation", async () => {
     const { queueToken, QueueNames } = await import("./common/queue/queue.constants");
+    const keys = async (name: string) =>
+      (await app.get<import("bullmq").Queue>(queueToken(name as never)).getJobSchedulers()).map((x) => x.key).sort();
+    expect(await keys(QueueNames.outbox)).toEqual(["outbox-relay"]);
+    expect(await keys(QueueNames.maintenance)).toEqual(
+      ["holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
+    );
+    const nightly = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).find((x) => x.key === "reconciliation.nightly");
+    expect(nightly).toMatchObject({ pattern: "0 2 * * *", tz: "Asia/Kolkata" });
+  });
+
+  it("registers a processor for every job name, per queue (webhook dispatcher, payout send, hold release, invoices and credit notes, re-drive, reconciliation, grace expiry, order expiry, idempotency cleanup)", async () => {
+    const { ProcessorRegistry } = await import("./common/queue/processor-registry");
+    const { QueueNames } = await import("./common/queue/queue.constants");
+    const registry = app.get(ProcessorRegistry);
+    const jobs = (queue: string) => registry.for(queue as never).flatMap((p) => p.jobNames).sort();
+    expect(jobs(QueueNames.billing)).toEqual(["payout.send", "webhook.process"]);
+    expect(jobs(QueueNames.maintenance)).toEqual(
+      ["holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
+    );
+  });
+
+  it("registers a webhook handler for every Razorpay and RazorpayX event the platform acts on", async () => {
     const { WebhookDispatcher } = await import("./modules/billing");
-    const schedulers = await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers();
-    expect(schedulers.map((x) => x.key)).toEqual(expect.arrayContaining(["orders.expire", "idempotency.cleanup", "holds.release", "invoices.complete", "refunds.resume", "payouts.redrive", "reconciliation.nightly"]));
-    expect(app.get(WebhookDispatcher).registeredTypes()).toEqual(expect.arrayContaining(["payment.captured", "payment.failed", "refund.processed", "payout.processed", "payout.reversed", "payout.failed", "payout.rejected", "fund_account.validation.completed", "fund_account.validation.failed"]));
+    expect(app.get(WebhookDispatcher).registeredTypes().sort()).toEqual(
+      [
+        "fund_account.validation.completed",
+        "fund_account.validation.failed",
+        "payment.captured",
+        "payment.failed",
+        "payout.failed",
+        "payout.processed",
+        "payout.rejected",
+        "payout.reversed",
+        "refund.failed",
+        "refund.processed",
+        "subscription.activated",
+        "subscription.cancelled",
+        "subscription.charged",
+        "subscription.completed",
+        "subscription.halted",
+        "subscription.pending",
+      ].sort(),
+    );
   });
 });

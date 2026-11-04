@@ -10,6 +10,7 @@ import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
 import { Idempotent } from "../../common/idempotency";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { OrganizationsService } from "../organizations";
@@ -34,6 +35,7 @@ export class PlansController {
 
   @Public()
   @Get("plans")
+  @ApiResult(200, "PlanList")
   @ApiOperation({ summary: "Plans a customer can buy now (newest version per interval)" })
   list() {
     return this.plans.listPublic();
@@ -155,6 +157,7 @@ export class CheckoutController {
   @Idempotent()
   @Post()
   @HttpCode(201)
+  @ApiResult(201, "CheckoutStarted")
   @ApiOperation({ summary: "Start buying an item: creates the order and the Razorpay order (requires Idempotency-Key)" })
   @ApiZodBody(checkoutBody)
   @ApiErrorResponse(409, "Idempotency conflict, item not purchasable, or coupon already used.")
@@ -188,6 +191,7 @@ export class OrdersController {
 
   @AuthenticatedOnly()
   @Get()
+  @ApiPageResult("Order")
   @ApiOperation({ summary: "My orders, newest first" })
   @ApiPagination()
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -196,6 +200,7 @@ export class OrdersController {
 
   @AuthenticatedOnly()
   @Get(":id")
+  @ApiResult(200, "Order")
   @ApiOperation({ summary: "One of my orders" })
   get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.orders.getFor(user.id, id);
@@ -241,6 +246,7 @@ export class OrderRefundsController {
   @Idempotent()
   @Post(":id/refund-requests")
   @HttpCode(201)
+  @ApiResult(201, "Refund")
   @ApiOperation({ summary: "Ask for a full refund of my paid order (requires Idempotency-Key). Finance approves or rejects it." })
   @ApiZodBody(refundRequestBody)
   @ApiErrorResponse(422, "REFUND_NOT_ELIGIBLE: the order is not paid, is outside the refund window, or already has a refund.")

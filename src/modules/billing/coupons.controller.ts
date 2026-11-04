@@ -8,6 +8,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { ProfilesService } from "../users";
@@ -54,6 +55,7 @@ export class AdminCouponsController {
 
   @Get()
   @RequirePermission("billing.coupons.manage")
+  @ApiPageResult("Coupon")
   @ApiOperation({ summary: "Platform-funded coupons, newest first (`active=true|false`, `code=` prefix)" })
   @ApiPagination()
   list(@Query() query: Record<string, unknown>) {
@@ -64,6 +66,7 @@ export class AdminCouponsController {
   @Post()
   @RequirePermission("billing.coupons.manage")
   @RequireStepUp()
+  @ApiResult(201, "Coupon")
   @ApiOperation({ summary: "Create a platform-funded coupon: for everything, one seller, or one item (step-up required, audited)" })
   @ApiZodBody(platformBody)
   @ApiErrorResponse(409, "COUPON_CODE_TAKEN")
@@ -75,6 +78,7 @@ export class AdminCouponsController {
   @Patch(":id")
   @RequirePermission("billing.coupons.manage")
   @RequireStepUp()
+  @ApiResult(200, "Coupon")
   @ApiOperation({ summary: "Switch a platform coupon on or off, or change its use limit or expiry (code, kind and value never change; step-up required, audited)" })
   @ApiZodBody(patchBody)
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
@@ -108,6 +112,7 @@ export class CreatorCouponsController {
 
   @AuthenticatedOnly()
   @Get()
+  @ApiPageResult("Coupon")
   @ApiOperation({ summary: "My coupons, newest first" })
   @ApiPagination()
   async list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -116,6 +121,7 @@ export class CreatorCouponsController {
 
   @AuthenticatedOnly()
   @Post()
+  @ApiResult(201, "Coupon")
   @ApiOperation({ summary: "Create a coupon for my items. Discounts come out of my share; the plan must include creator coupons" })
   @ApiZodBody(mineBody)
   @ApiErrorResponse(403, "CREATOR_REQUIRED, or ENTITLEMENT_LIMIT_REACHED when the plan has no creator coupons.")
@@ -127,6 +133,7 @@ export class CreatorCouponsController {
 
   @AuthenticatedOnly()
   @Patch(":id")
+  @ApiResult(200, "Coupon")
   @ApiOperation({ summary: "Switch one of my coupons on or off, or change its use limit or expiry" })
   @ApiZodBody(patchBody)
   async update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {

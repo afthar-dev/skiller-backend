@@ -9,6 +9,7 @@ import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
 import { Idempotent } from "../../common/idempotency";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { OrganizationsService } from "../organizations";
@@ -85,6 +86,7 @@ export class WalletController {
 
   @AuthenticatedOnly()
   @Get("me")
+  @ApiResult(200, "Wallet")
   @ApiOperation({ summary: "My balances (available, pending, locked for payouts) as strings, and lifetime earned / withdrawn" })
   async me(@CurrentUser() user: AuthUser) {
     return this.wallet.me(await this.owner(user));
@@ -92,6 +94,7 @@ export class WalletController {
 
   @AuthenticatedOnly()
   @Get("ledger")
+  @ApiPageResult("LedgerLine")
   @ApiOperation({ summary: "My ledger lines, newest first" })
   @ApiPagination()
   async ledger(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -100,6 +103,7 @@ export class WalletController {
 
   @AuthenticatedOnly()
   @Get("payouts")
+  @ApiPageResult("Payout")
   @ApiOperation({ summary: "My payouts, newest first" })
   @ApiPagination()
   async list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -111,6 +115,7 @@ export class WalletController {
   @Post("payouts")
   @HttpCode(201)
   @RequireStepUp()
+  @ApiResult(201, "Payout")
   @ApiOperation({ summary: "Withdraw money: locks the amount from my available balance until finance decides (requires Idempotency-Key and step-up)" })
   @ApiZodBody(payoutRequestSchema)
   @ApiErrorResponse(409, "INSUFFICIENT_BALANCE, PAYOUT_ACCOUNT_COOLDOWN or an idempotency conflict.")
@@ -159,6 +164,7 @@ export class OrgWalletController {
 
   @Get("me")
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiResult(200, "Wallet")
   @ApiOperation({ summary: "The organization's balances and lifetime totals" })
   async me(@Param("slug") slug: string) {
     return this.wallet.me(await this.owner(slug));
@@ -166,6 +172,7 @@ export class OrgWalletController {
 
   @Get("ledger")
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiPageResult("LedgerLine")
   @ApiOperation({ summary: "The organization's ledger lines, newest first" })
   @ApiPagination()
   async ledger(@Param("slug") slug: string, @Query() query: Record<string, unknown>) {
@@ -174,6 +181,7 @@ export class OrgWalletController {
 
   @Get("payouts")
   @RequirePermission("org.manage", { orgParam: "slug" })
+  @ApiPageResult("Payout")
   @ApiOperation({ summary: "The organization's payouts, newest first" })
   @ApiPagination()
   async list(@Param("slug") slug: string, @Query() query: Record<string, unknown>) {
@@ -185,6 +193,7 @@ export class OrgWalletController {
   @HttpCode(201)
   @RequirePermission("org.manage", { orgParam: "slug" })
   @RequireStepUp()
+  @ApiResult(201, "Payout")
   @ApiOperation({ summary: "Withdraw the organization's money (requires Idempotency-Key and step-up)" })
   @ApiZodBody(payoutRequestSchema)
   async request(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {

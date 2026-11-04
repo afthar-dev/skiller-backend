@@ -6,6 +6,7 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
@@ -52,6 +53,7 @@ export class AdminWalletController {
 
   @Get("payouts")
   @RequirePermission("wallet.view_any")
+  @ApiPageResult("Payout")
   @ApiOperation({ summary: "Payouts, newest first, optionally by status, owner and IST day range" })
   @ApiZodQuery(listSchema)
   @ApiPagination()
@@ -62,6 +64,7 @@ export class AdminWalletController {
 
   @Get("payouts/:id")
   @RequirePermission("wallet.view_any")
+  @ApiResult(200, "Payout")
   @ApiOperation({ summary: "One payout" })
   get(@Param("id") id: string) {
     return this.payouts.get(id);
@@ -71,6 +74,7 @@ export class AdminWalletController {
   @HttpCode(200)
   @RequirePermission("payout.approve")
   @RequireStepUp()
+  @ApiResult(200, "Payout")
   @ApiOperation({ summary: "Approve a payout: it is sent to RazorpayX by a background job (step-up required, audited). Repeating it never sends twice." })
   @ApiErrorResponse(409, "PAYOUT_NOT_PENDING: the payout was already decided.")
   approve(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
@@ -81,6 +85,7 @@ export class AdminWalletController {
   @HttpCode(200)
   @RequirePermission("payout.approve")
   @RequireStepUp()
+  @ApiResult(200, "Payout")
   @ApiOperation({ summary: "Reject a payout request: the locked funds return to the seller's available balance (step-up required, audited)" })
   @ApiZodBody(rejectSchema)
   @ApiErrorResponse(409, "PAYOUT_NOT_PENDING: the payout was already decided.")
