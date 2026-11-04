@@ -29,7 +29,7 @@ describe("PermissionRegistry / definePermissions", () => {
     expect([...PLATFORM_PERMISSION_KEYS].sort()).toEqual(
       [
         "profile.update_any", "user.view", "user.suspend", "user.revoke_sessions", "rbac.view", "rbac.manage", "role.grant", "audit.view",
-        "media.upload", "media.manage_any", "org.create", "org.manage", "org.invite", "settings.manage", "flags.manage", "notification.view",
+        "media.upload", "media.manage_any", "org.create", "org.manage", "org.invite", "org.wallet.manage", "settings.manage", "flags.manage", "notification.view",
         "billing.plans.manage", "billing.view_any", "billing.refund", "billing.coupons.manage", "finance.view", "finance.reconcile", "payout.approve", "wallet.view_any",
       ].sort(),
     );

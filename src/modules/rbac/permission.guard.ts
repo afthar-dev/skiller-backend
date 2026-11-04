@@ -33,7 +33,7 @@ export class PermissionGuard implements CanActivate {
       orgId = await this.orgParams.resolve(meta.orgParam, raw);
     }
 
-    if (!(await this.permissions.has(req.user.id, meta.key, orgId))) {
+    if (!(await this.permissions.has(req.user.id, meta.key, orgId, { orgScopedOnly: meta.orgScopedOnly }))) {
       throw new AppError("FORBIDDEN", 403, "You do not have permission to do this", { permission: meta.key });
     }
     return true;

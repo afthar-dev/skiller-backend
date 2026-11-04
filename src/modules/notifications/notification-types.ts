@@ -23,6 +23,7 @@ export const NOTIFICATION_TYPES = {
   "payout.paid": { transactional: true },
   "payout.failed": { transactional: true },
   "payout.review": { transactional: false },
+  "payout_account.changed": { transactional: true },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

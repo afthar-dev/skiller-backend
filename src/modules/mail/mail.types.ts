@@ -1,4 +1,4 @@
-export type MailTemplate = "otp" | "welcome" | "org_invite" | "media_failed" | "order_receipt";
+export type MailTemplate = "otp" | "welcome" | "org_invite" | "media_failed" | "order_receipt" | "payout_account_changed";
 
 export type MailCategory = "transactional" | "promotional";
 
@@ -9,4 +9,6 @@ export interface MailData {
   media_failed: { fileName: string; reason: string };
   /** amount is display text (e.g. "INR 800.00"), formatted from integer paise by the sender. */
   order_receipt: { orderId: string; itemTitle: string; amount: string; paidOn: string };
+  /** accountSummary is masked display text (e.g. "bank account ending 6789"); cooldownEnds is display text in IST. */
+  payout_account_changed: { ownerLabel: string; accountSummary: string; cooldownEnds: string; replaced: boolean };
 }

@@ -23,6 +23,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "payout.rejected": true,
   "payout.settled": true,
   "payout.failed": true,
+  "payout_account.changed": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
 };

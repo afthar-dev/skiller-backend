@@ -28,3 +28,9 @@ export function istWindow(from?: string, to?: string): { gte?: Date; lt?: Date }
   if (!from && !to) return undefined;
   return { ...(from ? { gte: istDayRange(from).from } : {}), ...(to ? { lt: istDayRange(to).to } : {}) };
 }
+
+/** "5 Nov 2026, 9:25 am IST": for people reading mail and notifications. */
+export function formatIstDateTime(at: Date): string {
+  const text = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).format(at);
+  return `${text.replace(/\s*(am|pm)$/i, (m) => ` ${m.trim().toLowerCase()}`)} IST`;
+}

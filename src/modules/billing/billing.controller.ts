@@ -114,7 +114,7 @@ export class OrgSubscriptionsController {
 
   @Post("checkout")
   @HttpCode(201)
-  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Start paying for an organization plan" })
   @ApiZodBody(planBody)
   async checkout(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {
@@ -123,7 +123,7 @@ export class OrgSubscriptionsController {
 
   @Post(":id/cancel")
   @HttpCode(200)
-  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Cancel at the end of the paid period" })
   async cancel(@Param("slug") slug: string, @Param("id") id: string) {
     return this.subscriptions.cancel(await this.owner(slug), id);
@@ -131,7 +131,7 @@ export class OrgSubscriptionsController {
 
   @Post(":id/change")
   @HttpCode(200)
-  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Upgrade now or schedule a downgrade for the period end" })
   @ApiZodBody(planBody)
   async change(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Param("id") id: string, @Body() body: unknown) {

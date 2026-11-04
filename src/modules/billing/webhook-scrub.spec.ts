@@ -7,18 +7,24 @@ describe("scrubPayoutDetails", () => {
         "fund_account.validation": {
           entity: {
             id: "fav_1",
-            fund_account: { bank_account: { ifsc: "HDFC0001234", account_number: "50100123456789", name: "Asha Rao" }, vpa: { address: "asha@okhdfc" } },
+            fund_account: { bank_account: { ifsc: "HDFC0001234", account_number: "50100123456789", name: "Asha Rao" }, vpa: { username: "asha", handle: "okhdfc", address: "asha@okhdfc" } },
             results: [{ pan: "ABCDE1234F" }],
           },
         },
       },
     };
     const text = JSON.stringify(scrubPayoutDetails(payload));
-    for (const secret of ["50100123456789", "asha@okhdfc", "ABCDE1234F"]) expect(text).not.toContain(secret);
+    for (const secret of ["50100123456789", "asha@okhdfc", "ABCDE1234F", '"username":"asha"', '"handle":"okhdfc"']) expect(text).not.toContain(secret);
     expect(text).toContain("****6789");
     expect(text).toContain("as***@okhdfc");
     expect(text).toContain("HDFC0001234");
     expect(text).toContain("fav_1");
+  });
+
+  it("masks a vpa that is a plain string or lacks `address`", () => {
+    const out = JSON.stringify(scrubPayoutDetails({ vpa: "rahul.k@ybl", other: { vpa: { username: "rahul.k", handle: "ybl" } } }));
+    expect(out).not.toContain("rahul.k");
+    expect(out).toContain("ra***@ybl");
   });
 
   it("leaves scalars and null alone and does not mutate its input", () => {

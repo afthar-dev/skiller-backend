@@ -145,7 +145,7 @@ export class OrgWalletController {
   }
 
   @Put("payout-account")
-  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @RequireStepUp()
   @ApiOperation({ summary: "Set the organization's payout account (step-up required, audited)" })
   @ApiZodBody(payoutAccountSchema)
@@ -191,7 +191,7 @@ export class OrgWalletController {
   @Idempotent()
   @Post("payouts")
   @HttpCode(201)
-  @RequirePermission("org.manage", { orgParam: "slug" })
+  @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @RequireStepUp()
   @ApiResult(201, "Payout")
   @ApiOperation({ summary: "Withdraw the organization's money (requires Idempotency-Key and step-up)" })

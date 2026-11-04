@@ -18,6 +18,7 @@ export const OrgPermissions = definePermissions("org", {
   create: "Create organizations",
   manage: "Manage an organization",
   invite: "Invite members to an organization",
+  "wallet.manage": "Move an organization's money: payout account, payouts, subscription payments (only held as an org-scoped grant)",
 });
 export const SettingsPermissions = definePermissions("settings", { manage: "Manage platform settings" });
 export const FlagsPermissions = definePermissions("flags", { manage: "Manage feature flags" });

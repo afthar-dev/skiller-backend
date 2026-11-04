@@ -108,6 +108,19 @@ export type DomainEvent =
       netPaise: string;
       outcome: "FAILED" | "REVERSED";
       reason: string;
+    }
+  | {
+      /** An owner's payout account was set or replaced: the owner (USER) or every org_owner (ORG) is told. Carries masked data only. */
+      type: "payout_account.changed";
+      payoutAccountId: string;
+      ownerType: "USER" | "ORG";
+      ownerId: string;
+      changedBy: string;
+      /** ISO instant until which payouts are paused (equal to the change time for a first account). */
+      cooldownUntil: string;
+      replaced: boolean;
+      /** Masked, e.g. "bank account ending 6789" or "UPI id as***@okhdfc". */
+      accountSummary: string;
     };
 
 export type DomainEventType = DomainEvent["type"];

@@ -13,6 +13,17 @@ export class PlatformRoleDirectory {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
+  /** Users holding the active role in one organization (e.g. every `org_owner`), by user id. */
+  async userIdsWithRoleInOrg(roleKey: string, orgId: string): Promise<string[]> {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { orgId, role: { key: roleKey }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
+    return rows.map((r) => r.userId);
+  }
+
   /** Users holding the active platform-wide role, newest first, strictly below `cursor`. */
   async userIdsWithRole(roleKey: string, cursor: string | undefined, take: number): Promise<string[]> {
     const now = this.clock.now();

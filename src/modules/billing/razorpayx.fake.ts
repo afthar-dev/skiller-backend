@@ -130,7 +130,7 @@ export class FakeRazorpayXClient implements RazorpayXClient {
         id: fa.id,
         entity: "fund_account",
         contact_id: fa.contactId,
-        ...(fa.bank ? { account_type: "bank_account", bank_account: { name: fa.bank.name, ifsc: fa.bank.ifsc, account_number: fa.bank.accountNumber } } : { account_type: "vpa", vpa: { address: fa.vpa!.address } }),
+        ...(fa.bank ? { account_type: "bank_account", bank_account: { name: fa.bank.name, ifsc: fa.bank.ifsc, account_number: fa.bank.accountNumber } } : { account_type: "vpa", vpa: { username: fa.vpa!.address.split("@")[0], handle: fa.vpa!.address.split("@")[1], address: fa.vpa!.address } }),
       },
       results: { account_status: outcome === "failed" ? null : outcome, registered_name: opts.registeredName ?? fa.bank?.name ?? null },
     };

@@ -6,6 +6,7 @@ import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
 import type { MutationMeta } from "../rbac";
@@ -98,6 +99,7 @@ export class PayoutAccountsService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly audit: AuditService,
     private readonly alerts: FinanceAlerts,
+    private readonly outbox: OutboxService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -166,6 +168,16 @@ export class PayoutAccountsService {
         before: live ? toPayoutAccountView(live) : null,
         after: { ...toPayoutAccountView(created), ownerType: owner.ownerType, ownerId: owner.ownerId, reviewFlag: created.reviewFlag },
         ...meta,
+      });
+      await this.outbox.enqueue(tx, {
+        type: "payout_account.changed",
+        payoutAccountId: created.id,
+        ownerType: owner.ownerType,
+        ownerId: owner.ownerId,
+        changedBy: actorId,
+        cooldownUntil: created.cooldownUntil.toISOString(),
+        replaced: !!live,
+        accountSummary: created.type === "BANK" ? `bank account ending ${created.accountLast4}` : `UPI id ${created.vpaMasked}`,
       });
       return { account: created, previous: live, duplicateOf: other };
     });

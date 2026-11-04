@@ -79,9 +79,10 @@ export class PermissionService {
     return { platform, byOrg };
   }
 
-  /** A platform grant satisfies any org. Without `orgId` only platform grants count. */
-  async has(userId: string, key: string, orgId?: string): Promise<boolean> {
+  /** A platform grant satisfies any org, unless `orgScopedOnly` (money routes): then only a grant held in that org counts. Without `orgId` only platform grants count. */
+  async has(userId: string, key: string, orgId?: string, opts: { orgScopedOnly?: boolean } = {}): Promise<boolean> {
     const eff = await this.effective(userId);
+    if (opts.orgScopedOnly) return orgId !== undefined && (eff.byOrg.get(orgId)?.has(key) ?? false);
     if (eff.platform.has(key)) return true;
     return orgId !== undefined && (eff.byOrg.get(orgId)?.has(key) ?? false);
   }

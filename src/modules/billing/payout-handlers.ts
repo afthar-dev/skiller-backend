@@ -3,7 +3,9 @@ import { CLOCK, type Clock } from "../../common/clock/clock";
 import { EventBus } from "../../common/outbox/event-bus";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { NotificationsService } from "../notifications";
+import { PlatformRoleDirectory } from "../rbac";
 import { FinanceAlerts } from "./finance-alerts.service";
+import { formatIstDateTime } from "./ist";
 import { formatInr, fromApi, fromGatewayAmount } from "./money";
 import { PayoutsService, type PayoutWebhookEntity } from "./payouts.service";
 import { WebhookDispatcher, type WebhookEventContext } from "./webhook.dispatcher";
@@ -45,6 +47,7 @@ export class PayoutHandlers implements OnModuleInit {
     private readonly notifications: NotificationsService,
     private readonly alerts: FinanceAlerts,
     private readonly prisma: PrismaService,
+    private readonly roleDirectory: PlatformRoleDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -55,6 +58,32 @@ export class PayoutHandlers implements OnModuleInit {
     this.dispatcher.on("payout.rejected", (e) => this.withEntity(e, (entity) => this.payouts.onReturned(entity, "rejected")));
     for (const type of ["payout.processed", "payout.reversed", "payout.failed", "payout.rejected"]) this.dispatcher.onExhausted(type, (e, err) => this.giveUp(e, err));
 
+    this.bus.on("payout_account.changed", async (e, { eventId }) => {
+      let recipients: string[];
+      let ownerLabel = "your account";
+      if (e.ownerType === "USER") recipients = [e.ownerId];
+      else {
+        recipients = await this.roleDirectory.userIdsWithRoleInOrg("org_owner", e.ownerId);
+        const org = await this.prisma.organization.findUnique({ where: { id: e.ownerId }, select: { name: true } });
+        ownerLabel = org?.name ?? "your organization";
+      }
+      const until = new Date(e.cooldownUntil);
+      const cooldownEnds = formatIstDateTime(until);
+      const body = e.replaced
+        ? `The payout account of ${ownerLabel} was replaced (${e.accountSummary}). Payouts are paused for 24 hours, until ${cooldownEnds}. If this was not you, contact support right away.`
+        : `A payout account was added for ${ownerLabel} (${e.accountSummary}). If this was not you, contact support right away.`;
+      for (const userId of recipients) {
+        await this.notifications.notify(userId, {
+          type: "payout_account.changed",
+          title: e.replaced ? "Payout account replaced" : "Payout account added",
+          body,
+          link: e.ownerType === "USER" ? "/wallet" : undefined,
+          data: { payoutAccountId: e.payoutAccountId, cooldownUntil: e.cooldownUntil, ownerType: e.ownerType, ownerId: e.ownerId, changedBy: e.changedBy },
+          email: { template: "payout_account_changed", data: { ownerLabel, accountSummary: e.accountSummary, cooldownEnds, replaced: e.replaced } },
+          sourceEventId: eventId,
+        });
+      }
+    });
     this.bus.on("payout.requested", async (e, { eventId }) => {
       const amount = formatInr(fromApi(e.amountPaise));
       await this.notifications.notify(e.requestedBy, {

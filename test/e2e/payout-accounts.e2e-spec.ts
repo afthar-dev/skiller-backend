@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { EventBus } from "../../src/common/outbox/event-bus";
 import { AppError } from "../../src/common/errors/app-error";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { FakeRazorpayXClient, PAYOUT_ACCOUNT_COOLDOWN, PayoutAccountsService, RAZORPAYX_CLIENT, RazorpayApiError } from "../../src/modules/billing";
@@ -34,6 +35,13 @@ describe("payout accounts and KYC", () => {
       process.stdout.write = out;
       process.stderr.write = err;
     }
+  }
+
+  /** Replays the account-change outbox event like the relay would. */
+  async function replayChange(accountId: string) {
+    const row = (await prisma.outboxEvent.findMany({ where: { type: "payout_account.changed" } })).find((x) => (x.payload as { payoutAccountId?: string }).payoutAccountId === accountId);
+    if (!row) throw new Error(`no payout_account.changed outbox row for ${accountId}`);
+    await t.app.get(EventBus).dispatch({ type: "payout_account.changed", ...(row.payload as object) } as Parameters<EventBus["dispatch"]>[0], row.id);
   }
 
   const rawRow = async (id: string) => (await prisma.$queryRaw<{ j: string }[]>`SELECT to_jsonb(p)::text AS j FROM payout_accounts p WHERE p.id = ${id}`)[0].j;
@@ -97,7 +105,17 @@ describe("payout accounts and KYC", () => {
       const raw = await rawRow(res.body.id);
       expect(raw).not.toContain(vpa);
       expect(raw).not.toContain(pan);
-      expect([...fakeX.fundAccounts.values()].some((f) => f.vpa?.address === vpa)).toBe(true);
+      const sentFa = [...fakeX.fundAccounts.values()].find((f) => f.vpa?.address === vpa);
+      expect(sentFa).toBeDefined();
+
+      // The validation event carries the VPA as { username, handle, address }: none of the three parts may be stored.
+      const hook = fakeX.validationWebhook(sentFa!.id, "active");
+      expect(hook.body).toContain(`"username":"${vpa.split("@")[0]}"`);
+      const stored = await h.deliverX(hook);
+      const payloadText = JSON.stringify((await prisma.webhookEvent.findUniqueOrThrow({ where: { id: stored.id } })).payload);
+      expect(payloadText).not.toContain(vpa);
+      expect(payloadText).not.toContain(vpa.split("@")[0]);
+      expect(payloadText).toContain("as***@okhdfc");
     });
 
     it("needs a creator, a fresh step-up, a valid body and authentication", async () => {
@@ -279,6 +297,39 @@ describe("payout accounts and KYC", () => {
       expect(got.body.account).toEqual(res.body);
       const plain = await t.login();
       expect((await h.http().get("/v1/wallet/payout-account").set(h.auth(plain))).status).toBe(403);
+    });
+  });
+
+  describe("owner notification on change", () => {
+    it("a creator is told by in-app message and email, with the cooldown end, whenever the account is replaced", async () => {
+      const s = await h.creator();
+      await h.stepUp(s);
+      const first = await h.putAccount(s, h.bankBody());
+      expect(first.status).toBe(200);
+      const second = await h.putAccount(s, h.bankBody());
+      await replayChange(first.body.id);
+      await replayChange(second.body.id);
+      await replayChange(second.body.id); // at-least-once redelivery: no duplicates
+      const row = await prisma.payoutAccount.findUniqueOrThrow({ where: { id: second.body.id } });
+      const notes = await prisma.notification.findMany({ where: { userId: s.userId, type: "payout_account.changed" }, orderBy: { id: "asc" } });
+      expect(notes).toHaveLength(2);
+      expect(notes[1].body).toContain("24 hours");
+      expect(JSON.stringify(notes[1].data)).toContain(row.cooldownUntil.toISOString());
+      const mail = await until(async () => t.mail.sent.filter((m) => m.to === s.email && /payout account/i.test(m.subject)).length >= 2 && t.mail.sent.filter((m) => m.to === s.email && /payout account/i.test(m.subject))[1]);
+      expect(mail.html).toContain("IST");
+      expect(t.mail.sent.filter((m) => m.to === s.email && /payout account/i.test(m.subject))).toHaveLength(2);
+    });
+
+    it("an organization's account change goes to every org_owner, not only the actor", async () => {
+      const ownerS = await t.login();
+      const org = (await h.http().post("/v1/orgs").set(h.auth(ownerS)).send({ name: "Notify Org", slug: `nt-${h.uid()}` })).body as { id: string; slug: string };
+      const second = await t.login();
+      await t.app.get(RolesService).grantSystem(second.userId, "org_owner", undefined, org.id);
+      await h.stepUp(ownerS);
+      const res = await h.http().put(`/v1/orgs/${org.slug}/wallet/payout-account`).set(h.auth(ownerS)).send(h.bankBody());
+      expect(res.status).toBe(200);
+      await replayChange(res.body.id);
+      for (const u of [ownerS.userId, second.userId]) expect(await prisma.notification.count({ where: { userId: u, type: "payout_account.changed" } })).toBe(1);
     });
   });
 

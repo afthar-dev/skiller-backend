@@ -9,7 +9,7 @@ jest.mock("@sentry/nestjs", () => ({
 }));
 
 import { AppError } from "../errors/app-error";
-import { initSentry, reportException } from "./sentry";
+import { initSentry, reportException, scrubSentryEvent } from "./sentry";
 
 describe("sentry", () => {
   beforeEach(() => jest.clearAllMocks());
@@ -35,5 +35,22 @@ describe("sentry", () => {
     reportException(err, err.status, { requestId: "req-1" });
     expect(captureException).toHaveBeenCalledWith(err);
     expect(setTag).toHaveBeenCalledWith("requestId", "req-1");
+  });
+
+  it("strips request data, cookies, headers and the query string but keeps method and path; scrubs sensitive extra/context keys", () => {
+    const event = {
+      request: { method: "PUT", url: "https://api.skiller.in/v1/wallet/payout-account?pan=ABCDE1234F", data: '{"pan":"ABCDE1234F"}', cookies: { a: "b" }, headers: { authorization: "Bearer x" }, query_string: "pan=ABCDE1234F" },
+      extra: { accountNumber: "50100123456789", note: "ok", nested: { vpa: "a@b", keep: 1 } },
+      contexts: { payout: { pan: "ABCDE1234F", token: "t", span_id: "abc" }, trace: { parent_span_id: "p", span_id: "s" } },
+    };
+    const out = scrubSentryEvent(event as never) as typeof event;
+    expect(out.request).toEqual({ method: "PUT", url: "https://api.skiller.in/v1/wallet/payout-account" });
+    expect(out.extra).toEqual({ accountNumber: "[Filtered]", note: "ok", nested: { vpa: "[Filtered]", keep: 1 } });
+    expect(out.contexts).toEqual({ payout: { pan: "[Filtered]", token: "[Filtered]", span_id: "abc" }, trace: { parent_span_id: "p", span_id: "s" } });
+  });
+
+  it("initialises with no default PII collection and the scrubbing hook", () => {
+    initSentry({ dsn: "https://k@o0.ingest.sentry.io/1" });
+    expect(init).toHaveBeenCalledWith(expect.objectContaining({ beforeSend: scrubSentryEvent, dataCollection: expect.objectContaining({ userInfo: false, httpBodies: [] }) }));
   });
 });

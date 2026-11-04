@@ -572,6 +572,20 @@ describe("payouts", () => {
       expect((await http().get(`/v1/admin/payouts/${res.body.id}`).set(auth(s))).status).toBe(403);
     });
 
+    it("org money routes need an org-scoped org.wallet.manage: a platform super_admin without an org role is refused, the org owner is not", async () => {
+      const ownerS = await t.login();
+      const org = (await http().post("/v1/orgs").set(auth(ownerS)).send({ name: "Scoped Org", slug: `sc-${h.uid()}` })).body as { id: string; slug: string };
+      const root = await t.login();
+      await t.app.get(RolesService).grantSystem(root.userId, "super_admin");
+      await h.stepUp(root);
+      await h.stepUp(ownerS);
+
+      expect((await http().put(`/v1/orgs/${org.slug}/wallet/payout-account`).set(auth(root)).send(h.bankBody())).status).toBe(403);
+      expect((await http().post(`/v1/orgs/${org.slug}/wallet/payouts`).set(auth(root)).set("Idempotency-Key", randomUUID()).send({ amountPaise: "100000" })).status).toBe(403);
+      expect(await prisma.payoutAccount.count({ where: { ownerType: "ORG", ownerId: org.id } })).toBe(0);
+      expect((await http().put(`/v1/orgs/${org.slug}/wallet/payout-account`).set(auth(ownerS)).send(h.bankBody({ pan: randomPan() }))).status).toBe(200);
+    });
+
     it("an organization's owner runs the payout through the org routes", async () => {
       const ownerS = await t.login();
       const org = (await http().post("/v1/orgs").set(auth(ownerS)).send({ name: "Payout Org", slug: `pw-${h.uid()}` })).body as { id: string; slug: string };
