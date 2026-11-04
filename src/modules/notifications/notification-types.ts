@@ -24,6 +24,7 @@ export const NOTIFICATION_TYPES = {
   "payout.failed": { transactional: true },
   "payout.review": { transactional: false },
   "payout_account.changed": { transactional: true },
+  "course.submitted": { transactional: false },
   "course.approved": { transactional: false },
   "course.rejected": { transactional: false },
   "course.flagged": { transactional: false },

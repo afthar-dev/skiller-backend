@@ -110,6 +110,14 @@ export class StudioCoursesController {
   }
 
   @AuthenticatedOnly()
+  @Post(":id/withdraw")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Take a course back from review to draft (content is locked while it is in review)" })
+  withdraw(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
+    return this.publishing.withdraw(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
+  }
+
+  @AuthenticatedOnly()
   @Post(":id/archive")
   @HttpCode(200)
   @ApiOperation({ summary: "Archive a published course: off the catalog and not for sale; enrolled learners keep access" })

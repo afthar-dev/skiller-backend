@@ -1,6 +1,9 @@
 // Public surface of the courses module. Other modules import only from here.
 export { CoursePolicy, ORG_AUTHOR_ROLES } from "./course.policy";
 export { seedCategories, STARTER_CATEGORIES } from "./categories.service";
+export { CourseAccessRules } from "./course-access-rules";
+export type { BuyerRelation } from "./course-access-rules";
+export { CourseMaintenanceProcessor } from "./course-maintenance.processor";
 export { EnrolmentsService } from "./enrolments.service";
 export type { EnrolmentView } from "./enrolments.service";
 export { COURSE_PROGRESS_READER } from "./course-progress";

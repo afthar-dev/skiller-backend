@@ -5,8 +5,7 @@ import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PlatformRoleDirectory } from "../rbac";
-
-export const ORG_LEARNER_ROLE = "org_learner";
+import { ORG_LEARNER_ROLE } from "./course-access-rules";
 
 export interface EnrolmentView {
   id: string;
@@ -107,6 +106,27 @@ export class EnrolmentsService {
       });
     }
     return revoked;
+  }
+
+  /**
+   * Daily sweep: ends every active ORG_SEAT enrolment whose user no longer holds a live org_learner grant in the owning organization
+   * (the grant expired, which emits no event). Batched by enrolment id; safe to repeat. Returns how many were revoked.
+   */
+  async sweepOrgSeats(batch = 500): Promise<number> {
+    let revoked = 0;
+    let after: string | undefined;
+    for (;;) {
+      const rows = await this.prisma.enrolment.findMany({
+        where: { source: "ORG_SEAT", revokedAt: null, ...(after ? { id: { gt: after } } : {}) },
+        select: { id: true, userId: true, course: { select: { ownerId: true } } },
+        orderBy: { id: "asc" },
+        take: batch,
+      });
+      if (rows.length === 0) return revoked;
+      after = rows[rows.length - 1].id;
+      const pairs = new Map(rows.map((r) => [`${r.course.ownerId}:${r.userId}`, { orgId: r.course.ownerId, userId: r.userId }]));
+      for (const p of pairs.values()) revoked += await this.revokeOrgSeats(p.orgId, p.userId);
+    }
   }
 
   async activeFor(userId: string, courseId: string): Promise<Enrolment | null> {

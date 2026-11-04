@@ -14,6 +14,7 @@ import { ReconciliationProcessor } from "./modules/billing/reconciliation.proces
 import { RefundsProcessor } from "./modules/billing/refunds.processor";
 import { SubscriptionMaintenanceProcessor } from "./modules/billing/subscription-maintenance.processor";
 import { CoursesWorkerModule } from "./modules/courses/courses-worker.module";
+import { CourseMaintenanceProcessor } from "./modules/courses/course-maintenance.processor";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
 import { UsersWorkerModule } from "./modules/users/users-worker.module";
@@ -43,6 +44,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly refunds: RefundsProcessor,
     private readonly payouts: PayoutMaintenanceProcessor,
     private readonly reconciliation: ReconciliationProcessor,
+    private readonly courseMaintenance: CourseMaintenanceProcessor,
   ) {}
 
   async onApplicationBootstrap() {
@@ -56,6 +58,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.refunds.schedule();
     await this.payouts.schedule();
     await this.reconciliation.schedule();
+    await this.courseMaintenance.schedule();
   }
 
   async onApplicationShutdown() {

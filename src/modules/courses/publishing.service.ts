@@ -6,6 +6,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
 import { EntitlementsService } from "../billing";
 import { MediaService } from "../media";
+import { CourseNotifier } from "./course-notifier";
 import { lockCourse } from "./course-lock";
 import { stateInvalid, type ActionMeta } from "./course-state";
 import { toCourseView, type CourseView } from "./course-view";
@@ -29,6 +30,7 @@ export class PublishingService {
     private readonly media: MediaService,
     private readonly entitlements: EntitlementsService,
     private readonly audit: AuditService,
+    private readonly notifier: CourseNotifier,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -43,6 +45,22 @@ export class PublishingService {
       await this.assertPublishable(tx, course);
       const row = await tx.course.update({ where: { id }, data: { status: "IN_REVIEW", submittedAt: this.clock.now(), rejectionReason: null } });
       await this.audit.record(tx, { actorId: user.id, action: "course.submit", targetType: "course", targetId: id, before: { status: course.status }, after: { status: row.status }, ...meta });
+      return row;
+    });
+    await this.notifier.notifyModerators(updated, user.id);
+    return toCourseView(updated);
+  }
+
+  /** IN_REVIEW -> DRAFT: the author takes the course back (to edit it) before a moderator decides. */
+  async withdraw(user: { id: string }, id: string, meta: Omit<ActionMeta, "actorId"> = {}): Promise<CourseView> {
+    await this.policy.loadForAuthor(user, id);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await lockCourse(tx, id);
+      const course = await tx.course.findUnique({ where: { id } });
+      if (!course) throw courseNotFound();
+      if (course.status !== "IN_REVIEW") throw stateInvalid("Only a course in review can be withdrawn");
+      const row = await tx.course.update({ where: { id }, data: { status: "DRAFT" } });
+      await this.audit.record(tx, { actorId: user.id, action: "course.withdraw", targetType: "course", targetId: id, before: { status: course.status }, after: { status: row.status }, ...meta });
       return row;
     });
     return toCourseView(updated);

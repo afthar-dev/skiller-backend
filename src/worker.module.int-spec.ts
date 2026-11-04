@@ -70,7 +70,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
       (await app.get<import("bullmq").Queue>(queueToken(name as never)).getJobSchedulers()).map((x) => x.key).sort();
     expect(await keys(QueueNames.outbox)).toEqual(["outbox-relay"]);
     expect(await keys(QueueNames.maintenance)).toEqual(
-      ["holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["courses.seats.sweep", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
     );
     const nightly = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).find((x) => x.key === "reconciliation.nightly");
     expect(nightly).toMatchObject({ pattern: "0 2 * * *", tz: "Asia/Kolkata" });
@@ -83,7 +83,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     const jobs = (queue: string) => registry.for(queue as never).flatMap((p) => p.jobNames).sort();
     expect(jobs(QueueNames.billing)).toEqual(["payout.send", "webhook.process"]);
     expect(jobs(QueueNames.maintenance)).toEqual(
-      ["holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["courses.seats.sweep", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "refunds.resume", "subscriptions.maintain"].sort(),
     );
   });
 

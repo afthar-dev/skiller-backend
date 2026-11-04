@@ -3,9 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { SellableRegistry, type PaidOrder, type SellableDescription, type SellableProvider } from "../billing";
-import { PlatformRoleDirectory } from "../rbac";
-import { EnrolmentsService, ORG_LEARNER_ROLE } from "./enrolments.service";
-import { ORG_AUTHOR_ROLES } from "./org-roles";
+import { CourseAccessRules } from "./course-access-rules";
+import { EnrolmentsService } from "./enrolments.service";
 
 /** Why a course cannot be bought; the specific reasons checkout shows the buyer. */
 export const COURSE_NOT_PURCHASABLE = {
@@ -31,7 +30,7 @@ export class CourseSellable implements SellableProvider, OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly registry: SellableRegistry,
     private readonly enrolments: EnrolmentsService,
-    private readonly roles: PlatformRoleDirectory,
+    private readonly rules: CourseAccessRules,
   ) {}
 
   onModuleInit() {
@@ -44,15 +43,10 @@ export class CourseSellable implements SellableProvider, OnModuleInit {
     const description = { title: course.title, pricePaise: course.pricePaise, sellerOwnerType: course.ownerType, sellerOwnerId: course.ownerId };
     const no = (reason: string): SellableDescription => ({ ...description, purchasable: false, reason });
 
-    let orgRoles: string[] = [];
-    if (course.ownerType === "USER") {
-      if (course.ownerId === ctx.buyerId) return no(COURSE_NOT_PURCHASABLE.own);
-    } else {
-      orgRoles = await this.roles.roleKeysInOrg(ctx.buyerId, course.ownerId);
-      if (orgRoles.some((r) => (ORG_AUTHOR_ROLES as readonly string[]).includes(r))) return no(COURSE_NOT_PURCHASABLE.own);
-    }
-    if (await this.enrolments.activeFor(ctx.buyerId, course.id)) return no(COURSE_NOT_PURCHASABLE.alreadyEnrolled);
-    if (orgRoles.includes(ORG_LEARNER_ROLE)) return no(COURSE_NOT_PURCHASABLE.orgSeat);
+    const relation = await this.rules.buyerRelation(ctx.buyerId, course);
+    if (relation === "OWN" || relation === "ORG_AUTHOR") return no(COURSE_NOT_PURCHASABLE.own);
+    if (relation === "ENROLLED") return no(COURSE_NOT_PURCHASABLE.alreadyEnrolled);
+    if (relation === "ORG_LEARNER") return no(COURSE_NOT_PURCHASABLE.orgSeat);
     if (course.status !== "PUBLISHED" || course.flaggedAt) return no(COURSE_NOT_PURCHASABLE.notAvailable);
     if (course.pricePaise === 0n) return no(COURSE_NOT_PURCHASABLE.free);
     return { ...description, purchasable: true };

@@ -3,7 +3,7 @@ import { Prisma, type Lesson, type LessonType } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
-import { lockCourse } from "./course-lock";
+import { lockCourseForEdit } from "./course-lock";
 import { CoursePolicy } from "./course.policy";
 import { assertSafeMarkdown } from "./markdown";
 
@@ -91,7 +91,7 @@ export class CurriculumService {
   async createSection(user: { id: string }, courseId: string, input: { title: string }): Promise<SectionView> {
     await this.policy.loadForAuthor(user, courseId);
     return this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const count = await tx.courseSection.count({ where: { courseId } });
       if (count >= MAX_SECTIONS_PER_COURSE) throw limit("sections", MAX_SECTIONS_PER_COURSE);
       const row = await tx.courseSection.create({ data: { courseId, title: input.title, position: count } });
@@ -102,7 +102,7 @@ export class CurriculumService {
   async updateSection(user: { id: string }, courseId: string, sectionId: string, input: { title: string }): Promise<SectionView> {
     await this.policy.loadForAuthor(user, courseId);
     return this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: sectionId, courseId } });
       if (!section) throw sectionNotFound();
       const row = await tx.courseSection.update({ where: { id: sectionId }, data: { title: input.title }, include: { lessons: { orderBy: { position: "asc" } } } });
@@ -113,7 +113,7 @@ export class CurriculumService {
   async deleteSection(user: { id: string }, courseId: string, sectionId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
     await this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: sectionId, courseId }, include: { lessons: true } });
       if (!section) throw sectionNotFound();
       for (const lesson of section.lessons) await this.releaseLessonMedia(tx, lesson);
@@ -126,7 +126,7 @@ export class CurriculumService {
     const course = await this.policy.loadForAuthor(user, courseId);
     assertFieldsMatchType(input.type, input);
     return this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: input.sectionId, courseId } });
       if (!section) throw sectionNotFound();
       if ((await tx.lesson.count({ where: { courseId } })) >= MAX_LESSONS_PER_COURSE) throw limit("lessons", MAX_LESSONS_PER_COURSE);
@@ -158,7 +158,7 @@ export class CurriculumService {
   async updateLesson(user: { id: string }, courseId: string, lessonId: string, patch: UpdateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
     return this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
       if (!lesson) throw lessonNotFound();
       assertFieldsMatchType(lesson.type, patch);
@@ -185,7 +185,7 @@ export class CurriculumService {
   async deleteLesson(user: { id: string }, courseId: string, lessonId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
     await this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
       if (!lesson) throw lessonNotFound();
       await this.releaseLessonMedia(tx, lesson);
@@ -201,7 +201,7 @@ export class CurriculumService {
   async reorder(user: { id: string }, courseId: string, order: OrderInput): Promise<{ sections: SectionView[] }> {
     await this.policy.loadForAuthor(user, courseId);
     return this.prisma.$transaction(async (tx) => {
-      await lockCourse(tx, courseId);
+      await lockCourseForEdit(tx, courseId);
       const [sections, lessons] = await Promise.all([
         tx.courseSection.findMany({ where: { courseId }, select: { id: true } }),
         tx.lesson.findMany({ where: { courseId }, select: { id: true } }),

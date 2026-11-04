@@ -10,7 +10,7 @@ import { CourseNotifier } from "./course-notifier";
 import { lockCourse } from "./course-lock";
 import { stateInvalid, type ActionMeta } from "./course-state";
 import { toCourseView, type CourseView } from "./course-view";
-import { courseNotFound } from "./course.policy";
+import { CoursePolicy, courseNotFound } from "./course.policy";
 import { lockOwnerPublishing, PublishingService } from "./publishing.service";
 
 const encodeCursor = (c: { submittedAt: Date | null; id: string }) => Buffer.from(`${c.submittedAt?.toISOString() ?? ""}|${c.id}`).toString("base64url");
@@ -27,6 +27,7 @@ export class ModerationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publishing: PublishingService,
+    private readonly policy: CoursePolicy,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
     private readonly notifier: CourseNotifier,
@@ -50,7 +51,7 @@ export class ModerationService {
   /** IN_REVIEW -> PUBLISHED. The publish checks run again (the course and the owner's plan may have changed while queued). */
   async approve(id: string, meta: ActionMeta): Promise<CourseView> {
     const row = await this.prisma.$transaction(async (tx) => {
-      const course = await this.lockedInReview(tx, id);
+      const course = await this.lockedInReview(tx, id, meta.actorId);
       await lockOwnerPublishing(tx, course);
       await this.publishing.assertPublishable(tx, course);
       const now = this.clock.now();
@@ -69,7 +70,7 @@ export class ModerationService {
   /** IN_REVIEW -> DRAFT with the moderator's reason; the author fixes it and submits again. */
   async reject(id: string, reason: string, meta: ActionMeta): Promise<CourseView> {
     const row = await this.prisma.$transaction(async (tx) => {
-      const course = await this.lockedInReview(tx, id);
+      const course = await this.lockedInReview(tx, id, meta.actorId);
       const updated = await tx.course.update({ where: { id }, data: { status: "DRAFT", rejectionReason: reason } });
       await this.audit.record(tx, { ...meta, action: "course.reject", targetType: "course", targetId: id, before: { status: course.status }, after: { status: updated.status, reason } });
       return updated;
@@ -81,7 +82,7 @@ export class ModerationService {
   /** Hides a published course from the catalog and stops new sales; learners who are enrolled keep their access. */
   async flag(id: string, reason: string, meta: ActionMeta): Promise<CourseView> {
     const row = await this.prisma.$transaction(async (tx) => {
-      const course = await this.locked(tx, id);
+      const course = await this.locked(tx, id, meta.actorId);
       if (course.status !== "PUBLISHED") throw stateInvalid("Only a published course can be flagged");
       if (course.flaggedAt) throw new AppError("COURSE_ALREADY_FLAGGED", 409, "This course is already flagged");
       const updated = await tx.course.update({ where: { id }, data: { flaggedAt: this.clock.now(), flagReason: reason } });
@@ -94,7 +95,7 @@ export class ModerationService {
 
   async unflag(id: string, reason: string, meta: ActionMeta): Promise<CourseView> {
     const row = await this.prisma.$transaction(async (tx) => {
-      const course = await this.locked(tx, id);
+      const course = await this.locked(tx, id, meta.actorId);
       if (!course.flaggedAt) throw new AppError("COURSE_NOT_FLAGGED", 409, "This course is not flagged");
       const updated = await tx.course.update({ where: { id }, data: { flaggedAt: null, flagReason: null } });
       await this.audit.record(tx, { ...meta, action: "course.unflag", targetType: "course", targetId: id, before: { flagged: true, reason: course.flagReason }, after: { flagged: false, reason } });
@@ -104,15 +105,19 @@ export class ModerationService {
     return toCourseView(row);
   }
 
-  private async locked(tx: Prisma.TransactionClient, id: string): Promise<Course> {
+  /** Loads the course under its lock. Whoever authors it (creator, or an owner or instructor of the owning organization) may not moderate it. */
+  private async locked(tx: Prisma.TransactionClient, id: string, actorId: string): Promise<Course> {
     await lockCourse(tx, id);
     const course = await tx.course.findUnique({ where: { id } });
     if (!course) throw courseNotFound();
+    if (course.createdById === actorId || (await this.policy.authorIds(course)).includes(actorId)) {
+      throw new AppError("COURSE_REVIEW_SELF", 403, "You cannot review a course you author");
+    }
     return course;
   }
 
-  private async lockedInReview(tx: Prisma.TransactionClient, id: string): Promise<Course> {
-    const course = await this.locked(tx, id);
+  private async lockedInReview(tx: Prisma.TransactionClient, id: string, actorId: string): Promise<Course> {
+    const course = await this.locked(tx, id, actorId);
     if (course.status !== "IN_REVIEW") throw stateInvalid("Only a course in review can be decided");
     return course;
   }

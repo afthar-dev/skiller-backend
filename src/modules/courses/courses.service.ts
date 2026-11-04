@@ -4,7 +4,7 @@ import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
-import { lockCourse } from "./course-lock";
+import { lockCourse, lockCourseForEdit } from "./course-lock";
 import { assertSafeMarkdown } from "./markdown";
 import { assertValidCoursePrice, firstFreeSlug, randomSlug, slugify } from "./course-rules";
 import { toCourseView, type CourseView } from "./course-view";
@@ -108,7 +108,7 @@ export class CoursesService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await lockCourse(tx, id);
+        await lockCourseForEdit(tx, id);
         const course = await tx.course.findUniqueOrThrow({ where: { id } });
         const data: Prisma.CourseUpdateInput = {};
         if (patch.title !== undefined) data.title = patch.title;

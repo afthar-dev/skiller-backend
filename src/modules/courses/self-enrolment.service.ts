@@ -2,9 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { EnrolmentSource } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { PlatformRoleDirectory } from "../rbac";
-import { EnrolmentsService, ORG_LEARNER_ROLE, toEnrolmentView, withCourse, type EnrolmentView } from "./enrolments.service";
-import { ORG_AUTHOR_ROLES } from "./org-roles";
+import { CourseAccessRules } from "./course-access-rules";
+import { EnrolmentsService, toEnrolmentView, withCourse, type EnrolmentView } from "./enrolments.service";
 
 const notFound = () => new AppError("COURSE_NOT_FOUND", 404, "Course not found");
 
@@ -14,7 +13,7 @@ export class SelfEnrolmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly enrolments: EnrolmentsService,
-    private readonly roles: PlatformRoleDirectory,
+    private readonly rules: CourseAccessRules,
   ) {}
 
   /**
@@ -26,21 +25,17 @@ export class SelfEnrolmentService {
     const course = await this.prisma.course.findUnique({ where: { slug } });
     if (!course) throw notFound();
 
-    const existing = await this.enrolments.activeFor(userId, course.id);
-    if (existing) return { enrolment: await this.view(existing.id), created: false };
-    if (course.status !== "PUBLISHED" || course.flaggedAt) throw notFound();
-
-    let orgRoles: string[] = [];
-    if (course.ownerType === "USER") {
-      if (course.ownerId === userId) throw this.own();
-    } else {
-      orgRoles = await this.roles.roleKeysInOrg(userId, course.ownerId);
-      if (orgRoles.some((r) => (ORG_AUTHOR_ROLES as readonly string[]).includes(r))) throw this.own();
+    const relation = await this.rules.buyerRelation(userId, course);
+    if (relation === "OWN" || relation === "ORG_AUTHOR") throw this.own();
+    if (relation === "ENROLLED") {
+      const existing = await this.enrolments.activeFor(userId, course.id);
+      if (existing) return { enrolment: await this.view(existing.id), created: false };
     }
+    if (course.status !== "PUBLISHED" || course.flaggedAt) throw notFound();
 
     let source: EnrolmentSource;
     if (course.pricePaise === 0n) source = "FREE";
-    else if (orgRoles.includes(ORG_LEARNER_ROLE)) source = "ORG_SEAT";
+    else if (relation === "ORG_LEARNER") source = "ORG_SEAT";
     else throw new AppError("COURSE_PAYMENT_REQUIRED", 402, "This course has to be purchased", { pricePaise: course.pricePaise.toString() });
 
     const { enrolment, changed } = await this.prisma.$transaction((tx) => this.enrolments.grant(tx, { courseId: course.id, userId, source }));

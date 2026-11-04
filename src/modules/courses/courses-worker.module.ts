@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ClockModule } from "../../common/clock/clock";
 import { BillingWorkerModule } from "../billing";
 import { RbacWorkerModule } from "../rbac";
+import { CourseMaintenanceProcessor } from "./course-maintenance.processor";
 import { COURSES_CORE_PROVIDERS } from "./courses-core";
 
 /**
@@ -11,5 +12,6 @@ import { COURSES_CORE_PROVIDERS } from "./courses-core";
 @Module({
   imports: [ClockModule, BillingWorkerModule, RbacWorkerModule],
   providers: COURSES_CORE_PROVIDERS,
+  exports: [CourseMaintenanceProcessor],
 })
 export class CoursesWorkerModule {}

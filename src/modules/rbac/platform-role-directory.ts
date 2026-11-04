@@ -45,6 +45,19 @@ export class PlatformRoleDirectory {
     return rows.map((r) => r.orgId as string);
   }
 
+  /** Users who hold a permission through an active platform-wide role (super_admin holds every key), at most `limit`. */
+  async userIdsWithPermission(permissionKey: string, limit: number): Promise<string[]> {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { orgId: null, role: { rolePermissions: { some: { permission: { key: permissionKey } } } }, user: { status: "ACTIVE" }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { userId: true },
+      distinct: ["userId"],
+      orderBy: { userId: "asc" },
+      take: limit,
+    });
+    return rows.map((r) => r.userId);
+  }
+
   /** Users holding the active platform-wide role, newest first, strictly below `cursor`. */
   async userIdsWithRole(roleKey: string, cursor: string | undefined, take: number): Promise<string[]> {
     const now = this.clock.now();
