@@ -14,6 +14,7 @@ import { AdminWalletController } from "./admin-wallet.controller";
 import { AdminCouponsController, CreatorCouponsController } from "./coupons.controller";
 import { CouponsAdminService } from "./coupons-admin.service";
 import { CheckoutController, CreditNotesController, InvoicesController, OrderRefundsController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
+import { BillingReports } from "./billing-reports";
 import { CheckoutService } from "./checkout.service";
 import { CouponsService } from "./coupons.service";
 import { EntitlementsModule } from "./entitlements.module";
@@ -105,7 +106,7 @@ export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookD
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule), forwardRef(() => OrganizationsWorkerModule)],
   controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, CreditNotesController, AdminBillingController, AdminRefundsController, AdminFinanceController, AdminOrdersController, AdminCouponsController, CreatorCouponsController, WalletController, OrgWalletController, AdminWalletController],
-  providers: [...BILLING_CORE_PROVIDERS, AdminFinanceService, CouponsAdminService, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
-  exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
+  providers: [...BILLING_CORE_PROVIDERS, AdminFinanceService, CouponsAdminService, PlansService, CheckoutService, InvoicesService, RefundRequestsService, BillingReports],
+  exports: [...BILLING_CORE_EXPORTS, CouponsService, BillingReports, EntitlementsModule],
 })
 export class BillingModule {}
