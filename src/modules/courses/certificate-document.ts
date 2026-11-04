@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import PDFDocument from "pdfkit";
 import { registerNotoFonts, writeRuns } from "../../common/pdf/pdf-text";
+import { BIDI_CONTROLS } from "./plain-text";
 
 /** No 0, 1, I, L or O: a code read aloud or typed from paper cannot be confused. */
 export const CERTIFICATE_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -17,7 +18,7 @@ export function generateCertificateCode(): string {
 export const CERTIFICATE_NAME_MAX = 80;
 export const CERTIFICATE_TITLE_MAX = 120;
 
-const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/gu;
+
 
 /**
  * Text that is frozen on a certificate and printed on a public page and a PDF: NFC, every run of whitespace (newlines included) one

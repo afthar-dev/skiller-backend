@@ -8,6 +8,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { PlatformRoleDirectory } from "../rbac";
 import { ORG_LEARNER_ROLE } from "./course-access-rules";
 import { revokeCertificates } from "./certificate-revocation";
+import { hideReviewOfEndedEnrolment, restoreReviewOfReactivatedEnrolment } from "./course-rating";
 import { ProgressService } from "./progress.service";
 
 export interface EnrolmentView {
@@ -80,6 +81,7 @@ export class EnrolmentsService {
     if (row.revokedAt) {
       await tx.enrolment.update({ where: key, data: { revokedAt: null, source: input.source, orderId } });
       await this.bump(tx, input.courseId, 1);
+      await restoreReviewOfReactivatedEnrolment(tx, input.courseId, input.userId);
       await this.progress.refreshEnrolment(tx, input.courseId, input.userId); // curriculum changes while revoked left the old figures behind
       // Finished before it was revoked: that completion is not new, so nothing would announce it. Announce it again so the certificate revoked with the enrolment is issued afresh.
       if (row.completedAt) await this.outbox.enqueue(tx, { type: "course.completed", userId: input.userId, courseId: input.courseId });
@@ -97,6 +99,7 @@ export class EnrolmentsService {
     if (revoked.count > 0) {
       await this.bump(tx, input.courseId, -1);
       await revokeCertificates(tx, input.courseId, input.userId, this.clock.now());
+      await hideReviewOfEndedEnrolment(tx, input.courseId, input.userId, this.clock.now());
     }
   }
 
@@ -115,6 +118,7 @@ export class EnrolmentsService {
         if (res.count > 0) {
           await this.bump(tx, seat.courseId, -1);
           await revokeCertificates(tx, seat.courseId, userId, this.clock.now());
+          await hideReviewOfEndedEnrolment(tx, seat.courseId, userId, this.clock.now());
         }
         return res.count;
       });

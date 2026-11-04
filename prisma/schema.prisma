@@ -1069,22 +1069,22 @@ model Category {
 }
 
 model Course {
-  id                String          @id @default(uuid(7))
+  id                String                   @id @default(uuid(7))
   ownerType         CourseOwnerType
   ownerId           String
-  slug              String          @unique
+  slug              String                   @unique
   slugLockedAt      DateTime?
   title             String
   subtitle          String?
-  description       String          @default("")
+  description       String                   @default("")
   categoryId        String
-  level             CourseLevel     @default(ALL)
+  level             CourseLevel              @default(ALL)
   language          String
   tags              String[]
-  pricePaise        BigInt          @default(0)
+  pricePaise        BigInt                   @default(0)
   thumbnailAssetId  String?
   promoVideoAssetId String?
-  status            CourseStatus    @default(DRAFT)
+  status            CourseStatus             @default(DRAFT)
   flaggedAt         DateTime?
   flagReason        String?
   /// Set when the author submits for review; the moderator queue is oldest first.
@@ -1093,11 +1093,18 @@ model Course {
   rejectionReason   String?
   publishedAt       DateTime?
   createdById       String
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  ratingAvg         Decimal?        @db.Decimal(3, 2)
-  ratingCount       Int             @default(0)
-  enrolmentCount    Int             @default(0)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  ratingAvg         Decimal?                 @db.Decimal(3, 2)
+  ratingCount       Int                      @default(0)
+  enrolmentCount    Int                      @default(0)
+  /// The owner's display name (the creator's, or the organization's), copied here so search needs no join. Refreshed by the courses worker on profile / organization renames.
+  ownerName         String                   @default("")
+  /// Full-text document (simple config): title A, subtitle + tags B, description + owner name C. Maintained in code (course-search.ts), never by Prisma;
+  /// its GIN index and the pg_trgm index on title are hand-written in the migration, so later `migrate dev` runs must keep them out of DROP/CREATE.
+  searchVector      Unsupported("tsvector")?
+  /// Enrolments of the last 30 days, refreshed hourly by the maintenance job; the "popular" sort.
+  enrolments30d     Int                      @default(0)
 
   category     Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   sections     CourseSection[]
@@ -1105,6 +1112,8 @@ model Course {
   enrolments   Enrolment[]
   quizzes      Quiz[]
   certificates Certificate[]
+  reviews      Review[]
+  questions    Question[]
 
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
@@ -1157,9 +1166,10 @@ model Lesson {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  section  CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  progress LessonProgress[]
+  course    Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section   CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  progress  LessonProgress[]
+  questions Question[]
 
   @@index([sectionId, position])
   @@index([courseId])
@@ -1305,4 +1315,67 @@ model Certificate {
   @@index([userId, issuedAt])
   @@index([courseId])
   @@map("certificates")
+}
+
+// ─── reviews and lesson Q&A ──────────────────────────────────────────────
+// Plain text only (sanitised on write). One review per (course, learner). hiddenAt hides a row from everyone but its author: hiddenBy is the
+// moderator who hid it, or null when the system did (the learner's enrolment ended; reactivating the enrolment brings it back). Course.ratingAvg
+// / ratingCount are computed from the rows with hiddenAt null, in the transaction of every change, with the course row locked.
+
+model Review {
+  id           String    @id @default(uuid(7))
+  courseId     String
+  userId       String
+  rating       Int
+  body         String?
+  reply        String?
+  repliedAt    DateTime?
+  repliedById  String?
+  hiddenAt     DateTime?
+  hiddenBy     String?
+  hiddenReason String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([courseId, hiddenAt, id])
+  @@map("reviews")
+}
+
+model Question {
+  id           String    @id @default(uuid(7))
+  lessonId     String
+  courseId     String
+  userId       String
+  body         String
+  hiddenAt     DateTime?
+  hiddenBy     String?
+  hiddenReason String?
+  createdAt    DateTime  @default(now())
+
+  lesson  Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  answers Answer[]
+
+  @@index([lessonId, hiddenAt, id])
+  @@map("questions")
+}
+
+model Answer {
+  id           String    @id @default(uuid(7))
+  questionId   String
+  userId       String
+  body         String
+  isInstructor Boolean   @default(false)
+  hiddenAt     DateTime?
+  hiddenBy     String?
+  hiddenReason String?
+  createdAt    DateTime  @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId, hiddenAt, id])
+  @@map("answers")
 }

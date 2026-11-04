@@ -1,4 +1,5 @@
 import type { Category, Course } from "@prisma/client";
+import { MIN_RATINGS_TO_SHOW } from "./course-rating";
 
 export interface CourseView {
   id: string;
@@ -56,7 +57,7 @@ export function toCourseView(c: Course): CourseView {
     createdById: c.createdById,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
-    ratingAvg: c.ratingAvg === null ? null : Number(c.ratingAvg.toString()),
+    ratingAvg: c.ratingCount >= MIN_RATINGS_TO_SHOW && c.ratingAvg !== null ? Number(c.ratingAvg.toString()) : null,
     ratingCount: c.ratingCount,
     enrolmentCount: c.enrolmentCount,
   };
@@ -89,7 +90,7 @@ export const toPublicCourseView = (c: Course) => ({
   thumbnailAssetId: c.thumbnailAssetId,
   promoVideoAssetId: c.promoVideoAssetId,
   publishedAt: c.publishedAt?.toISOString() ?? null,
-  ratingAvg: c.ratingCount >= 3 && c.ratingAvg !== null ? Number(c.ratingAvg.toString()) : null,
+  ratingAvg: c.ratingCount >= MIN_RATINGS_TO_SHOW && c.ratingAvg !== null ? Number(c.ratingAvg.toString()) : null,
   ratingCount: c.ratingCount,
   enrolmentCount: c.enrolmentCount,
 });
