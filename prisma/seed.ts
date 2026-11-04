@@ -6,9 +6,10 @@ import { bumpPermissionEpochs } from "../src/modules/rbac/permission.service";
 import { bootstrapSuperAdmin, seedSystemRoles, syncPermissions } from "../src/modules/rbac/permission-sync";
 import "../src/modules/rbac/permissions";
 import { seedPlans } from "../src/modules/billing/plans-seed";
+import { seedCategories } from "../src/modules/courses/categories.service";
 import { ensurePlatformAccounts } from "../src/modules/wallet/ledger-sql";
 
-/** Idempotent: permissions, system roles, the SUPER_ADMIN_EMAIL user with the super_admin role, platform ledger accounts and the plan catalog. */
+/** Idempotent: permissions, system roles, course categories, the SUPER_ADMIN_EMAIL user with the super_admin role, platform ledger accounts and the plan catalog. */
 export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
   const sync = await syncPermissions(prisma, permissionRegistry);
   // New default permissions reach existing system roles; holders' cached permissions are refreshed when a Redis is configured.
@@ -24,6 +25,7 @@ export async function runSeed(prisma: PrismaClient, superAdminEmail: string) {
   await prisma.featureFlag.upsert({ where: { key: "gig_orders" }, create: { key: "gig_orders", enabled: false }, update: {} });
   await ensurePlatformAccounts(prisma);
   await seedPlans(prisma);
+  await seedCategories(prisma);
   return { ...sync, roles };
 }
 

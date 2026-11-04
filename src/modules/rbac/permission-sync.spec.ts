@@ -25,12 +25,13 @@ describe("PermissionRegistry / definePermissions", () => {
     expect(() => definePermissions("dup", { a: "A again" }, registry)).toThrow(/dup\.a/);
   });
 
-  it("defines exactly the Phase-1 and Phase-2 keys in the default registry", () => {
+  it("defines exactly the Phase-1, Phase-2 and Phase-3 keys in the default registry", () => {
     expect([...PLATFORM_PERMISSION_KEYS].sort()).toEqual(
       [
         "profile.update_any", "user.view", "user.suspend", "user.revoke_sessions", "rbac.view", "rbac.manage", "role.grant", "audit.view",
         "media.upload", "media.manage_any", "org.create", "org.manage", "org.invite", "org.wallet.manage", "settings.manage", "flags.manage", "notification.view",
         "billing.plans.manage", "billing.view_any", "billing.refund", "billing.coupons.manage", "finance.view", "finance.reconcile", "payout.approve", "wallet.view_any",
+        "course.create", "course.review", "course.manage_any", "course.categories.manage",
       ].sort(),
     );
   });

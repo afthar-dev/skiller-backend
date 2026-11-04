@@ -13,6 +13,7 @@ import { PayoutMaintenanceProcessor } from "./modules/billing/payout.processor";
 import { ReconciliationProcessor } from "./modules/billing/reconciliation.processor";
 import { RefundsProcessor } from "./modules/billing/refunds.processor";
 import { SubscriptionMaintenanceProcessor } from "./modules/billing/subscription-maintenance.processor";
+import { CoursesWorkerModule } from "./modules/courses/courses-worker.module";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
 import { UsersWorkerModule } from "./modules/users/users-worker.module";
@@ -28,7 +29,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule],
+  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(

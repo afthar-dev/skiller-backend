@@ -1030,3 +1030,74 @@ model ReconciliationRun {
   @@index([createdAt])
   @@map("reconciliation_runs")
 }
+
+// ─── courses ─────────────────────────────────────────────────────────────
+// ownerId / createdById / asset ids are plain ids (no FKs): users, organizations and media belong to other modules.
+// ownerType USER -> ownerId is a user id; ORG -> an organization id. slugLockedAt is set on first publish and freezes the slug.
+
+enum CourseOwnerType {
+  USER
+  ORG
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL
+}
+
+enum CourseStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+model Category {
+  id       String  @id @default(uuid(7))
+  slug     String  @unique
+  name     String
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  courses Course[]
+
+  @@index([position])
+  @@map("categories")
+}
+
+model Course {
+  id                String          @id @default(uuid(7))
+  ownerType         CourseOwnerType
+  ownerId           String
+  slug              String          @unique
+  slugLockedAt      DateTime?
+  title             String
+  subtitle          String?
+  description       String          @default("")
+  categoryId        String
+  level             CourseLevel     @default(ALL)
+  language          String
+  tags              String[]
+  pricePaise        BigInt          @default(0)
+  thumbnailAssetId  String?
+  promoVideoAssetId String?
+  status            CourseStatus    @default(DRAFT)
+  flaggedAt         DateTime?
+  flagReason        String?
+  publishedAt       DateTime?
+  createdById       String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  ratingAvg         Decimal?        @db.Decimal(3, 2)
+  ratingCount       Int             @default(0)
+  enrolmentCount    Int             @default(0)
+
+  category Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([ownerType, ownerId, id])
+  @@index([categoryId])
+  @@index([status, publishedAt])
+  @@map("courses")
+}

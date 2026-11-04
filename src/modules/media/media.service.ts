@@ -182,6 +182,11 @@ export class MediaService {
     return this.dto(asset);
   }
 
+  /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
+  async assetInfo(assetId: string): Promise<{ ownerId: string; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
+    return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, purpose: true, status: true, durationSec: true } });
+  }
+
   /**
    * Marks the asset as in use. Call it inside the same transaction that stores the reference (profile, org, ...).
    * The asset must belong to `ownerId`, have the given purpose and be READY. Unattached assets are deleted after 24 h.

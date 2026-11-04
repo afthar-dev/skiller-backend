@@ -2,6 +2,7 @@ import { definePermissions, permissionRegistry } from "./permission.registry";
 // Other modules define their own keys next to their code; importing them here registers them in the default registry.
 import "../billing/permissions";
 import "../wallet/permissions";
+import "../courses/permissions";
 
 // Phase-1 permission keys. Later phases add their own definePermissions() calls next to their modules.
 export const ProfilePermissions = definePermissions("profile", { update_any: "Edit any user's profile" });

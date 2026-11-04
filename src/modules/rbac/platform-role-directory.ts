@@ -24,6 +24,27 @@ export class PlatformRoleDirectory {
     return rows.map((r) => r.userId);
   }
 
+  /** Active role keys the user holds in one organization (org-scoped grants only; platform grants are not included). */
+  async roleKeysInOrg(userId: string, orgId: string): Promise<string[]> {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId, orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { role: { select: { key: true } } },
+    });
+    return [...new Set(rows.map((r) => r.role.key))];
+  }
+
+  /** Organizations in which the user holds at least one of the active roles (org-scoped grants only). */
+  async orgIdsWithAnyRole(userId: string, roleKeys: readonly string[]): Promise<string[]> {
+    const now = this.clock.now();
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId, orgId: { not: null }, role: { key: { in: [...roleKeys] } }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      select: { orgId: true },
+      distinct: ["orgId"],
+    });
+    return rows.map((r) => r.orgId as string);
+  }
+
   /** Users holding the active platform-wide role, newest first, strictly below `cursor`. */
   async userIdsWithRole(roleKey: string, cursor: string | undefined, take: number): Promise<string[]> {
     const now = this.clock.now();
