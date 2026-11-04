@@ -3,9 +3,11 @@ import type { Course, Enrolment, EnrolmentSource, Prisma } from "@prisma/client"
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PlatformRoleDirectory } from "../rbac";
 import { ORG_LEARNER_ROLE } from "./course-access-rules";
+import { revokeCertificates } from "./certificate-revocation";
 import { ProgressService } from "./progress.service";
 
 export interface EnrolmentView {
@@ -53,6 +55,7 @@ export class EnrolmentsService {
     private readonly prisma: PrismaService,
     private readonly roles: PlatformRoleDirectory,
     private readonly progress: ProgressService,
+    private readonly outbox: OutboxService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -78,6 +81,8 @@ export class EnrolmentsService {
       await tx.enrolment.update({ where: key, data: { revokedAt: null, source: input.source, orderId } });
       await this.bump(tx, input.courseId, 1);
       await this.progress.refreshEnrolment(tx, input.courseId, input.userId); // curriculum changes while revoked left the old figures behind
+      // Finished before it was revoked: that completion is not new, so nothing would announce it. Announce it again so the certificate revoked with the enrolment is issued afresh.
+      if (row.completedAt) await this.outbox.enqueue(tx, { type: "course.completed", userId: input.userId, courseId: input.courseId });
       return { enrolment: await tx.enrolment.findUniqueOrThrow({ where: key }), changed: true };
     }
     if (input.source !== "PURCHASE") return { enrolment: row, changed: false };
@@ -89,7 +94,10 @@ export class EnrolmentsService {
   /** A refunded order takes back the access it gave. An enrolment that came from another order is left alone. */
   async revokeForOrder(tx: Prisma.TransactionClient, input: { courseId: string; userId: string; orderId: string }): Promise<void> {
     const revoked = await tx.enrolment.updateMany({ where: { courseId: input.courseId, userId: input.userId, orderId: input.orderId, revokedAt: null }, data: { revokedAt: this.clock.now() } });
-    if (revoked.count > 0) await this.bump(tx, input.courseId, -1);
+    if (revoked.count > 0) {
+      await this.bump(tx, input.courseId, -1);
+      await revokeCertificates(tx, input.courseId, input.userId, this.clock.now());
+    }
   }
 
   /**
@@ -104,7 +112,10 @@ export class EnrolmentsService {
     for (const seat of seats) {
       revoked += await this.prisma.$transaction(async (tx) => {
         const res = await tx.enrolment.updateMany({ where: { id: seat.id, source: "ORG_SEAT", revokedAt: null }, data: { revokedAt: this.clock.now() } });
-        if (res.count > 0) await this.bump(tx, seat.courseId, -1);
+        if (res.count > 0) {
+          await this.bump(tx, seat.courseId, -1);
+          await revokeCertificates(tx, seat.courseId, userId, this.clock.now());
+        }
         return res.count;
       });
     }

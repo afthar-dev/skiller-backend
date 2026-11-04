@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import PDFDocument from "pdfkit";
+import { registerNotoFonts, splitRuns, writeRuns, type TextRun } from "../../common/pdf/pdf-text";
 import { formatBps, formatInr } from "./money";
 
 /** Who the platform is on a document; all from platform settings, frozen at issue time. */
@@ -76,43 +76,9 @@ export function documentLines(f: DocumentFacts): string[] {
   ];
 }
 
-// ── Fonts ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-// assets/fonts is at the project root: three levels up from both src/modules/billing (tests) and dist/modules/billing (the images).
-const FONT_DIR = join(__dirname, "..", "..", "..", "assets", "fonts");
-const FONTS = {
-  latin: { regular: join(FONT_DIR, "NotoSans_400Regular.ttf"), bold: join(FONT_DIR, "NotoSans_700Bold.ttf") },
-  devanagari: { regular: join(FONT_DIR, "NotoSansDevanagari_400Regular.ttf"), bold: join(FONT_DIR, "NotoSansDevanagari_700Bold.ttf") },
-} as const;
-
-const isDevanagari = (ch: string): boolean => {
-  const c = ch.codePointAt(0)!;
-  return (c >= 0x0900 && c <= 0x097f) || (c >= 0xa8e0 && c <= 0xa8ff) || (c >= 0x1cd0 && c <= 0x1cff);
-};
-/** Spaces, digits, punctuation and symbols belong to whichever script run they sit in. */
-const NEUTRAL = /^[\s\p{N}\p{P}\p{S}]$/u;
-
-export interface TextRun {
-  text: string;
-  devanagari: boolean;
-}
-
-/** Splits a line into runs of one script, so each run can be set in the font that has its glyphs. */
-export function splitRuns(line: string): TextRun[] {
-  const runs: TextRun[] = [];
-  for (const ch of line) {
-    const isDev = isDevanagari(ch);
-    const last = runs[runs.length - 1];
-    if (last && (NEUTRAL.test(ch) || last.devanagari === isDev)) last.text += ch;
-    else runs.push({ text: ch, devanagari: isDev });
-  }
-  // A leading neutral run (e.g. "  "): its script is that of the next letter run, so merge it forward.
-  if (runs.length > 1 && !/[\p{L}\p{M}]/u.test(runs[0].text)) {
-    const first = runs.shift()!;
-    runs[0].text = first.text + runs[0].text;
-  }
-  return runs;
-}
+// Fonts and script-run splitting are shared with other documents (certificates): see src/common/pdf/pdf-text.ts.
+export { splitRuns };
+export type { TextRun };
 
 /** Renders the stored lines as a PDF. Latin text uses Noto Sans, Devanagari runs Noto Sans Devanagari (both embedded as subsets). */
 export function renderInvoicePdf(details: InvoiceDetails): Promise<Buffer> {
@@ -123,10 +89,7 @@ export function renderInvoicePdf(details: InvoiceDetails): Promise<Buffer> {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
     try {
-      doc.registerFont("latin", FONTS.latin.regular);
-      doc.registerFont("latin-bold", FONTS.latin.bold);
-      doc.registerFont("dev", FONTS.devanagari.regular);
-      doc.registerFont("dev-bold", FONTS.devanagari.bold);
+      registerNotoFonts(doc);
       details.lines.forEach((line, i) => {
         const bold = i <= 1 || line === "Billed to" || line === "Refunded to";
         const size = i === 0 ? 20 : i === 1 ? 12 : 10;
@@ -134,10 +97,7 @@ export function renderInvoicePdf(details: InvoiceDetails): Promise<Buffer> {
           doc.font("latin").fontSize(10).text(" ");
           return;
         }
-        const runs = splitRuns(line);
-        runs.forEach((run, j) => {
-          doc.font(`${run.devanagari ? "dev" : "latin"}${bold ? "-bold" : ""}`).fontSize(size).text(run.text, { continued: j < runs.length - 1 });
-        });
+        writeRuns(doc, line, { size, bold });
       });
       doc.end();
     } catch (err) {

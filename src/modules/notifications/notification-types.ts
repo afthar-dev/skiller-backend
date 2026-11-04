@@ -29,6 +29,7 @@ export const NOTIFICATION_TYPES = {
   "course.rejected": { transactional: false },
   "course.flagged": { transactional: false },
   "course.unflagged": { transactional: false },
+  "certificate.issued": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

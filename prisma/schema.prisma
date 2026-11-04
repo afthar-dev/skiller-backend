@@ -1099,11 +1099,12 @@ model Course {
   ratingCount       Int             @default(0)
   enrolmentCount    Int             @default(0)
 
-  category   Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  sections   CourseSection[]
-  lessons    Lesson[]
-  enrolments Enrolment[]
-  quizzes    Quiz[]
+  category     Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  sections     CourseSection[]
+  lessons      Lesson[]
+  enrolments   Enrolment[]
+  quizzes      Quiz[]
+  certificates Certificate[]
 
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
@@ -1271,4 +1272,30 @@ model QuizAttempt {
 
   @@index([quizId, userId, createdAt])
   @@map("quiz_attempts")
+}
+
+// ─── certificates ────────────────────────────────────────────────────────
+// Issued when a learner finishes a course. learnerName, courseTitle and issuerName are snapshots taken at issue time: the PDF and the
+// public verify page keep saying what the certificate said, whatever is renamed later. At most one LIVE (revokedAt null) certificate per
+// (userId, courseId): the partial unique index certificates_live_key is hand-written in the migration (Prisma cannot express it), so
+// every later migration must keep it out of its DROP/CREATE. A revoked one stays (verify says REVOKED) and a new one may be issued.
+
+model Certificate {
+  id          String    @id @default(uuid(7))
+  code        String    @unique
+  courseId    String
+  userId      String
+  learnerName String
+  courseTitle String
+  issuerName  String
+  issuedAt    DateTime
+  /// Private storage key of the PDF: certificates/{id}.pdf
+  objectKey   String
+  revokedAt   DateTime?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@index([userId, issuedAt])
+  @@index([courseId])
+  @@map("certificates")
 }

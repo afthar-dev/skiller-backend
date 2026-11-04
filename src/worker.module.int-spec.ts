@@ -29,8 +29,8 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "org.member_invited": false,
   // Reserved: the search index and feeds consume it in a later task.
   "course.published": false,
-  // Reserved: certificates and notifications consume it in later tasks.
-  "course.completed": false,
+  // Certificates are issued on it.
+  "course.completed": true,
 };
 
 describe("WorkerModule boot (src/worker.ts path)", () => {
