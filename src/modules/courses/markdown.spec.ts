@@ -100,6 +100,33 @@ describe("assertSafeMarkdown accepts and returns the text unchanged", () => {
   });
 });
 
+const deepList = (n: number) => Array.from({ length: n }, (_v, i) => " ".repeat(2 * i) + "- a").join(String.fromCharCode(10)) + String.fromCharCode(10) + " ".repeat(2 * n);
+
+describe("nesting depth", () => {
+  const code = (src: string) => {
+    try {
+      assertSafeMarkdown(src);
+    } catch (err) {
+      return (err as AppError).code;
+    }
+    return null;
+  };
+  it.each([
+    ["100 blockquotes then a script", ">".repeat(100) + " <script>x</script>"],
+    ["101 blockquotes then a javascript link", ">".repeat(101) + " [x](javascript:1)"],
+    ["unterminated script after 100 blockquotes", ">".repeat(100) + " <script>x"],
+    ["60-deep list then a script", deepList(60) + "<script>x</script>"],
+    ["25k blockquote markers", "> ".repeat(25_000) + "x"],
+  ])("rejects %s", (_n, src) => {
+    expect(["MARKDOWN_TOO_DEEP", "MARKDOWN_UNSAFE"]).toContain(code(src));
+  });
+  it("rejects with MARKDOWN_TOO_DEEP beyond 20 levels and accepts up to 20", () => {
+    expect(code(">".repeat(25) + " fine")).toBe("MARKDOWN_TOO_DEEP");
+    expect(code(">".repeat(15) + " fine")).toBeNull();
+    expect(code(">".repeat(25) + " <script>x</script>")).toBe("MARKDOWN_TOO_DEEP");
+  });
+});
+
 describe("performance", () => {
   const timed = (src: string) => {
     const start = performance.now();

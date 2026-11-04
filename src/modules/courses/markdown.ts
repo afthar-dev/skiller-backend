@@ -13,6 +13,8 @@ import { AppError } from "../../common/errors/app-error";
  */
 export const MAX_MARKDOWN_CHARS = 50_000;
 const MAX_REPORTED_ISSUES = 20;
+/** Deepest container nesting (blockquote / list levels) accepted. markdown-it silently drops anything beyond its maxNesting, so depth is capped far below the parser limit and nothing is ever left uninspected. */
+export const MAX_MARKDOWN_DEPTH = 20;
 const SAFE_SCHEMES: ReadonlySet<string> = new Set(["http", "https", "mailto", "tel"]);
 
 /** `url` is what markdown-it passes to validateLink: already normalised, so it holds no raw whitespace or control characters. */
@@ -30,6 +32,8 @@ export function createMarkdownRenderer(): MarkdownIt {
 
 // Validation parses with HTML on (to see it) and an accepting validateLink (so unsafe links still become tokens we can inspect).
 const validator = new MarkdownIt({ html: true, linkify: false });
+// maxNesting is a real markdown-it option that its typings omit.
+(validator.options as { maxNesting?: number }).maxNesting = 10_000;
 validator.validateLink = () => true;
 
 export interface MarkdownIssue {
@@ -39,6 +43,15 @@ export interface MarkdownIssue {
 }
 
 const clip = (s: string) => (s.length > 200 ? `${s.slice(0, 200)}...` : s);
+
+function maxLevel(tokens: Token[]): number {
+  let max = 0;
+  for (const t of tokens) {
+    if (t.level > max) max = t.level;
+    if (t.children) max = Math.max(max, maxLevel(t.children));
+  }
+  return max;
+}
 
 function walk(tokens: Token[], line: number, issues: MarkdownIssue[]): void {
   for (const token of tokens) {
@@ -54,9 +67,34 @@ function walk(tokens: Token[], line: number, issues: MarkdownIssue[]): void {
   }
 }
 
+const tooDeep = () => new AppError("MARKDOWN_TOO_DEEP", 422, `Markdown may nest quotes and lists at most ${MAX_MARKDOWN_DEPTH} levels deep`, { maxDepth: MAX_MARKDOWN_DEPTH });
+const CONTAINER_MARKER = /^ *(?:>|[-*+](?= )|[0-9]{1,9}[.)](?= ))/;
+
+/** Cheap per-line count of leading quote / list markers, so absurd nesting is refused before the (recursive) parser sees it. */
+function exceedsMarkerDepth(src: string): boolean {
+  for (const line of src.split(String.fromCharCode(10))) {
+    let rest = line;
+    for (let depth = 0; ; depth++) {
+      const m = CONTAINER_MARKER.exec(rest);
+      if (!m) break;
+      if (depth >= MAX_MARKDOWN_DEPTH) return true;
+      rest = rest.slice(m[0].length);
+    }
+  }
+  return false;
+}
+
 export function findMarkdownIssues(src: string): MarkdownIssue[] {
+  if (exceedsMarkerDepth(src)) throw tooDeep();
   const env: { references?: Record<string, { href: string }> } = {};
-  const tokens = validator.parse(src, env);
+  let tokens: Token[];
+  try {
+    tokens = validator.parse(src, env);
+  } catch (err) {
+    if (err instanceof RangeError) throw tooDeep(); // stack exhausted by nesting the marker scan did not foresee
+    throw err;
+  }
+  if (maxLevel(tokens) > MAX_MARKDOWN_DEPTH) throw tooDeep();
   const issues: MarkdownIssue[] = [];
   walk(tokens, 1, issues);
   // Definitions nobody references yet are still stored, and a later edit could reference them.
