@@ -17,6 +17,7 @@ import { metaOf } from "./wallet.controller";
 
 const payoutStatusSchema = z.enum(["REQUESTED", "APPROVED", "PROCESSING", "PAID", "REJECTED", "REVERSED", "FAILED", "MANUAL_REVIEW"]);
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(500).optional() }).strict();
+const resolveSchema = z.object({ outcome: z.enum(["PAID", "RETURNED"]), note: z.string().trim().min(1).max(500) }).strict();
 const day = z.string().regex(DATE_PATTERN, "a calendar day, YYYY-MM-DD (India time)");
 const listSchema = z.object({ status: payoutStatusSchema.optional(), ownerType: z.enum(["USER", "ORG"]).optional(), ownerId: z.string().min(1).max(100).optional(), from: day.optional(), to: day.optional() });
 const clearFlagSchema = z.object({ flag: z.enum(["DUPLICATE_PAN", "NAME_MISMATCH"]), note: z.string().trim().min(1).max(500).optional() }).strict();
@@ -79,6 +80,20 @@ export class AdminWalletController {
   @ApiErrorResponse(409, "PAYOUT_NOT_PENDING: the payout was already decided.")
   approve(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.payouts.approve(user.id, id, metaOf(req));
+  }
+
+  @Post("payouts/:id/resolve")
+  @HttpCode(200)
+  @RequirePermission("payout.approve")
+  @RequireStepUp()
+  @ApiResult(200, "Payout")
+  @ApiOperation({ summary: "Resolve a MANUAL_REVIEW payout: PAID posts the settlement as a processed event would, RETURNED gives the locked funds back to the seller. Someone other than the approver (step-up required, audited, note required)" })
+  @ApiZodBody(resolveSchema)
+  @ApiErrorResponse(403, "PAYOUT_SELF_RESOLUTION: the approver or requester cannot resolve it.")
+  @ApiErrorResponse(409, "PAYOUT_NOT_IN_REVIEW: the payout is not in MANUAL_REVIEW.")
+  resolve(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
+    const { outcome, note } = resolveSchema.parse(body);
+    return this.payouts.resolve(user.id, id, outcome, note, metaOf(req));
   }
 
   @Post("payouts/:id/reject")

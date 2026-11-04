@@ -17,6 +17,7 @@ const FAILURE_TEXT: Record<string, string> = {
   BANK_REJECTED: "the bank rejected the payment",
   INVALID_ACCOUNT: "the payout account is not valid for payments",
   PROVIDER_ERROR: "the payment could not be completed",
+  MANUAL_REVIEW_RETURNED: "finance checked and the payment did not reach your account",
 };
 
 const entityOf = (payload: Record<string, unknown>): PayoutWebhookEntity | null => {

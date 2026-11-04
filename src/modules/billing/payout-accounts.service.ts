@@ -185,7 +185,7 @@ export class PayoutAccountsService {
     if (duplicateOf) {
       await this.alerts.raise({
         kind: "DUPLICATE_PAN",
-        message: `The same PAN (ending ${account.panLast4}) is on the payout accounts of ${owner.ownerType} ${owner.ownerId} and ${duplicateOf.ownerType} ${duplicateOf.ownerId}. Payouts are not blocked; review whether these are the same person.`,
+        message: `The same PAN (ending ${account.panLast4}) is on the payout accounts of ${owner.ownerType} ${owner.ownerId} and ${duplicateOf.ownerType} ${duplicateOf.ownerId}. Payouts to both accounts are blocked until you review whether these are the same person and clear the flag (POST /v1/admin/payout-accounts/:id/clear-flag).`,
         dedupeKey: `duplicate-pan:${account.id}`,
         link: "/admin/payout-accounts?flagged=true",
         data: { payoutAccountId: account.id, otherPayoutAccountId: duplicateOf.id },
@@ -210,6 +210,8 @@ export class PayoutAccountsService {
     const a = await db.payoutAccount.findFirst({ where: { ownerType: owner.ownerType, ownerId: owner.ownerId, status: { not: "INACTIVE" } } });
     if (!a) throw new AppError("PAYOUT_ACCOUNT_REQUIRED", 422, "Add a payout account before requesting a payout");
     if (a.status !== "VERIFIED") throw new AppError("PAYOUT_ACCOUNT_NOT_VERIFIED", 422, a.status === "FAILED" ? "Your payout account could not be verified; add a different one" : "Your payout account is still being verified", { status: a.status });
+    // A flagged account blocks new requests as well as approvals: funds are never locked for a payout that would only be auto-rejected.
+    if (a.reviewFlag) throw new AppError("PAYOUT_ACCOUNT_UNDER_REVIEW", 409, "Your payout account is under review; payouts resume once our team has checked it");
     if (this.clock.now() < a.cooldownUntil) {
       throw new AppError("PAYOUT_ACCOUNT_COOLDOWN", 409, "Payouts are paused for 24 hours after a payout account change", { until: a.cooldownUntil.toISOString() });
     }
@@ -242,6 +244,15 @@ export class PayoutAccountsService {
         : { status: "FAILED", failureReason: result.status === "completed" ? `The account is not valid (${result.accountStatus ?? "unknown"})` : "The account could not be validated", panNameMatch: nameMatch },
     });
     if (done.count > 0) this.logger.log(`payout account ${account.id} ${ok ? "verified" : "failed validation"}`);
+    if (done.count > 0 && ok && nameMatch === false && !account.reviewFlag) {
+      await this.alerts.raise({
+        kind: "PAYOUT_NAME_MISMATCH",
+        message: `The name the bank has for payout account ${account.id} (${account.ownerType} ${account.ownerId}) does not match the holder name given. Payouts to it are blocked until you check it and clear the flag (POST /v1/admin/payout-accounts/:id/clear-flag).`,
+        dedupeKey: `name-mismatch:${account.id}`,
+        link: "/admin/payout-accounts?flagged=true",
+        data: { payoutAccountId: account.id },
+      });
+    }
   }
 
   /**

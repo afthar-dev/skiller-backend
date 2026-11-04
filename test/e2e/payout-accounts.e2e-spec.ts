@@ -236,8 +236,12 @@ describe("payout accounts and KYC", () => {
 
       const c = await h.putAccount(s, h.bankBody({ holderName: "Asha Rao" }));
       const rowC = await prisma.payoutAccount.findUniqueOrThrow({ where: { id: c.body.id } });
+      const finance = await t.login();
+      await t.app.get(RolesService).grantSystem(finance.userId, "finance_admin");
       await h.deliverX(fakeX.validationWebhook(rowC.razorpayxFundAccountId, "active", { registeredName: "Somebody Else" }));
       expect(await prisma.payoutAccount.findUniqueOrThrow({ where: { id: rowC.id } })).toMatchObject({ status: "VERIFIED", panNameMatch: false, reviewFlag: "NAME_MISMATCH" });
+      const alert = await until(() => prisma.notification.findFirst({ where: { userId: finance.userId, type: "finance.alert", sourceEventId: `finance:name-mismatch:${rowC.id}` } }));
+      expect(alert.body).toContain("blocked until");
     });
 
     it("a result for an account that was replaced meanwhile changes nothing", async () => {

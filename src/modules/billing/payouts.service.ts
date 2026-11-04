@@ -116,6 +116,8 @@ export function failureCodeOf(raw: string | null | undefined): FailureCode {
   return "PROVIDER_ERROR";
 }
 
+/** failureReason of a MANUAL_REVIEW payout that finance found never reached the bank. */
+export const MANUAL_RETURNED_REASON = "MANUAL_REVIEW_RETURNED";
 const notPending = () => new AppError("PAYOUT_NOT_PENDING", 409, "This payout has already been decided");
 const isFourXx = (err: unknown) => err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
 
@@ -415,6 +417,51 @@ export class PayoutsService {
     throw new Error(`unknown payout ${entity.id}: not stored yet, will retry`);
   }
 
+  /** PAYOUT_LOCKED -amount / GATEWAY_CLEARING +(amount - tds) / TAX_PAYABLE +tds, status PAID, event payout.settled. Under the payout row lock; the entry is keyed, so a repeat posts nothing. */
+  private async settle(tx: Prisma.TransactionClient, p: Payout, utr: string | null, extra: Prisma.PayoutUncheckedUpdateInput = {}): Promise<Payout> {
+    const seller = await this.accounts.ensureSellerAccounts(tx, p.ownerType, p.ownerId);
+    const clearing = await this.accounts.platformAccount("GATEWAY_CLEARING", tx);
+    const lines = [
+      { accountId: seller.PAYOUT_LOCKED, amountPaise: -p.amountPaise },
+      { accountId: clearing, amountPaise: netOf(p) },
+      ...(p.tdsPaise > 0n ? [{ accountId: await this.accounts.platformAccount("TAX_PAYABLE", tx), amountPaise: p.tdsPaise }] : []),
+    ];
+    await this.ledger.post(tx, { refType: PAYOUT_LEDGER_REF, refId: p.id, description: PAYOUT_SETTLED_DESCRIPTION, lines });
+    const paid = await tx.payout.update({ where: { id: p.id }, data: { status: "PAID", paidAt: this.clock.now(), utr, ...extra } });
+    await this.outbox.enqueue(tx, this.event("payout.settled", paid, { utr }));
+    this.logger.log(`payout ${p.id} paid`);
+    return paid;
+  }
+
+  /**
+   * Finance settles a MANUAL_REVIEW payout by hand (a processed event whose amount did not match). PAID: the money did reach the bank, so
+   * the same settlement a processed webhook posts is posted now. RETURNED: it did not, so the locked funds go back to AVAILABLE (FAILED,
+   * entry payout_failed). The person who approved the payout (or asked for it) cannot resolve it. Audited with the note; the creator is told by the usual events.
+   */
+  async resolve(actorId: string, payoutId: string, outcome: "PAID" | "RETURNED", note: string, meta: MutationMeta = {}): Promise<PayoutView> {
+    const resolved = await this.prisma.$transaction(
+      async (tx) => {
+        const current = await this.lockAndLoad(tx, payoutId);
+        if (current.status !== "MANUAL_REVIEW") throw new AppError("PAYOUT_NOT_IN_REVIEW", 409, "Only a payout in MANUAL_REVIEW can be resolved");
+        if (current.approvedBy === actorId || current.requestedBy === actorId) {
+          throw new AppError("PAYOUT_SELF_RESOLUTION", 403, "A payout in review must be resolved by someone other than the person who approved or requested it");
+        }
+        let updated: Payout;
+        if (outcome === "PAID") updated = await this.settle(tx, current, null);
+        else {
+          const seller = await this.accounts.ensureSellerAccounts(tx, current.ownerType, current.ownerId);
+          await this.unlock(tx, current, seller, PAYOUT_FAILED_DESCRIPTION);
+          updated = await tx.payout.update({ where: { id: current.id }, data: { status: "FAILED", failureReason: MANUAL_RETURNED_REASON } });
+          await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome: "FAILED", reason: MANUAL_RETURNED_REASON }));
+        }
+        await this.audit.record(tx, { actorId, action: "payout.resolve", targetType: "payout", targetId: current.id, before: toPayoutView(current), after: { ...toPayoutView(updated), outcome, note }, ...meta });
+        return updated;
+      },
+      { maxWait: 10_000, timeout: 20_000 },
+    );
+    return this.viewOf(resolved, true);
+  }
+
   /**
    * payout.processed: the money reached the bank. PAYOUT_LOCKED -amount / GATEWAY_CLEARING +(amount - tds) / TAX_PAYABLE +tds, status PAID.
    * Only an APPROVED / PROCESSING payout settles; a repeat finds PAID, a late event for a payout already reversed or failed is ignored.
@@ -437,18 +484,7 @@ export class PayoutsService {
           mismatch = p;
           return;
         }
-        const seller = await this.accounts.ensureSellerAccounts(tx, p.ownerType, p.ownerId);
-        const clearing = await this.accounts.platformAccount("GATEWAY_CLEARING", tx);
-        const net = netOf(p);
-        const lines = [
-          { accountId: seller.PAYOUT_LOCKED, amountPaise: -p.amountPaise },
-          { accountId: clearing, amountPaise: net },
-          ...(p.tdsPaise > 0n ? [{ accountId: await this.accounts.platformAccount("TAX_PAYABLE", tx), amountPaise: p.tdsPaise }] : []),
-        ];
-        await this.ledger.post(tx, { refType: PAYOUT_LEDGER_REF, refId: p.id, description: PAYOUT_SETTLED_DESCRIPTION, lines });
-        const paid = await tx.payout.update({ where: { id: p.id }, data: { status: "PAID", paidAt: this.clock.now(), utr: entity.utr, ...(p.razorpayxPayoutId ? {} : { razorpayxPayoutId: entity.id }) } });
-        await this.outbox.enqueue(tx, this.event("payout.settled", paid, { utr: entity.utr }));
-        this.logger.log(`payout ${p.id} paid`);
+        await this.settle(tx, p, entity.utr, p.razorpayxPayoutId ? {} : { razorpayxPayoutId: entity.id });
       },
       { maxWait: 10_000, timeout: 20_000 },
     );

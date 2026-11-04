@@ -649,6 +649,23 @@ describe("payouts", () => {
       }
     });
 
+    it("a flagged account (DUPLICATE_PAN / NAME_MISMATCH) cannot request a payout either: nothing is locked until finance clears the flag", async () => {
+      for (const flag of ["DUPLICATE_PAN", "NAME_MISMATCH"]) {
+        const s = await ready(200_000n);
+        await prisma.payoutAccount.update({ where: { id: s.accountId }, data: { reviewFlag: flag } });
+        const blocked = await requestPayout(s, "100000");
+        expect(blocked.status).toBe(409);
+        expect(blocked.body.error.code).toBe("PAYOUT_ACCOUNT_UNDER_REVIEW");
+        expect(JSON.stringify(blocked.body)).not.toContain(flag); // the flag is for finance only
+        expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
+        expect(await prisma.payout.count({ where: { ownerId: s.userId } })).toBe(0);
+
+        const fin = await finance();
+        expect((await http().post(`/v1/admin/payout-accounts/${s.accountId}/clear-flag`).set(auth(fin)).send({ flag })).status).toBe(200);
+        expect((await requestPayout(s, "100000")).status).toBe(201);
+      }
+    });
+
     it("the send re-checks the account too: an APPROVED payout whose account was replaced is rejected and unlocked, not sent", async () => {
       const s = await ready(200_000n);
       const res = await requestPayout(s, "100000");
@@ -766,6 +783,86 @@ describe("payouts", () => {
       await h.deliverX(fakeX.payoutWebhook("payout.processed", q.razorpayxPayoutId!, { omitAmount: true }));
       expect((await payoutRow(q.id)).status).toBe("MANUAL_REVIEW");
       expect(await entry(q.id, "payout_settled")).toBeNull();
+    });
+
+    describe("POST /v1/admin/payouts/:id/resolve (MANUAL_REVIEW)", () => {
+      async function inReview(amount = 100_000n) {
+        const s = await ready(400_000n);
+        const p = await sent(s, amount);
+        await h.deliverX(fakeX.payoutWebhook("payout.processed", p.razorpayxPayoutId!, { amountPaise: amount - 10_000n }));
+        expect((await payoutRow(p.id)).status).toBe("MANUAL_REVIEW");
+        return { s, p };
+      }
+      const resolve = async (id: string, body: object, who: Session) => http().post(`/v1/admin/payouts/${id}/resolve`).set(auth(who)).send(body);
+      async function secondFinance() {
+        const f = await t.login();
+        await t.app.get(RolesService).grantSystem(f.userId, "finance_admin");
+        await h.stepUp(f);
+        return f;
+      }
+
+      it("PAID posts the settle entry as a processed webhook would, once, and tells the creator", async () => {
+        const { s, p } = await inReview();
+        const other = await secondFinance();
+        const res = await resolve(p.id, { outcome: "PAID", note: "UTR confirmed in the RazorpayX dashboard" }, other);
+        expect(res.status).toBe(200);
+        expect(await payoutRow(p.id)).toMatchObject({ status: "PAID" });
+        expect(await entry(p.id, "payout_settled")).toMatchObject({ byKind: { PAYOUT_LOCKED: -100_000n, GATEWAY_CLEARING: 100_000n }, sum: 0n });
+        expect(await balances(s)).toMatchObject({ AVAILABLE: 300_000n, PAYOUT_LOCKED: 0n });
+        expect((await resolve(p.id, { outcome: "PAID", note: "again" }, other)).body.error.code).toBe("PAYOUT_NOT_IN_REVIEW");
+        expect(await prisma.journalEntry.count({ where: { refType: "PAYOUT", refId: p.id, description: "payout_settled" } })).toBe(1);
+        const audit = await prisma.auditLog.findFirst({ where: { action: "payout.resolve", targetId: p.id } });
+        expect(JSON.stringify(audit?.after)).toContain("UTR confirmed");
+        await replay("payout.settled", p.id);
+        expect(await prisma.notification.count({ where: { userId: s.userId, type: "payout.paid" } })).toBe(1);
+        // A late processed webhook finds PAID and does nothing.
+        await deliver("payout.processed", p.id, { amountPaise: 100_000n });
+        expect(await prisma.journalEntry.count({ where: { refType: "PAYOUT", refId: p.id, description: "payout_settled" } })).toBe(1);
+      });
+
+      it("RETURNED unlocks the money back to AVAILABLE, once, and tells the creator", async () => {
+        const { s, p } = await inReview();
+        const other = await secondFinance();
+        const res = await resolve(p.id, { outcome: "RETURNED", note: "Never reached the bank" }, other);
+        expect(res.status).toBe(200);
+        expect(await payoutRow(p.id)).toMatchObject({ status: "FAILED", failureReason: "MANUAL_REVIEW_RETURNED" });
+        expect(await balances(s)).toMatchObject({ AVAILABLE: 400_000n, PAYOUT_LOCKED: 0n });
+        expect(await entry(p.id, "payout_failed")).toMatchObject({ byKind: { PAYOUT_LOCKED: -100_000n, AVAILABLE: 100_000n }, sum: 0n });
+        expect((await resolve(p.id, { outcome: "RETURNED", note: "again" }, other)).status).toBe(409);
+        await replay("payout.failed", p.id);
+        expect(await prisma.notification.count({ where: { userId: s.userId, type: "payout.failed" } })).toBe(1);
+      });
+
+      it("needs payout.approve, step-up and a note; the original approver (and a non-review payout) cannot resolve", async () => {
+        const { p } = await inReview();
+        const approver = await finance(); // approved it
+        expect((await resolve(p.id, { outcome: "PAID", note: "mine" }, approver)).body.error.code).toBe("PAYOUT_SELF_RESOLUTION");
+        const other = await secondFinance();
+        expect((await resolve(p.id, { outcome: "PAID" }, other)).status).toBe(400);
+        expect((await resolve(p.id, { outcome: "MAYBE", note: "x" }, other)).status).toBe(400);
+        const plain = await t.login();
+        await h.stepUp(plain);
+        expect((await resolve(p.id, { outcome: "PAID", note: "x" }, plain)).status).toBe(403);
+        const noStep = await t.login();
+        await t.app.get(RolesService).grantSystem(noStep.userId, "finance_admin");
+        expect((await resolve(p.id, { outcome: "PAID", note: "x" }, noStep)).body.error.code).toBe("STEP_UP_REQUIRED");
+        expect((await payoutRow(p.id)).status).toBe("MANUAL_REVIEW");
+
+        const s2 = await ready(200_000n);
+        const live = await requestPayout(s2, "100000");
+        expect((await resolve(live.body.id, { outcome: "PAID", note: "x" }, other)).body.error.code).toBe("PAYOUT_NOT_IN_REVIEW");
+        expect((await resolve(randomUUID(), { outcome: "PAID", note: "x" }, other)).status).toBe(404);
+      });
+
+      it("a payout in MANUAL_REVIEW still counts as pending in the finance summary", async () => {
+        const s = await ready(400_000n);
+        const p = await sent(s, 100_000n);
+        const pending = async () => (await http().get("/v1/admin/finance/summary").set(auth(await finance()))).body.payoutsPendingPaise as string;
+        const before = await pending();
+        await h.deliverX(fakeX.payoutWebhook("payout.processed", p.razorpayxPayoutId!, { amountPaise: 90_000n }));
+        expect((await payoutRow(p.id)).status).toBe("MANUAL_REVIEW");
+        expect(await pending()).toBe(before);
+      });
     });
 
     it("the send job racing the 5-minute re-drive creates one RazorpayX payout, adopted by reference", async () => {

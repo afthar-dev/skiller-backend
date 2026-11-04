@@ -85,7 +85,7 @@ export class AdminFinanceService {
         JOIN "ledger_accounts" a ON a."id" = l."accountId" AND a."kind" = 'GATEWAY_CLEARING'
         WHERE j."refType" = ${ORDER_LEDGER_REF} AND j."description" = ${REFUND_DESCRIPTION} AND j."createdAt" >= ${window.from} AND j."createdAt" < ${window.to}`,
       this.prisma.payout.aggregate({ where: { status: "PAID", paidAt: { gte: window.from, lt: window.to } }, _sum: { amountPaise: true }, _count: { _all: true } }),
-      this.prisma.payout.aggregate({ where: { status: { in: ["REQUESTED", "APPROVED", "PROCESSING"] } }, _sum: { amountPaise: true }, _count: { _all: true } }),
+      this.prisma.payout.aggregate({ where: { status: { in: ["REQUESTED", "APPROVED", "PROCESSING", "MANUAL_REVIEW"] } }, _sum: { amountPaise: true }, _count: { _all: true } }),
       this.prisma.subscription.count({ where: { status: "ACTIVE", planVersion: { pricePaise: { gt: 0 } } } }),
     ]);
     const moved = (kind: string) => movement.find((m) => m.kind === kind)?.total ?? 0n;
