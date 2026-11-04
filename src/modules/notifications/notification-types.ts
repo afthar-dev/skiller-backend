@@ -38,6 +38,9 @@ export const NOTIFICATION_TYPES = {
   "reel.published": { transactional: false },
   "reel.failed": { transactional: false },
   "reel.limit_reached": { transactional: false },
+  "reel.like": { transactional: false },
+  "reel.comment": { transactional: false },
+  "reel.reply": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

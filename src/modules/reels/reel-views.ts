@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/prisma/prisma.service";
 import type { Reel } from "@prisma/client";
 import { CourseLookup } from "../courses";
 import { MediaService } from "../media";
@@ -45,6 +46,7 @@ export interface ReelView {
 @Injectable()
 export class ReelViews {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly profiles: ProfilesService,
     private readonly media: MediaService,
     private readonly courses: CourseLookup,
@@ -60,6 +62,7 @@ export class ReelViews {
       ...[...cards.values()].flatMap((c) => (c.thumbnailAssetId ? [c.thumbnailAssetId] : [])),
     ];
     const urls = await this.media.publicUrls(assetIds);
+    const mine = await this.engagement(reels, viewerId);
 
     return reels.map((r) => {
       const summary = summaries.get(r.creatorId);
@@ -84,7 +87,19 @@ export class ReelViews {
         media: video?.hls ? { hls: video.hls, poster: video.poster ?? null } : null,
         counts: { likes: r.likeCount, comments: r.commentCount, saves: r.saveCount, shares: r.shareCount, views: r.viewCount },
         course: card ? { id: card.id, slug: card.slug, title: card.title, pricePaise: card.pricePaise, thumbnail: (card.thumbnailAssetId ? urls.get(card.thumbnailAssetId) : undefined) ?? null } : null,
+        ...(viewerId ? { likedByMe: mine.liked.has(r.id), savedByMe: mine.saved.has(r.id) } : {}),
       };
     });
+  }
+
+  /** Which of these reels the signed-in viewer liked and saved. */
+  private async engagement(reels: Reel[], viewerId: string | null): Promise<{ liked: Set<string>; saved: Set<string> }> {
+    if (!viewerId) return { liked: new Set(), saved: new Set() };
+    const ids = reels.map((r) => r.id);
+    const [likes, saves] = await Promise.all([
+      this.prisma.reelLike.findMany({ where: { userId: viewerId, reelId: { in: ids } }, select: { reelId: true } }),
+      this.prisma.reelSave.findMany({ where: { userId: viewerId, reelId: { in: ids } }, select: { reelId: true } }),
+    ]);
+    return { liked: new Set(likes.map((l) => l.reelId)), saved: new Set(saves.map((s) => s.reelId)) };
   }
 }

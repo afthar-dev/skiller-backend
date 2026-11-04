@@ -1424,6 +1424,11 @@ model Reel {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
+  likes    ReelLike[]
+  saves    ReelSave[]
+  shares   ReelShare[]
+  comments ReelComment[]
+
   @@index([creatorId, publishedAt, id])
   @@index([creatorId, status, id])
   @@map("reels")
@@ -1435,4 +1440,80 @@ model Hashtag {
   lastUsedAt DateTime
 
   @@map("hashtags")
+}
+
+// ─── reel engagement ─────────────────────────────────────────────────────
+// Likes and saves are one row per (reel, user); the counters on the reel move only when a row is really inserted or deleted, in the same
+// transaction. A share is recorded once per (reel, user, IST day) (anonymous shares are not recorded). Comments are plain text with one level of
+// replies (parentId is always a top-level comment); a deleted comment keeps its row (status DELETED) so a thread with replies survives.
+// reel.commentCount counts the VISIBLE rows.
+
+model ReelLike {
+  reelId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@id([reelId, userId])
+  @@index([userId, createdAt])
+  @@map("reel_likes")
+}
+
+model ReelSave {
+  reelId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@id([reelId, userId])
+  @@index([userId, createdAt, reelId])
+  @@map("reel_saves")
+}
+
+model ReelShare {
+  id        String   @id @default(uuid(7))
+  reelId    String
+  userId    String?
+  channel   String
+  /// IST calendar day ("YYYY-MM-DD") of the share: with the reel and user it makes the share count once a day.
+  day       String
+  createdAt DateTime @default(now())
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@unique([reelId, userId, day])
+  @@index([reelId, createdAt])
+  @@map("reel_shares")
+}
+
+enum ReelCommentStatus {
+  VISIBLE
+  HIDDEN
+  REMOVED
+  DELETED
+}
+
+model ReelComment {
+  id        String            @id @default(uuid(7))
+  reelId    String
+  userId    String
+  /// The top-level comment this replies to; null for a top-level comment.
+  parentId  String?
+  body      String
+  status    ReelCommentStatus @default(VISIBLE)
+  editedAt  DateTime?
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  reel    Reel          @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  parent  ReelComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies ReelComment[] @relation("CommentReplies")
+
+  @@index([reelId, parentId, id])
+  @@index([parentId, status, id])
+  @@map("reel_comments")
 }
