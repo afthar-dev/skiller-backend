@@ -65,6 +65,7 @@ jobs:
           pnpm prisma validate
           # prisma migrate diff from the migrations to the schema, minus Prisma's known raw-ops index false positives
           node scripts/check-schema-drift.mjs
+          pnpm test:scripts
 
       - name: Unit tests
         run: pnpm test

@@ -216,7 +216,7 @@ The `courses` module owns every course table (categories, courses, sections, les
 
 ### Hand-written database objects (`prisma migrate dev` must never drop or recreate these)
 
-Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in every `migrate dev`. Delete those statements from the generated SQL, or the migration silently removes a uniqueness rule or an index the queries depend on. `scripts/check-schema-drift.mjs` knows the pattern, search and `ratingShown` ones and fails the build on any other drift.
+Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in every `migrate dev`. Delete those statements from the generated SQL, or the migration silently removes a uniqueness rule or an index the queries depend on. `scripts/check-schema-drift.mjs` (filter in `check-schema-drift-lib.mjs`, tested by `pnpm test:scripts`) ignores only those exact statements and the exact `ratingShown` ALTER COLUMN clauses, and fails the build on any other drift, including a real change in the same `ALTER TABLE`.
 
 - `profiles_handle_pattern_idx`, `users_email_pattern_idx`: `text_pattern_ops` prefix-search indexes.
 - `user_roles_userId_roleId_orgId_key`, `ledger_accounts_owner_kind_key`: unique indexes `NULLS NOT DISTINCT` (a platform-wide grant / platform account has a NULL owner and must still be unique).
