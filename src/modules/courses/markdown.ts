@@ -19,6 +19,8 @@ const SAFE_SCHEMES: ReadonlySet<string> = new Set(["http", "https", "mailto", "t
 
 /** `url` is what markdown-it passes to validateLink: already normalised, so it holds no raw whitespace or control characters. */
 export function isSafeLinkDestination(url: string): boolean {
+  // Protocol-relative: browsers read `//host`, `\\host`, `/\host` and `\/host` as another site, not a path on ours. A leading backslash is never a path.
+  if (/^[/\\]{2}/.test(url) || url.startsWith("\\")) return false;
   const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(url);
   return scheme ? SAFE_SCHEMES.has(scheme[1].toLowerCase()) : true;
 }

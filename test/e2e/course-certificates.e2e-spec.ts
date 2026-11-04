@@ -203,6 +203,7 @@ describe("course certificates", () => {
 
       const res = await verify(cert.code);
       expect(res.status).toBe(200);
+      expect(res.headers["cache-control"]).toBe("no-store"); // a cached VALID must not outlive a revoke
       expect(Object.keys(res.body).sort()).toEqual(["code", "courseTitle", "issuedAt", "issuer", "learnerName", "status"]);
       expect(res.body).toEqual({ code: cert.code, learnerName: cert.learnerName, courseTitle: c.title, issuer: cert.issuerName, issuedAt: cert.issuedAt.toISOString(), status: "VALID" });
       expect(res.text).not.toContain(me.email);
@@ -215,6 +216,7 @@ describe("course certificates", () => {
 
     it("404s for unknown and malformed codes", async () => {
       expect((await verify(NEVER)).status).toBe(404);
+      expect((await verify(NEVER)).headers["cache-control"]).toBe("no-store");
       expect((await verify(NEVER)).body.error.code).toBe("CERTIFICATE_NOT_FOUND");
       expect((await verify("short")).status).toBe(404);
       expect((await verify("0000000000")).status).toBe(404); // characters outside the alphabet

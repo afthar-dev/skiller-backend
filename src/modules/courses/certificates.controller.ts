@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Header, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
@@ -36,6 +36,7 @@ export class CertificatesController {
 
   @Public()
   @Get("certificates/:code")
+  @Header("Cache-Control", "no-store")
   @RateLimit({ key: (req) => `certificate:verify:${req.ip}`, limit: 60, windowSec: 60 })
   @ApiOperation({ summary: "Verify a certificate by its code: learner name, course, issuer, date and VALID / REVOKED. No account needed, no personal data beyond the name; 60 per minute per IP" })
   verify(@Param("code") code: string) {

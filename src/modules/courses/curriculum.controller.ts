@@ -8,11 +8,12 @@ import { Public } from "../../common/auth/public.decorator";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { CurriculumService } from "./curriculum.service";
 import { MAX_MARKDOWN_CHARS } from "./markdown";
+import { singleLine } from "./text-schemas";
 
-const sectionBody = z.object({ title: z.string().trim().min(1).max(120) }).strict();
+const sectionBody = z.object({ title: singleLine(1, 120) }).strict();
 
 const uuid = z.string().uuid();
-const lessonTitle = z.string().trim().min(1).max(160);
+const lessonTitle = singleLine(1, 160);
 const articleBody = z.string().max(MAX_MARKDOWN_CHARS);
 
 const createLessonSchema = z

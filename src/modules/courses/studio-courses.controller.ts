@@ -9,10 +9,11 @@ import { parsePage } from "../../common/http/pagination";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { COURSE_LANGUAGES, COURSE_LEVELS, SLUG_PATTERN } from "./course-rules";
 import { CoursesService } from "./courses.service";
+import { singleLine } from "./text-schemas";
 import { PublishingService } from "./publishing.service";
 
-const title = z.string().trim().min(3).max(120);
-const subtitle = z.string().trim().min(1).max(200).nullable();
+const title = singleLine(3, 120);
+const subtitle = singleLine(1, 200).nullable();
 const description = z.string().trim().max(10_000);
 const tags = z
   .array(z.string().trim().toLowerCase().min(1).max(30))

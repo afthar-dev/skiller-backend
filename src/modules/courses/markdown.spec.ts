@@ -165,5 +165,5 @@ describe("reference renderer config", () => {
 
 describe("isSafeLinkDestination", () => {
   it.each(["https://a.example", "http://a.example/x", "mailto:a@b.co", "tel:+911234567890", "/relative", "relative/path", "#anchor", "?q=1"])("allows %s", (d) => expect(isSafeLinkDestination(d)).toBe(true));
-  it.each(["javascript:x", "data:text/plain,hi", "ftp://x", "JAVASCRIPT:x", "blob:x"])("rejects %s", (d) => expect(isSafeLinkDestination(d)).toBe(false));
+  it.each(["javascript:x", "data:text/plain,hi", "ftp://x", "JAVASCRIPT:x", "blob:x", "//evil.example", "//evil.example/x", "\\\\evil.example", "/\\evil.example", "\\/evil.example", "\\evil.example"])("rejects %s", (d) => expect(isSafeLinkDestination(d)).toBe(false));
 });

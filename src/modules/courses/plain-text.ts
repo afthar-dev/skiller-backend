@@ -19,3 +19,9 @@ export function sanitizePlainText(input: string, max: number): string {
     .trim();
   return Array.from(text).slice(0, max).join("").trim();
 }
+
+/** The same for text that must stay on one line (titles, subtitles): every line break becomes a space, so the result never holds a newline. */
+export function sanitizeSingleLine(input: string, max: number): string {
+  const line = sanitizePlainText(input, Number.MAX_SAFE_INTEGER).replace(/\s*\n\s*/gu, " ");
+  return Array.from(line).slice(0, max).join("").trim();
+}
