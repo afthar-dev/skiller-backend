@@ -26,6 +26,26 @@ export interface RazorpayPayment {
   method: string | null;
   amountRefundedPaise: Paise;
   notes: RazorpayNotes;
+  /** Unix seconds the payment was created. */
+  createdAt: number;
+}
+
+export interface RazorpaySettlement {
+  id: string;
+  /** What reached our bank account (after fees and tax). */
+  amountPaise: Paise;
+  feesPaise: Paise;
+  taxPaise: Paise;
+  /** created | processed | failed */
+  status: string;
+  /** Unix seconds. */
+  createdAt: number;
+}
+
+/** A half-open window [fromUnix, toUnix) in unix seconds. */
+export interface TimeRange {
+  fromUnix: number;
+  toUnix: number;
 }
 
 export interface RazorpayRefund {
@@ -75,6 +95,11 @@ export interface RazorpaySubscription {
 export interface RazorpayClient {
   createOrder(input: { amountPaise: Paise; receipt: string; notes?: RazorpayNotes }): Promise<RazorpayOrder>;
   fetchPayment(paymentId: string): Promise<RazorpayPayment>;
+  /** Every captured payment created in the window (all pages). Used by nightly reconciliation. */
+  listCapturedPayments(range: TimeRange): Promise<RazorpayPayment[]>;
+  /** Every settlement created in the window (all pages). */
+  listSettlements(range: TimeRange): Promise<RazorpaySettlement[]>;
+  fetchRefund(refundId: string): Promise<RazorpayRefund>;
   /** `idempotencyKey` makes a repeated call (a retry after a timeout) return the first refund instead of refunding twice. */
   createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund>;
   /** The refunds made on a payment (up to 100), with the notes they were created with. Used to find a refund whose creation was not recorded. */
@@ -98,6 +123,9 @@ export class RazorpayApiError extends Error {
     this.name = "RazorpayApiError";
   }
 }
+
+const PAGE_SIZE = 100;
+const MAX_PAGES = 200;
 
 const toApiAmount = (p: Paise): number => {
   if (p < 0n || p > BigInt(Number.MAX_SAFE_INTEGER)) throw new RangeError("amount is outside the range Razorpay accepts");
@@ -170,8 +198,7 @@ export class HttpRazorpayClient implements RazorpayClient {
     return { id: String(o.id), amountPaise: num(o.amount), currency: String(o.currency), receipt: (o.receipt as string | null) ?? null, status: String(o.status), notes: notesOf(o.notes) };
   }
 
-  async fetchPayment(paymentId: string): Promise<RazorpayPayment> {
-    const p = await this.call("GET", `/payments/${encodeURIComponent(paymentId)}`);
+  private toPayment(p: RawAmounts): RazorpayPayment {
     return {
       id: String(p.id),
       orderId: (p.order_id as string | null) ?? null,
@@ -182,7 +209,45 @@ export class HttpRazorpayClient implements RazorpayClient {
       method: (p.method as string | null) ?? null,
       amountRefundedPaise: p.amount_refunded === undefined || p.amount_refunded === null ? 0n : num(p.amount_refunded),
       notes: notesOf(p.notes),
+      createdAt: Number(p.created_at ?? 0),
     };
+  }
+
+  async fetchPayment(paymentId: string): Promise<RazorpayPayment> {
+    return this.toPayment(await this.call("GET", `/payments/${encodeURIComponent(paymentId)}`));
+  }
+
+  /** Pages through a collection endpoint (100 per page); bounded so a runaway response cannot loop forever. */
+  private async pages(path: string, range: TimeRange): Promise<RawAmounts[]> {
+    const out: RawAmounts[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      // Razorpay's `to` is inclusive; ours is exclusive.
+      const res = await this.call("GET", `${path}?from=${range.fromUnix}&to=${range.toUnix - 1}&count=${PAGE_SIZE}&skip=${page * PAGE_SIZE}`);
+      const items = Array.isArray(res.items) ? (res.items as RawAmounts[]) : [];
+      out.push(...items);
+      if (items.length < PAGE_SIZE) return out;
+    }
+    throw new RazorpayApiError(0, null, `more than ${MAX_PAGES * PAGE_SIZE} records in one window (${path})`);
+  }
+
+  async listCapturedPayments(range: TimeRange): Promise<RazorpayPayment[]> {
+    return (await this.pages("/payments", range)).filter((p) => p.captured === true).map((p) => this.toPayment(p));
+  }
+
+  async listSettlements(range: TimeRange): Promise<RazorpaySettlement[]> {
+    return (await this.pages("/settlements", range)).map((s) => ({
+      id: String(s.id),
+      amountPaise: num(s.amount),
+      feesPaise: s.fees === undefined || s.fees === null ? 0n : num(s.fees),
+      taxPaise: s.tax === undefined || s.tax === null ? 0n : num(s.tax),
+      status: String(s.status),
+      createdAt: Number(s.created_at ?? 0),
+    }));
+  }
+
+  async fetchRefund(refundId: string): Promise<RazorpayRefund> {
+    const r = await this.call("GET", `/refunds/${encodeURIComponent(refundId)}`);
+    return { id: String(r.id), paymentId: String(r.payment_id), amountPaise: num(r.amount), status: String(r.status), notes: notesOf(r.notes) };
   }
 
   async createRefund(paymentId: string, input: { amountPaise: Paise; notes?: RazorpayNotes; idempotencyKey?: string }): Promise<RazorpayRefund> {

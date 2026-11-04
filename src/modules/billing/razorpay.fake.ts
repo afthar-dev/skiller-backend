@@ -8,8 +8,11 @@ import type {
   RazorpayPayment,
   RazorpayPlan,
   RazorpayRefund,
+  RazorpaySettlement,
   RazorpaySubscription,
+  TimeRange,
 } from "./razorpay.client";
+import { RazorpayApiError } from "./razorpay.client";
 import type { Paise } from "./money";
 import { hmacSha256Hex, verifyPaymentSignature } from "./signature";
 
@@ -34,6 +37,7 @@ export class FakeRazorpayClient implements RazorpayClient {
   readonly orders = new Map<string, RazorpayOrder>();
   readonly payments = new Map<string, RazorpayPayment>();
   readonly refunds: RazorpayRefund[] = [];
+  readonly settlements: RazorpaySettlement[] = [];
   readonly plans = new Map<string, RazorpayPlan>();
   readonly subscriptions = new Map<string, RazorpaySubscription>();
   /** When set, the next call to that method rejects with this error (then clears). */
@@ -64,8 +68,25 @@ export class FakeRazorpayClient implements RazorpayClient {
   async fetchPayment(paymentId: string): Promise<RazorpayPayment> {
     this.record("fetchPayment", paymentId);
     const p = this.payments.get(paymentId);
-    if (!p) throw new Error(`fake razorpay: unknown payment ${paymentId}`);
+    if (!p) throw new RazorpayApiError(400, "BAD_REQUEST_ERROR", `fake razorpay: unknown payment ${paymentId}`);
     return p;
+  }
+
+  async listCapturedPayments(range: TimeRange): Promise<RazorpayPayment[]> {
+    this.record("listCapturedPayments", range);
+    return [...this.payments.values()].filter((p) => p.captured && p.createdAt >= range.fromUnix && p.createdAt < range.toUnix);
+  }
+
+  async listSettlements(range: TimeRange): Promise<RazorpaySettlement[]> {
+    this.record("listSettlements", range);
+    return this.settlements.filter((x) => x.createdAt >= range.fromUnix && x.createdAt < range.toUnix);
+  }
+
+  async fetchRefund(refundId: string): Promise<RazorpayRefund> {
+    this.record("fetchRefund", refundId);
+    const r = this.refunds.find((x) => x.id === refundId);
+    if (!r) throw new Error(`fake razorpay: unknown refund ${refundId}`);
+    return r;
   }
 
   private readonly refundsByKey = new Map<string, RazorpayRefund>();
@@ -145,8 +166,16 @@ export class FakeRazorpayClient implements RazorpayClient {
       method: "upi",
       amountRefundedPaise: 0n,
       notes: order.notes,
+      createdAt: Math.floor(Date.now() / 1000),
       ...overrides,
     };
+    this.payments.set(payment.id, payment);
+    return payment;
+  }
+
+  /** A captured payment that belongs to no order of ours (e.g. paid straight from a payment link): money we never booked. */
+  capturePaymentWithoutOrder(amountPaise: Paise, overrides: Partial<RazorpayPayment> = {}): RazorpayPayment {
+    const payment: RazorpayPayment = { id: id("pay"), orderId: null, amountPaise, currency: "INR", status: "captured", captured: true, method: "upi", amountRefundedPaise: 0n, notes: {}, createdAt: Math.floor(Date.now() / 1000), ...overrides };
     this.payments.set(payment.id, payment);
     return payment;
   }

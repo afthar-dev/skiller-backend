@@ -10,6 +10,7 @@ import { HoldReleaseProcessor } from "./modules/billing/hold-release.processor";
 import { InvoicesProcessor } from "./modules/billing/invoices.processor";
 import { OrderMaintenanceProcessor } from "./modules/billing/order-maintenance.processor";
 import { PayoutMaintenanceProcessor } from "./modules/billing/payout.processor";
+import { ReconciliationProcessor } from "./modules/billing/reconciliation.processor";
 import { RefundsProcessor } from "./modules/billing/refunds.processor";
 import { SubscriptionMaintenanceProcessor } from "./modules/billing/subscription-maintenance.processor";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
@@ -40,6 +41,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly invoices: InvoicesProcessor,
     private readonly refunds: RefundsProcessor,
     private readonly payouts: PayoutMaintenanceProcessor,
+    private readonly reconciliation: ReconciliationProcessor,
   ) {}
 
   async onApplicationBootstrap() {
@@ -52,6 +54,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.invoices.schedule();
     await this.refunds.schedule();
     await this.payouts.schedule();
+    await this.reconciliation.schedule();
   }
 
   async onApplicationShutdown() {

@@ -8,7 +8,11 @@ import { ObjectStorageModule } from "../media";
 import { UsersModule } from "../users";
 import { WalletModule } from "../wallet";
 import { AdminBillingController, AdminRefundsController } from "./admin-billing.controller";
+import { AdminFinanceController, AdminOrdersController } from "./admin-finance.controller";
+import { AdminFinanceService } from "./admin-finance.service";
 import { AdminWalletController } from "./admin-wallet.controller";
+import { AdminCouponsController, CreatorCouponsController } from "./coupons.controller";
+import { CouponsAdminService } from "./coupons-admin.service";
 import { CheckoutController, CreditNotesController, InvoicesController, OrderRefundsController, OrdersController, OrgSubscriptionsController, PlansController, SubscriptionsController } from "./billing.controller";
 import { CheckoutService } from "./checkout.service";
 import { CouponsService } from "./coupons.service";
@@ -32,6 +36,8 @@ import { WalletService } from "./wallet.service";
 import { PayoutAccountsService } from "./payout-accounts.service";
 import { PlansService } from "./plans.service";
 import { DefaultRefundEligibility, RefundEligibilityRegistry } from "./refund-eligibility";
+import { ReconciliationProcessor } from "./reconciliation.processor";
+import { ReconciliationService } from "./reconciliation.service";
 import { RefundHandlers } from "./refund-handlers";
 import { RefundRequestsService } from "./refund-requests.service";
 import { RefundsProcessor } from "./refunds.processor";
@@ -89,15 +95,17 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   PayoutSendProcessor,
   PayoutMaintenanceProcessor,
   WalletService,
+  ReconciliationService,
+  ReconciliationProcessor,
 ];
 
-export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor, RefundEligibilityRegistry, RefundsProcessor, PayoutMaintenanceProcessor];
+export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookDispatcher, SubscriptionsService, SubscriptionMaintenanceProcessor, SellableRegistry, FulfilmentService, OrdersService, OrderMaintenanceProcessor, HoldReleaseProcessor, InvoicesProcessor, RefundEligibilityRegistry, RefundsProcessor, PayoutMaintenanceProcessor, ReconciliationService, ReconciliationProcessor];
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
-  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, CreditNotesController, AdminBillingController, AdminRefundsController, WalletController, OrgWalletController, AdminWalletController],
-  providers: [...BILLING_CORE_PROVIDERS, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
+  controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, CreditNotesController, AdminBillingController, AdminRefundsController, AdminFinanceController, AdminOrdersController, AdminCouponsController, CreatorCouponsController, WalletController, OrgWalletController, AdminWalletController],
+  providers: [...BILLING_CORE_PROVIDERS, AdminFinanceService, CouponsAdminService, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],
 })
 export class BillingModule {}

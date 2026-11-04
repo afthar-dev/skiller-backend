@@ -1008,3 +1008,25 @@ model Payout {
   @@index([status, approvedAt])
   @@map("payouts")
 }
+
+// ─── reconciliation ──────────────────────────────────────────────────────
+
+enum ReconciliationStatus {
+  OK
+  MISMATCH
+  ERROR
+}
+
+/// One run per IST calendar day (`date` = "YYYY-MM-DD"); running the same day again updates the row. `details` lists every mismatch found.
+model ReconciliationRun {
+  id         String               @id @default(uuid(7))
+  date       String               @unique
+  status     ReconciliationStatus
+  details    Json
+  startedAt  DateTime
+  finishedAt DateTime?
+  createdAt  DateTime             @default(now())
+
+  @@index([createdAt])
+  @@map("reconciliation_runs")
+}

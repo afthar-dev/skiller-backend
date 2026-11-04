@@ -49,6 +49,14 @@ export const toOrderView = (o: OrderRow): OrderView => ({
   creditNoteId: o.refunds[0]?.creditNote?.id ?? null,
 });
 
+export interface AdminOrderFilter {
+  status?: Order["status"];
+  buyerId?: string;
+  sellerOwnerId?: string;
+  razorpayPaymentId?: string;
+  createdAt?: { gte?: Date; lt?: Date };
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -68,6 +76,36 @@ export class OrdersService {
     });
     const { items, nextCursor } = toPage(rows, page.limit);
     return { items: items.map(toOrderView), nextCursor };
+  }
+
+  /** Finance's view: every order, newest first, with who bought and who sold. */
+  async listAll(filter: AdminOrderFilter, page: PageQuery) {
+    const rows = await this.prisma.order.findMany({
+      where: {
+        ...(filter.status ? { status: filter.status } : {}),
+        ...(filter.buyerId ? { buyerId: filter.buyerId } : {}),
+        ...(filter.sellerOwnerId ? { sellerOwnerId: filter.sellerOwnerId } : {}),
+        ...(filter.razorpayPaymentId ? { razorpayPaymentId: filter.razorpayPaymentId } : {}),
+        ...(filter.createdAt ? { createdAt: filter.createdAt } : {}),
+        ...(page.cursor ? { id: { lt: page.cursor } } : {}),
+      },
+      orderBy: { id: "desc" },
+      take: page.limit + 1,
+      include,
+    });
+    const { items, nextCursor } = toPage(rows, page.limit);
+    return {
+      items: items.map((o) => ({
+        ...toOrderView(o),
+        buyerId: o.buyerId,
+        sellerOwnerType: o.sellerOwnerType,
+        sellerOwnerId: o.sellerOwnerId,
+        commissionBps: o.commissionBps,
+        razorpayPaymentId: o.razorpayPaymentId,
+        fulfilmentFailedAt: o.fulfilmentFailedAt?.toISOString() ?? null,
+      })),
+      nextCursor,
+    };
   }
 
   /** Another buyer's (or an unknown) order is a 404, never a hint that it exists. */

@@ -54,7 +54,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     const { queueToken, QueueNames } = await import("./common/queue/queue.constants");
     const { WebhookDispatcher } = await import("./modules/billing");
     const schedulers = await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers();
-    expect(schedulers.map((x) => x.key)).toEqual(expect.arrayContaining(["orders.expire", "idempotency.cleanup", "holds.release", "invoices.complete", "refunds.resume", "payouts.redrive"]));
+    expect(schedulers.map((x) => x.key)).toEqual(expect.arrayContaining(["orders.expire", "idempotency.cleanup", "holds.release", "invoices.complete", "refunds.resume", "payouts.redrive", "reconciliation.nightly"]));
     expect(app.get(WebhookDispatcher).registeredTypes()).toEqual(expect.arrayContaining(["payment.captured", "payment.failed", "refund.processed", "payout.processed", "payout.reversed", "payout.failed", "payout.rejected", "fund_account.validation.completed", "fund_account.validation.failed"]));
   });
 });

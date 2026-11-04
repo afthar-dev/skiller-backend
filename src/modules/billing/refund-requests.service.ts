@@ -52,9 +52,9 @@ export class RefundRequestsService {
     }
   }
 
-  async list(filter: { status?: RefundStatus }, page: PageQuery) {
+  async list(filter: { status?: RefundStatus; orderId?: string; createdAt?: { gte?: Date; lt?: Date } }, page: PageQuery) {
     const rows = await this.prisma.refund.findMany({
-      where: { ...(filter.status ? { status: filter.status } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
+      where: { ...(filter.status ? { status: filter.status } : {}), ...(filter.orderId ? { orderId: filter.orderId } : {}), ...(filter.createdAt ? { createdAt: filter.createdAt } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
       orderBy: { id: "desc" },
       take: page.limit + 1,
     });

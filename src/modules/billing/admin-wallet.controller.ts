@@ -6,16 +6,19 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
-import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiPagination, ApiZodBody, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
+import { DATE_PATTERN, istWindow } from "./ist";
 import { PayoutAccountsService } from "./payout-accounts.service";
 import { PayoutsService } from "./payouts.service";
 import { metaOf } from "./wallet.controller";
 
 const payoutStatusSchema = z.enum(["REQUESTED", "APPROVED", "PROCESSING", "PAID", "REJECTED", "REVERSED", "FAILED", "MANUAL_REVIEW"]);
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(500).optional() }).strict();
-const listSchema = z.object({ status: payoutStatusSchema.optional(), ownerType: z.enum(["USER", "ORG"]).optional(), ownerId: z.string().min(1).max(100).optional() });
+const day = z.string().regex(DATE_PATTERN, "a calendar day, YYYY-MM-DD (India time)");
+const listSchema = z.object({ status: payoutStatusSchema.optional(), ownerType: z.enum(["USER", "ORG"]).optional(), ownerId: z.string().min(1).max(100).optional(), from: day.optional(), to: day.optional() });
+const clearFlagSchema = z.object({ flag: z.enum(["DUPLICATE_PAN", "NAME_MISMATCH"]), note: z.string().trim().min(1).max(500).optional() }).strict();
 
 @ApiTags("Admin")
 @Controller("admin")
@@ -34,13 +37,27 @@ export class AdminWalletController {
     return this.accounts.listForReview({ flagged: query.flagged === "true", status }, parsePage(query));
   }
 
+  @Post("payout-accounts/:id/clear-flag")
+  @HttpCode(200)
+  @RequirePermission("payout.approve")
+  @RequireStepUp()
+  @ApiOperation({ summary: "Clear a review flag (DUPLICATE_PAN or NAME_MISMATCH) after finance checked the account, so payouts to it go through again (step-up required, audited)" })
+  @ApiZodBody(clearFlagSchema)
+  @ApiErrorResponse(404, "PAYOUT_ACCOUNT_NOT_FOUND")
+  @ApiErrorResponse(409, "PAYOUT_ACCOUNT_FLAG_NOT_SET: the account does not carry that flag.")
+  clearFlag(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
+    const { flag, note } = clearFlagSchema.parse(body);
+    return this.accounts.clearFlag(user.id, id, flag, note, metaOf(req));
+  }
+
   @Get("payouts")
   @RequirePermission("wallet.view_any")
-  @ApiOperation({ summary: "Payouts, newest first, optionally by status and owner" })
+  @ApiOperation({ summary: "Payouts, newest first, optionally by status, owner and IST day range" })
+  @ApiZodQuery(listSchema)
   @ApiPagination()
   list(@Query() query: Record<string, unknown>) {
-    const { status, ownerType, ownerId } = listSchema.parse({ status: query.status, ownerType: query.ownerType, ownerId: query.ownerId });
-    return this.payouts.list({ status, ownerType, ownerId }, parsePage(query), true);
+    const { status, ownerType, ownerId, from, to } = listSchema.parse({ status: query.status, ownerType: query.ownerType, ownerId: query.ownerId, from: query.from, to: query.to });
+    return this.payouts.list({ status, ownerType, ownerId, createdAt: istWindow(from, to) }, parsePage(query), true);
   }
 
   @Get("payouts/:id")

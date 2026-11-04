@@ -232,6 +232,22 @@ export class PayoutAccountsService {
     if (done.count > 0) this.logger.log(`payout account ${account.id} ${ok ? "verified" : "failed validation"}`);
   }
 
+  /**
+   * Finance reviewed a flagged account (DUPLICATE_PAN, NAME_MISMATCH) and clears the flag, which lets payouts to it through again.
+   * Only the flag that is actually set can be cleared, so a stale click cannot clear a different problem. Audited with the note.
+   */
+  async clearFlag(actorId: string, accountId: string, flag: string, note: string | undefined, meta: MutationMeta = {}): Promise<AdminPayoutAccountView> {
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "payout_accounts" WHERE "id" = ${accountId} FOR UPDATE`;
+      if (locked.length === 0) throw new AppError("PAYOUT_ACCOUNT_NOT_FOUND", 404, "Payout account not found");
+      const before = await tx.payoutAccount.findUniqueOrThrow({ where: { id: accountId } });
+      if (before.reviewFlag !== flag) throw new AppError("PAYOUT_ACCOUNT_FLAG_NOT_SET", 409, `The account is not flagged ${flag}`, { reviewFlag: before.reviewFlag });
+      const updated = await tx.payoutAccount.update({ where: { id: accountId }, data: { reviewFlag: null } });
+      await this.audit.record(tx, { actorId, action: "payout_account.clear_flag", targetType: "payout_account", targetId: accountId, before: toAdminView(before), after: { ...toAdminView(updated), clearedFlag: flag, note: note ?? null }, ...meta });
+      return toAdminView(updated);
+    });
+  }
+
   async listForReview(filter: { flagged?: boolean; status?: PayoutAccount["status"] }, page: PageQuery) {
     const rows = await this.prisma.payoutAccount.findMany({
       where: { ...(filter.flagged ? { reviewFlag: { not: null } } : {}), ...(filter.status ? { status: filter.status } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },

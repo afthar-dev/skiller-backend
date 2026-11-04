@@ -6,10 +6,11 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
-import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiPagination, ApiZodBody, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
 import type { MutationMeta } from "../rbac";
+import { DATE_PATTERN, istWindow } from "./ist";
 import { planLimitsSchema } from "./plan-catalog";
 import { PlansService } from "./plans.service";
 import { RefundRequestsService } from "./refund-requests.service";
@@ -65,6 +66,7 @@ export class AdminBillingController {
 }
 
 const refundStatusSchema = z.enum(["REQUESTED", "APPROVED", "PROCESSING", "PROCESSED", "REJECTED", "FAILED"]);
+const refundListSchema = z.object({ status: refundStatusSchema.optional(), orderId: z.string().min(1).max(100).optional(), from: z.string().regex(DATE_PATTERN).optional(), to: z.string().regex(DATE_PATTERN).optional() });
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(500).optional() }).strict();
 
 @ApiTags("Admin")
@@ -74,11 +76,12 @@ export class AdminRefundsController {
 
   @Get()
   @RequirePermission("billing.refund")
-  @ApiOperation({ summary: "Refunds, newest first, optionally by status" })
+  @ApiOperation({ summary: "Refunds, newest first, optionally by status, order and IST day range" })
+  @ApiZodQuery(refundListSchema)
   @ApiPagination()
   list(@Query() query: Record<string, unknown>) {
-    const status = query.status === undefined ? undefined : refundStatusSchema.parse(query.status);
-    return this.refunds.list({ status }, parsePage(query));
+    const { status, orderId, from, to } = refundListSchema.parse({ status: query.status, orderId: query.orderId, from: query.from, to: query.to });
+    return this.refunds.list({ status, orderId, createdAt: istWindow(from, to) }, parsePage(query));
   }
 
   @Post(":id/approve")

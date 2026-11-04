@@ -20,7 +20,9 @@ export type {
   RazorpayPayment,
   RazorpayPlan,
   RazorpayRefund,
+  RazorpaySettlement,
   RazorpaySubscription,
+  TimeRange,
 } from "./razorpay.client";
 export { FakeRazorpayClient } from "./razorpay.fake";
 export type { FakeWebhook } from "./razorpay.fake";
@@ -40,11 +42,16 @@ export { SellableRegistry } from "./sellable.registry";
 export type { PaidOrder, SellableDescription, SellableProvider } from "./sellable.registry";
 export { CouponsService } from "./coupons.service";
 export type { CreateCouponInput } from "./coupons.service";
+export { RefundsService } from "./refunds.service";
+export type { RefundWebhookEntity } from "./refunds.service";
 export { FulfilmentService } from "./fulfilment.service";
 export type { FulfilResult } from "./fulfilment.service";
 export { splitSale, saleLines } from "./sale-split";
 export type { SaleInput, SaleSplit } from "./sale-split";
 export { ORDER_LEDGER_REF, SALE_DESCRIPTION } from "./fulfilment.service";
+export { ReconciliationService } from "./reconciliation.service";
+export type { ReconciliationRunView } from "./reconciliation.service";
+export { ReconciliationProcessor } from "./reconciliation.processor";
 export { HoldReleaseProcessor } from "./hold-release.processor";
 export { CreditNoteIssuer } from "./credit-note-issuer";
 export { InvoiceIssuer } from "./invoice-issuer";

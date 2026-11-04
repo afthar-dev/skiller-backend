@@ -47,7 +47,7 @@ export class CouponsService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  async create(input: CreateCouponInput): Promise<Coupon> {
+  async create(input: CreateCouponInput, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<Coupon> {
     const code = normalizeCouponCode(input.code);
     const scope = input.scope ?? "ALL";
     if (!CODE_PATTERN.test(code)) throw invalid("Coupon codes are 3-32 characters: letters, digits, dash and underscore");
@@ -68,7 +68,7 @@ export class CouponsService {
     }
 
     try {
-      return await this.prisma.coupon.create({
+      return await db.coupon.create({
         data: {
           code,
           kind: input.kind,

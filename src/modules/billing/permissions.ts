@@ -6,4 +6,4 @@ export const BillingPermissions = definePermissions("billing", {
   refund: "Approve refunds",
   "coupons.manage": "Manage platform-wide coupons",
 });
-export const FinancePermissions = definePermissions("finance", { view: "View platform finance reports" });
+export const FinancePermissions = definePermissions("finance", { view: "View platform finance reports", reconcile: "Run payment reconciliation for a day" });

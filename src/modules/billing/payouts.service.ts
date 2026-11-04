@@ -522,9 +522,9 @@ export class PayoutsService {
     return this.list({ ownerType: owner.ownerType, ownerId: owner.ownerId }, page);
   }
 
-  async list(filter: { ownerType?: "USER" | "ORG"; ownerId?: string; status?: PayoutStatus }, page: PageQuery, admin = false) {
+  async list(filter: { ownerType?: "USER" | "ORG"; ownerId?: string; status?: PayoutStatus; createdAt?: { gte?: Date; lt?: Date } }, page: PageQuery, admin = false) {
     const rows = await this.prisma.payout.findMany({
-      where: { ...(filter.ownerType ? { ownerType: filter.ownerType } : {}), ...(filter.ownerId ? { ownerId: filter.ownerId } : {}), ...(filter.status ? { status: filter.status } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
+      where: { ...(filter.createdAt ? { createdAt: filter.createdAt } : {}), ...(filter.ownerType ? { ownerType: filter.ownerType } : {}), ...(filter.ownerId ? { ownerId: filter.ownerId } : {}), ...(filter.status ? { status: filter.status } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
       orderBy: { id: "desc" },
       take: page.limit + 1,
     });

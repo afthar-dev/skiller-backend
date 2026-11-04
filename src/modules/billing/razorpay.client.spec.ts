@@ -89,11 +89,33 @@ describe("HttpRazorpayClient (stubbed fetch)", () => {
   });
 
   it("fetchPayment maps the payment", async () => {
-    const { seen, client } = stub([{ body: { id: "pay_1", order_id: "order_1", amount: 5000, currency: "INR", status: "captured", captured: true, method: "upi", amount_refunded: 0, notes: { a: 1 } } }]);
-    expect(await client.fetchPayment("pay_1")).toEqual({ id: "pay_1", orderId: "order_1", amountPaise: 5000n, currency: "INR", status: "captured", captured: true, method: "upi", amountRefundedPaise: 0n, notes: { a: "1" } });
+    const { seen, client } = stub([{ body: { id: "pay_1", order_id: "order_1", amount: 5000, currency: "INR", status: "captured", captured: true, method: "upi", amount_refunded: 0, created_at: 1700000000, notes: { a: 1 } } }]);
+    expect(await client.fetchPayment("pay_1")).toEqual({ id: "pay_1", orderId: "order_1", amountPaise: 5000n, currency: "INR", status: "captured", captured: true, method: "upi", amountRefundedPaise: 0n, notes: { a: "1" }, createdAt: 1700000000 });
     expect(seen[0].method).toBe("GET");
     expect(seen[0].url).toBe("https://rzp.example/v1/payments/pay_1");
     expect(seen[0].body).toBeUndefined();
+  });
+
+  it("listCapturedPayments pages through /payments with an exclusive end and keeps only captured payments", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: `pay_${i}`, order_id: null, amount: 100, currency: "INR", status: "captured", captured: true, created_at: 1700000000 + i }));
+    const page2 = [{ id: "pay_100", amount: 200, currency: "INR", status: "captured", captured: true, created_at: 1700000200 }, { id: "pay_x", amount: 300, currency: "INR", status: "authorized", captured: false, created_at: 1700000300 }];
+    const { seen, client } = stub([{ body: { items: page1 } }, { body: { items: page2 } }]);
+    const payments = await client.listCapturedPayments({ fromUnix: 1700000000, toUnix: 1700086400 });
+    expect(payments).toHaveLength(101);
+    expect(payments[100]).toMatchObject({ id: "pay_100", amountPaise: 200n, createdAt: 1700000200 });
+    expect(seen[0].url).toBe("https://rzp.example/v1/payments?from=1700000000&to=1700086399&count=100&skip=0");
+    expect(seen[1].url).toBe("https://rzp.example/v1/payments?from=1700000000&to=1700086399&count=100&skip=100");
+  });
+
+  it("listSettlements maps amounts to paise and fetchRefund reads one refund", async () => {
+    const { seen, client } = stub([
+      { body: { items: [{ id: "setl_1", amount: 9000, fees: 900, tax: 162, status: "processed", created_at: 1700000100 }] } },
+      { body: { id: "rfnd_1", payment_id: "pay_1", amount: 500, status: "processed", notes: { refundId: "r-1" } } },
+    ]);
+    expect(await client.listSettlements({ fromUnix: 1, toUnix: 100 })).toEqual([{ id: "setl_1", amountPaise: 9000n, feesPaise: 900n, taxPaise: 162n, status: "processed", createdAt: 1700000100 }]);
+    expect(seen[0].url).toContain("/settlements?from=1&to=99");
+    expect(await client.fetchRefund("rfnd_1")).toEqual({ id: "rfnd_1", paymentId: "pay_1", amountPaise: 500n, status: "processed", notes: { refundId: "r-1" } });
+    expect(seen[1].url).toBe("https://rzp.example/v1/refunds/rfnd_1");
   });
 
   it("createRefund posts the partial amount to the payment's refund endpoint", async () => {
