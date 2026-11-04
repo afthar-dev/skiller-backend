@@ -60,6 +60,17 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
     expect(mediaTmpDirs()).toEqual(before); // the working directory is always removed
   });
 
+  it("a course promo is transcoded like a reel: public HLS and poster, source removed, and it is not capped at the reel length", async () => {
+    const { row, prefix } = await h.createAsset({ purpose: "COURSE_PROMO", source: "sample-91s-video-only.mp4", mime: "video/mp4" });
+    await run(row.id);
+    const done = await reload(row.id);
+    expect(done.status).toBe("READY");
+    expect(done.durationSec).toBeGreaterThan(90.5); // a reel would have failed DURATION_EXCEEDED at 91 s
+    const keys = await h.r2.listKeys("PUBLIC", prefix);
+    expect(keys).toContain(`${prefix}/hls/index.m3u8`);
+    expect(keys).toContain(`${prefix}/poster.jpg`);
+  });
+
   it("the source is deleted after READY and the public bucket never holds one", async () => {
     const { row, sourceKey } = await h.createAsset({ purpose: "REEL", source: "sample-3s-180p.mp4", mime: "video/mp4" });
     await run(row.id);

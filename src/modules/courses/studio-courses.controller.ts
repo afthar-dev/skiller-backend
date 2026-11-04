@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { Request } from "express";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
@@ -8,6 +9,7 @@ import { parsePage } from "../../common/http/pagination";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { COURSE_LANGUAGES, COURSE_LEVELS, SLUG_PATTERN } from "./course-rules";
 import { CoursesService } from "./courses.service";
+import { PublishingService } from "./publishing.service";
 
 const title = z.string().trim().min(3).max(120);
 const subtitle = z.string().trim().min(1).max(200).nullable();
@@ -61,7 +63,10 @@ const listQuery = z.object({ status: z.enum(["DRAFT", "IN_REVIEW", "PUBLISHED", 
 @ApiTags("Course studio")
 @Controller("studio/courses")
 export class StudioCoursesController {
-  constructor(private readonly courses: CoursesService) {}
+  constructor(
+    private readonly courses: CoursesService,
+    private readonly publishing: PublishingService,
+  ) {}
 
   // AuthenticatedOnly, not course.create: who may create is decided per owner by CoursePolicy (creator for yourself, org author for an org).
   @AuthenticatedOnly()
@@ -94,6 +99,22 @@ export class StudioCoursesController {
   @ApiZodBody(updateSchema)
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.courses.update(user, id, updateSchema.parse(body));
+  }
+
+  @AuthenticatedOnly()
+  @Post(":id/submit")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Submit a complete draft for moderator review (COURSE_NOT_PUBLISHABLE lists what is missing)" })
+  submit(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
+    return this.publishing.submit(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
+  }
+
+  @AuthenticatedOnly()
+  @Post(":id/archive")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Archive a published course: off the catalog and not for sale; enrolled learners keep access" })
+  archive(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
+    return this.publishing.archive(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
   }
 
   @AuthenticatedOnly()

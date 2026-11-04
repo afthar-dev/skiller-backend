@@ -361,6 +361,7 @@ enum MediaPurpose {
   REEL
   COURSE_LESSON
   COURSE_RESOURCE
+  COURSE_PROMO
 }
 
 enum MediaBucket {
@@ -1086,6 +1087,10 @@ model Course {
   status            CourseStatus    @default(DRAFT)
   flaggedAt         DateTime?
   flagReason        String?
+  /// Set when the author submits for review; the moderator queue is oldest first.
+  submittedAt       DateTime?
+  /// The moderator reason for the last rejection; cleared when the course is submitted again.
+  rejectionReason   String?
   publishedAt       DateTime?
   createdById       String
   createdAt         DateTime        @default(now())
@@ -1101,6 +1106,7 @@ model Course {
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
   @@index([status, publishedAt])
+  @@index([status, submittedAt, id])
   @@map("courses")
 }
 

@@ -18,6 +18,7 @@ describe("MEDIA_RULES", () => {
     }
     expect(MEDIA_RULES.REEL).toMatchObject({ bucket: "PUBLIC", kind: "video", maxBytes: 200 * MB, maxDurationSec: 90 });
     expect(MEDIA_RULES.COURSE_LESSON).toMatchObject({ bucket: "PRIVATE", kind: "video", maxBytes: 5 * 1024 * MB });
+    expect(MEDIA_RULES.COURSE_PROMO).toMatchObject({ bucket: "PUBLIC", kind: "video", maxBytes: 500 * MB, maxDurationSec: 300 });
     expect(MEDIA_RULES.COURSE_RESOURCE).toMatchObject({ bucket: "PRIVATE", kind: "file", maxBytes: 100 * MB });
     expect(MEDIA_RULES.COURSE_RESOURCE.mimes).toEqual(expect.arrayContaining(["application/pdf", "application/zip"]));
     expect(PART_SIZE).toBe(10 * MB);
@@ -27,6 +28,7 @@ describe("MEDIA_RULES", () => {
     expect(requiresCreator("REEL")).toBe(true);
     expect(requiresCreator("COURSE_LESSON")).toBe(true);
     expect(requiresCreator("COURSE_RESOURCE")).toBe(true);
+    expect(requiresCreator("COURSE_PROMO")).toBe(true);
     expect(requiresCreator("AVATAR")).toBe(false);
     expect(requiresCreator("GIG_GALLERY")).toBe(false);
   });
@@ -48,6 +50,8 @@ describe("validateUpload", () => {
 
   it("rejects a 201 MB reel and a 101 MB resource", () => {
     expect(codeOf(() => validateUpload("REEL", "video/mp4", 201 * MB))).toBe("MEDIA_TOO_LARGE");
+    expect(codeOf(() => validateUpload("COURSE_PROMO", "video/mp4", 500 * MB))).toBeNull();
+    expect(codeOf(() => validateUpload("COURSE_PROMO", "video/mp4", 501 * MB))).toBe("MEDIA_TOO_LARGE");
     expect(codeOf(() => validateUpload("COURSE_RESOURCE", "application/pdf", 101 * MB))).toBe("MEDIA_TOO_LARGE");
   });
 

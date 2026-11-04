@@ -129,7 +129,7 @@ export class CoursesService {
           data.thumbnailAssetId = patch.thumbnailAssetId;
         }
         if (patch.promoVideoAssetId !== undefined && patch.promoVideoAssetId !== course.promoVideoAssetId) {
-          if (patch.promoVideoAssetId) await this.media.attach(tx, course, patch.promoVideoAssetId, "REEL");
+          if (patch.promoVideoAssetId) await this.media.attach(tx, course, patch.promoVideoAssetId, "COURSE_PROMO");
           if (course.promoVideoAssetId) await this.media.detach(tx, course.promoVideoAssetId);
           data.promoVideoAssetId = patch.promoVideoAssetId;
         }

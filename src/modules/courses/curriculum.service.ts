@@ -223,10 +223,10 @@ export class CurriculumService {
     });
   }
 
-  /** Public curriculum of a published course: titles, durations and free-preview flags. Only free-preview videos expose their asset id. */
+  /** Public curriculum of a published, unflagged course: titles, durations and free-preview flags. Only free-preview videos expose their asset id. */
   async publicView(slug: string) {
-    const course = await this.prisma.course.findUnique({ where: { slug }, select: { id: true, slug: true, title: true, status: true } });
-    if (!course || course.status !== "PUBLISHED") throw new AppError("COURSE_NOT_FOUND", 404, "Course not found");
+    const course = await this.prisma.course.findUnique({ where: { slug }, select: { id: true, slug: true, title: true, status: true, flaggedAt: true } });
+    if (!course || course.status !== "PUBLISHED" || course.flaggedAt) throw new AppError("COURSE_NOT_FOUND", 404, "Course not found");
     const sections = await this.read(this.prisma, course.id);
     let lessonCount = 0;
     let total = 0;

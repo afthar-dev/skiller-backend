@@ -50,14 +50,16 @@ export const MEDIA_RULES: Record<MediaPurpose, MediaRule> = {
   GIG_GALLERY: image,
   REEL: { bucket: "PUBLIC", mimes: VIDEO_MIMES, maxBytes: 200 * MB, maxDurationSec: 90, kind: "video" },
   COURSE_LESSON: { bucket: "PRIVATE", mimes: VIDEO_MIMES, maxBytes: 5 * 1024 * MB, kind: "video" },
+  /** A course trailer: public, transcoded like a reel to public HLS, but longer and larger. */
+  COURSE_PROMO: { bucket: "PUBLIC", mimes: VIDEO_MIMES, maxBytes: 500 * MB, maxDurationSec: 300, kind: "video" },
   COURSE_RESOURCE: { bucket: "PRIVATE", mimes: ["application/pdf", "application/zip", "application/x-zip-compressed"], maxBytes: 100 * MB, kind: "file" },
 };
 
-const CREATOR_PURPOSES: ReadonlySet<MediaPurpose> = new Set(["REEL", "COURSE_LESSON", "COURSE_RESOURCE"]);
+const CREATOR_PURPOSES: ReadonlySet<MediaPurpose> = new Set(["REEL", "COURSE_LESSON", "COURSE_RESOURCE", "COURSE_PROMO"]);
 export const requiresCreator = (purpose: MediaPurpose) => CREATOR_PURPOSES.has(purpose);
 
 /** API purposes are lower-case (`course_lesson`); the enum is upper-case. */
-export const API_PURPOSES = ["avatar", "banner", "thumbnail", "gig_gallery", "reel", "course_lesson", "course_resource"] as const;
+export const API_PURPOSES = ["avatar", "banner", "thumbnail", "gig_gallery", "reel", "course_lesson", "course_resource", "course_promo"] as const;
 export type ApiPurpose = (typeof API_PURPOSES)[number];
 export const toPurpose = (p: ApiPurpose): MediaPurpose => p.toUpperCase() as MediaPurpose;
 export const toApiPurpose = (p: MediaPurpose): ApiPurpose => p.toLowerCase() as ApiPurpose;

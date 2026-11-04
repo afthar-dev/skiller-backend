@@ -182,6 +182,13 @@ export class MediaService {
     return this.dto(asset);
   }
 
+  /** Processing state of several assets at once (ids that do not exist are absent from the map). */
+  async assetStatuses(assetIds: string[]): Promise<Map<string, MediaAsset["status"]>> {
+    if (assetIds.length === 0) return new Map();
+    const rows = await this.prisma.mediaAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, status: true } });
+    return new Map(rows.map((r) => [r.id, r.status]));
+  }
+
   /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
   async assetInfo(assetId: string): Promise<{ ownerId: string; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
     return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, purpose: true, status: true, durationSec: true } });
@@ -279,7 +286,7 @@ export class MediaService {
     const base = this.config.r2.publicBaseUrl;
     const prefix = assetPrefix(a);
     const renditions = a.renditions as Record<string, unknown> | unknown[] | null;
-    if (a.purpose === "REEL") {
+    if (a.purpose === "REEL" || a.purpose === "COURSE_PROMO") {
       const out: Record<string, string> = { hls: `${base}/${prefix}/hls/index.m3u8` };
       if (a.posterKey) out.poster = `${base}/${a.posterKey}`;
       return out;

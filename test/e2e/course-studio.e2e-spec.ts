@@ -171,7 +171,7 @@ describe("course studio", () => {
   describe("thumbnail and promo media", () => {
     const asset = (ownerId: string, purpose: string, over: Record<string, unknown> = {}) =>
       prisma.mediaAsset.create({
-        data: { ownerId, purpose: purpose as never, bucket: purpose === "THUMBNAIL" || purpose === "REEL" ? "PUBLIC" : "PRIVATE", status: "READY", objectKey: `incoming/${uniq()}/source`, mime: "image/png", declaredSize: 10n, ...over },
+        data: { ownerId, purpose: purpose as never, bucket: purpose === "THUMBNAIL" || purpose === "COURSE_PROMO" ? "PUBLIC" : "PRIVATE", status: "READY", objectKey: `incoming/${uniq()}/source`, mime: "image/png", declaredSize: 10n, ...over },
       });
 
     it("attaches the creator's READY thumbnail, swaps it (detaching the old one) and rejects someone else's asset", async () => {
@@ -203,10 +203,10 @@ describe("course studio", () => {
       expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: a2.id } })).attachedAt).toBeNull();
     });
 
-    it("attaches a promo video (reel) and releases media when the draft is deleted", async () => {
+    it("attaches a promo video and releases media when the draft is deleted", async () => {
       const c = await creator();
       const { body: course } = await create(c);
-      const promo = await asset(c.userId, "REEL", { mime: "video/mp4" });
+      const promo = await asset(c.userId, "COURSE_PROMO", { mime: "video/mp4" });
       const res = await http().patch(`/v1/studio/courses/${course.id}`).set(auth(c)).send({ promoVideoAssetId: promo.id });
       expect(res.body.promoVideoAssetId).toBe(promo.id);
       expect((await http().delete(`/v1/studio/courses/${course.id}`).set(auth(c))).status).toBe(204);

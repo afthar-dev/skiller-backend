@@ -60,6 +60,13 @@ export class CoursePolicy {
     return keys.some((k) => (ORG_AUTHOR_ROLES as readonly string[]).includes(k));
   }
 
+  /** Everyone who authors the course today: the creator for a USER course, the org owners and instructors for an ORG course. */
+  async authorIds(course: Pick<Course, "ownerType" | "ownerId">): Promise<string[]> {
+    if (course.ownerType === "USER") return [course.ownerId];
+    const lists = await Promise.all(ORG_AUTHOR_ROLES.map((role) => this.roles.userIdsWithRoleInOrg(role, course.ownerId)));
+    return [...new Set(lists.flat())];
+  }
+
   /** Organizations whose courses the user may author. */
   authoredOrgIds(userId: string): Promise<string[]> {
     return this.roles.orgIdsWithAnyRole(userId, ORG_AUTHOR_ROLES);

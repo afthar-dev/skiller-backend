@@ -4,6 +4,7 @@ export type DomainEvent =
   | { type: "media.ready"; assetId: string; ownerId: string; purpose: string }
   | { type: "media.failed"; assetId: string; ownerId: string; reason: string; fileName?: string }
   | { type: "org.created"; orgId: string; ownerId: string }
+  | { type: "course.published"; courseId: string; ownerType: "USER" | "ORG"; ownerId: string; slug: string; title: string }
   | { type: "org.member_invited"; orgId: string; email: string; inviteId: string }
   | { type: "role.granted"; userId: string; roleKey: string; grantedBy: string }
   | { type: "rbac.permissions_changed"; userIds: string[] }

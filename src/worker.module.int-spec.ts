@@ -26,6 +26,8 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "payout_account.changed": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
+  // Reserved: the search index and feeds consume it in a later task.
+  "course.published": false,
 };
 
 describe("WorkerModule boot (src/worker.ts path)", () => {

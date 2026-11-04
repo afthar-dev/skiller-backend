@@ -19,6 +19,8 @@ export interface CourseView {
   status: Course["status"];
   flaggedAt: string | null;
   flagReason: string | null;
+  submittedAt: string | null;
+  rejectionReason: string | null;
   publishedAt: string | null;
   createdById: string;
   createdAt: string;
@@ -48,6 +50,8 @@ export function toCourseView(c: Course): CourseView {
     status: c.status,
     flaggedAt: c.flaggedAt?.toISOString() ?? null,
     flagReason: c.flagReason,
+    submittedAt: c.submittedAt?.toISOString() ?? null,
+    rejectionReason: c.rejectionReason,
     publishedAt: c.publishedAt?.toISOString() ?? null,
     createdById: c.createdById,
     createdAt: c.createdAt.toISOString(),
