@@ -282,30 +282,32 @@ describe("course curriculum", () => {
   });
 
   describe("article markdown", () => {
-    it("strips raw HTML and dangerous links from articles", async () => {
+    it("rejects raw HTML and dangerous links with MARKDOWN_UNSAFE and stores nothing", async () => {
       const c = await creator();
       const course = await newCourse(c);
       const s = await addSection(c, course.id);
-      const body = [
-        "# Hello",
-        "<script>alert(1)</script>",
-        '<img src=x onerror="alert(1)">',
-        "[x](javascript:alert(1))",
-        "[y](data:text/html,<script>alert(1)</script>)",
-        "[ok](https://example.com)",
-        "`List<String>`",
-      ].join("\n");
+      for (const body of ["# Hello\n<script>alert(1)</script>", "[x](javascript:alert(1))", "\\`[x](javascript:alert(1))\\`", "[y](data:text/html,hi)"]) {
+        const res = await addLesson(c, course.id, s.id, { articleBody: body });
+        expect(res.status).toBe(422);
+        expect(res.body.error.code).toBe("MARKDOWN_UNSAFE");
+        expect(res.body.error.details.issues.length).toBeGreaterThan(0);
+      }
+      expect(await prisma.lesson.count({ where: { courseId: course.id } })).toBe(0);
+    });
+
+    it("stores valid Markdown byte for byte and rejects an unsafe edit", async () => {
+      const c = await creator();
+      const course = await newCourse(c);
+      const s = await addSection(c, course.id);
+      const body = "# Hello\n\n> quote, a > b\n\n[ok](https://example.com)\n\nUse `List<String>`.\n\n```html\n<script>alert(1)</script>\n```\n";
       const res = await addLesson(c, course.id, s.id, { articleBody: body });
       expect(res.status).toBe(201);
-      const stored = res.body.articleBody as string;
-      expect(stored).not.toMatch(/<script|<img|onerror|javascript:|data:text\/html/i);
-      expect(stored).toContain("# Hello");
-      expect(stored).toContain("[ok](https://example.com)");
-      expect(stored).toContain("`List<String>`");
-      expect((await prisma.lesson.findUniqueOrThrow({ where: { id: res.body.id } })).articleBody).toBe(stored);
+      expect(res.body.articleBody).toBe(body);
+      expect((await prisma.lesson.findUniqueOrThrow({ where: { id: res.body.id } })).articleBody).toBe(body);
 
-      const patched = await http().patch(`${base(course.id)}/lessons/${res.body.id}`).set(auth(c)).send({ articleBody: "<iframe src=//evil></iframe>safe [z](JaVaScRiPt:1)" });
-      expect(patched.body.articleBody).toBe("safe [z](#)");
+      const patched = await http().patch(`${base(course.id)}/lessons/${res.body.id}`).set(auth(c)).send({ articleBody: "<iframe src=//evil></iframe>" });
+      expect(patched.status).toBe(422);
+      expect((await prisma.lesson.findUniqueOrThrow({ where: { id: res.body.id } })).articleBody).toBe(body);
     });
 
     it("limits the article to 50,000 characters", async () => {
@@ -316,11 +318,16 @@ describe("course curriculum", () => {
       expect((await addLesson(c, course.id, s.id, { articleBody: "a".repeat(50_000) })).status).toBe(201);
     });
 
-    it("sanitises the course description too", async () => {
+    it("validates the course description too", async () => {
       const c = await creator();
       const course = await newCourse(c);
-      const res = await http().patch(base(course.id)).set(auth(c)).send({ description: "Hi <script>alert(1)</script>[x](javascript:1)" });
-      expect(res.body.description).toBe("Hi [x](#)");
+      const bad = await http().patch(base(course.id)).set(auth(c)).send({ description: "Hi <script>alert(1)</script>" });
+      expect(bad.status).toBe(422);
+      expect(bad.body.error.code).toBe("MARKDOWN_UNSAFE");
+      const ok = await http().patch(base(course.id)).set(auth(c)).send({ description: "Hi [x](https://example.com)" });
+      expect(ok.body.description).toBe("Hi [x](https://example.com)");
+      const create = await http().post("/v1/studio/courses").set(auth(c)).send({ title: `Bad ${uniq()}`, categoryId, language: "en", description: "<b>x</b>" });
+      expect(create.status).toBe(422);
     });
   });
 

@@ -264,6 +264,41 @@ describe("course studio", () => {
     });
   });
 
+  describe("moderators", () => {
+    it("course.review reads in-review, published and flagged courses in full but never drafts, and never edits", async () => {
+      const c = await creator();
+      const { body: course } = await create(c);
+      const mod = await t.login();
+      const role = await prisma.role.findUniqueOrThrow({ where: { key: "moderator" } });
+      await prisma.userRole.create({ data: { userId: mod.userId, roleId: role.id } });
+      await t.app.get(PermissionService).invalidateUser(mod.userId);
+      expect(await prisma.rolePermission.count({ where: { roleId: role.id, permission: { key: "course.manage_any" } } })).toBe(0);
+
+      expect((await http().get(`/v1/studio/courses/${course.id}`).set(auth(mod))).status).toBe(404);
+      expect((await http().get(`/v1/studio/courses/${course.id}/curriculum`).set(auth(mod))).status).toBe(404);
+
+      await prisma.course.update({ where: { id: course.id }, data: { status: "IN_REVIEW" } });
+      const read = await http().get(`/v1/studio/courses/${course.id}`).set(auth(mod));
+      expect(read.status).toBe(200);
+      expect(read.body.description).toBe("A course");
+      expect((await http().get(`/v1/studio/courses/${course.id}/curriculum`).set(auth(mod))).status).toBe(200);
+
+      for (const res of [
+        await http().patch(`/v1/studio/courses/${course.id}`).set(auth(mod)).send({ title: "Hijack" }),
+        await http().delete(`/v1/studio/courses/${course.id}`).set(auth(mod)),
+        await http().post(`/v1/studio/courses/${course.id}/sections`).set(auth(mod)).send({ title: "x" }),
+        await http().put(`/v1/studio/courses/${course.id}/order`).set(auth(mod)).send({ sections: [] }),
+      ]) {
+        expect(res.status).toBe(403);
+      }
+
+      await prisma.course.update({ where: { id: course.id }, data: { status: "DRAFT", flaggedAt: new Date(), flagReason: "x" } });
+      expect((await http().get(`/v1/studio/courses/${course.id}`).set(auth(mod))).status).toBe(200);
+      const list = await http().get("/v1/studio/courses").set(auth(mod));
+      expect(list.body.items.map((x: { id: string }) => x.id)).not.toContain(course.id);
+    });
+  });
+
   describe("categories", () => {
     it("are seeded and listed publicly", async () => {
       const res = await http().get("/v1/categories");

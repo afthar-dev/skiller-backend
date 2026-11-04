@@ -5,7 +5,7 @@ import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
 import { lockCourse } from "./course-lock";
-import { sanitizeMarkdown } from "./markdown-sanitizer";
+import { assertSafeMarkdown } from "./markdown";
 import { assertValidCoursePrice, firstFreeSlug, randomSlug, slugify } from "./course-rules";
 import { toCourseView, type CourseView } from "./course-view";
 import { CoursePolicy } from "./course.policy";
@@ -65,7 +65,7 @@ export class CoursesService {
             slug,
             title: input.title,
             subtitle: input.subtitle ?? null,
-            description: sanitizeMarkdown(input.description),
+            description: assertSafeMarkdown(input.description),
             categoryId: input.categoryId,
             level: input.level,
             language: input.language,
@@ -98,7 +98,7 @@ export class CoursesService {
   }
 
   async get(user: { id: string }, id: string): Promise<CourseView> {
-    return toCourseView(await this.policy.loadForAuthor(user, id));
+    return toCourseView(await this.policy.loadForRead(user, id));
   }
 
   async update(user: { id: string }, id: string, patch: UpdateCourseInput): Promise<CourseView> {
@@ -113,7 +113,7 @@ export class CoursesService {
         const data: Prisma.CourseUpdateInput = {};
         if (patch.title !== undefined) data.title = patch.title;
         if (patch.subtitle !== undefined) data.subtitle = patch.subtitle;
-        if (patch.description !== undefined) data.description = sanitizeMarkdown(patch.description);
+        if (patch.description !== undefined) data.description = assertSafeMarkdown(patch.description);
         if (patch.categoryId !== undefined) data.category = { connect: { id: patch.categoryId } };
         if (patch.level !== undefined) data.level = patch.level;
         if (patch.language !== undefined) data.language = patch.language;

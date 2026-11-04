@@ -7,7 +7,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { CurriculumService } from "./curriculum.service";
-import { MAX_MARKDOWN_CHARS } from "./markdown-sanitizer";
+import { MAX_MARKDOWN_CHARS } from "./markdown";
 
 const sectionBody = z.object({ title: z.string().trim().min(1).max(120) }).strict();
 

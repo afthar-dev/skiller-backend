@@ -2,3 +2,4 @@
 export { CoursePolicy, ORG_AUTHOR_ROLES } from "./course.policy";
 export { seedCategories, STARTER_CATEGORIES } from "./categories.service";
 export { CoursesModule } from "./courses.module";
+export { assertSafeMarkdown, createMarkdownRenderer, isSafeLinkDestination } from "./markdown";

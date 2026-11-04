@@ -5,7 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
 import { lockCourse } from "./course-lock";
 import { CoursePolicy } from "./course.policy";
-import { sanitizeMarkdown } from "./markdown-sanitizer";
+import { assertSafeMarkdown } from "./markdown";
 
 export const MAX_SECTIONS_PER_COURSE = 50;
 export const MAX_LESSONS_PER_COURSE = 500;
@@ -84,7 +84,7 @@ export class CurriculumService {
   ) {}
 
   async authorView(user: { id: string }, courseId: string): Promise<{ sections: SectionView[] }> {
-    await this.policy.loadForAuthor(user, courseId);
+    await this.policy.loadForRead(user, courseId);
     return { sections: await this.read(this.prisma, courseId) };
   }
 
@@ -147,7 +147,7 @@ export class CurriculumService {
           isRequired: input.isRequired ?? true,
           videoAssetId: input.videoAssetId ?? null,
           durationSec,
-          articleBody: input.articleBody === undefined ? null : sanitizeMarkdown(input.articleBody),
+          articleBody: input.articleBody === undefined ? null : assertSafeMarkdown(input.articleBody),
           resourceAssetId: input.resourceAssetId ?? null,
         },
       });
@@ -167,7 +167,7 @@ export class CurriculumService {
       if (patch.title !== undefined) data.title = patch.title;
       if (patch.isFreePreview !== undefined) data.isFreePreview = patch.isFreePreview;
       if (patch.isRequired !== undefined) data.isRequired = patch.isRequired;
-      if (patch.articleBody !== undefined) data.articleBody = patch.articleBody === null ? null : sanitizeMarkdown(patch.articleBody);
+      if (patch.articleBody !== undefined) data.articleBody = patch.articleBody === null ? null : assertSafeMarkdown(patch.articleBody);
       if (patch.videoAssetId !== undefined && patch.videoAssetId !== lesson.videoAssetId) {
         data.durationSec = patch.videoAssetId ? (await this.media.attach(tx, course, patch.videoAssetId, "COURSE_LESSON")).durationSec : null;
         if (lesson.videoAssetId) await this.media.detach(tx, lesson.videoAssetId);

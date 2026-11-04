@@ -44,6 +44,12 @@ export class CoursePolicy {
     return this.permissions.has(user.id, "course.manage_any");
   }
 
+  /** Reviewers may read the full content of courses in review, published or flagged courses; never drafts, and never edit. */
+  async canReview(user: { id: string }, course: Pick<Course, "status" | "flaggedAt">): Promise<boolean> {
+    const reviewable = course.status === "IN_REVIEW" || course.status === "PUBLISHED" || course.flaggedAt !== null;
+    return reviewable && (await this.permissions.has(user.id, "course.review"));
+  }
+
   /** Moderators (`course.review`) and course admins (`course.manage_any`); platform-wide grants only. */
   async canModerate(user: { id: string }): Promise<boolean> {
     return (await this.permissions.has(user.id, "course.review")) || (await this.permissions.has(user.id, "course.manage_any"));
@@ -62,10 +68,20 @@ export class CoursePolicy {
   /** 404 unless the user may author the course; an org member who may not gets 403 (they already know the course exists). */
   async assertCanAuthor(user: { id: string }, course: Course): Promise<void> {
     if (await this.canAuthor(user, course)) return;
+    if (await this.canReview(user, course)) throw new AppError("FORBIDDEN", 403, "Reviewers can read this course but not edit it");
     if (course.ownerType === "ORG" && (await this.roles.roleKeysInOrg(user.id, course.ownerId)).length > 0) {
       throw new AppError("FORBIDDEN", 403, "Your role in this organization cannot edit its courses");
     }
     throw courseNotFound();
+  }
+
+  /** Authors, plus reviewers for courses they may moderate (read-only paths only). Everyone else gets 404. */
+  async loadForRead(user: { id: string }, courseId: string): Promise<Course> {
+    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) throw courseNotFound();
+    if (await this.canReview(user, course)) return course;
+    await this.assertCanAuthor(user, course);
+    return course;
   }
 
   async loadForAuthor(user: { id: string }, courseId: string): Promise<Course> {

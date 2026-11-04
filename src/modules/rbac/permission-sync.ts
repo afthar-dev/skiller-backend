@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import type { PrismaClient } from "@prisma/client";
-import { SUPER_ADMIN_ROLE_KEY, SYSTEM_ROLES } from "./default-roles";
+import { REVOKED_DEFAULT_GRANTS, SUPER_ADMIN_ROLE_KEY, SYSTEM_ROLES } from "./default-roles";
 import type { PermissionRegistry } from "./permission.registry";
 
 export interface SyncResult {
@@ -44,7 +44,7 @@ export async function syncPermissions(prisma: PrismaClient, registry: Permission
 
 /**
  * Creates the default system roles that do not exist yet, with their default permissions. For roles that already exist it only
- * ADDS default permissions they are missing (a release that adds keys reaches existing databases) and never revokes or edits
+ * ADDS default permissions they are missing (a release that adds keys reaches existing databases) and never revokes or edits (except the targeted REVOKED_DEFAULT_GRANTS list)
  * anything an operator did. Holders of a changed role are passed to `invalidateUsers` so their cached permissions refresh.
  */
 export async function seedSystemRoles(prisma: PrismaClient, opts: { invalidateUsers?: (userIds: string[]) => Promise<void> } = {}): Promise<string[]> {
@@ -64,6 +64,11 @@ export async function seedSystemRoles(prisma: PrismaClient, opts: { invalidateUs
       if (missing.length > 0) {
         await prisma.rolePermission.createMany({ data: missing.map((p) => ({ roleId: exists.id, permissionId: p.id })), skipDuplicates: true });
         changedRoleIds.push(exists.id);
+      }
+      const revoke = REVOKED_DEFAULT_GRANTS[def.key] ?? [];
+      if (revoke.length > 0) {
+        const removed = await prisma.rolePermission.deleteMany({ where: { roleId: exists.id, permission: { key: { in: [...revoke] } } } });
+        if (removed.count > 0) changedRoleIds.push(exists.id);
       }
       continue;
     }
