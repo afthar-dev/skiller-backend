@@ -16,6 +16,7 @@ import { InjectQueue } from "../../common/queue/queue.decorators";
 import { EntitlementsService } from "../billing";
 import { PermissionService, PlatformRoleDirectory } from "../rbac";
 import { ProfilesService } from "../users";
+import { MediaAttachments } from "./media-attachments";
 import { MediaLifecycle } from "./media-lifecycle";
 import { effectiveMaxBytes } from "./media-limits";
 import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
@@ -61,6 +62,7 @@ export class MediaService {
     private readonly prisma: PrismaService,
     private readonly r2: R2Client,
     private readonly lifecycle: MediaLifecycle,
+    private readonly attachments: MediaAttachments,
     private readonly profiles: ProfilesService,
     private readonly permissions: PermissionService,
     private readonly roles: PlatformRoleDirectory,
@@ -214,8 +216,8 @@ export class MediaService {
   }
 
   /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
-  async assetInfo(assetId: string): Promise<{ ownerId: string; orgId: string | null; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
-    return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, orgId: true, purpose: true, status: true, durationSec: true } });
+  assetInfo(assetId: string) {
+    return this.attachments.assetInfo(assetId);
   }
 
   /** Where a READY private file (a course resource) lives, for a caller that has already decided the user may download it. */
@@ -228,25 +230,28 @@ export class MediaService {
    * Marks the asset as in use. Call it inside the same transaction that stores the reference (profile, org, ...).
    * The asset must belong to `ownerId`, have the given purpose and be READY. Unattached assets are deleted after 24 h.
    */
-  async attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
-    // Row lock: concurrent attaches / detaches of one asset serialise, so "exactly one attachment" holds.
-    await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
-    const asset = await tx.mediaAsset.findUnique({ where: { id: assetId } });
-    if (!asset || asset.ownerId !== ownerId || asset.purpose !== purpose || asset.status !== "READY") {
-      throw new AppError("MEDIA_NOT_USABLE", 422, "This media cannot be used here: it must be your own, fully processed upload of the right type");
-    }
-    // An asset belongs to exactly one target. Callers re-saving the same target skip attach/detach when the id is unchanged.
-    if (asset.attachedAt) throw new AppError("MEDIA_NOT_USABLE", 409, "This media is already in use somewhere else; upload it again to use it here");
-    await tx.mediaAsset.update({ where: { id: assetId }, data: { attachedAt: this.clock.now(), detachedAt: null } });
+  attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
+    return this.attachments.attach(tx, assetId, ownerId, purpose);
   }
 
   /**
    * Releases an asset that a profile / org no longer references. It stays for 24 h (caches, in-flight pages), then the
    * cleanup job deletes it. Call it in the same transaction that drops the reference. Safe because an asset has exactly one attachment (see attach).
    */
-  async detach(tx: Prisma.TransactionClient, assetId: string): Promise<void> {
-    await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
-    await tx.mediaAsset.updateMany({ where: { id: assetId, attachedAt: { not: null } }, data: { attachedAt: null, detachedAt: this.clock.now() } });
+  detach(tx: Prisma.TransactionClient, assetId: string): Promise<void> {
+    return this.attachments.detach(tx, assetId);
+  }
+
+  /** Public URLs (see MediaAssetDto.urls) of READY public assets, by id; ids that are unknown, not ready or private are absent. */
+  async publicUrls(assetIds: string[]): Promise<Map<string, Record<string, string>>> {
+    if (assetIds.length === 0) return new Map();
+    const rows = await this.prisma.mediaAsset.findMany({ where: { id: { in: [...new Set(assetIds)] } } });
+    const out = new Map<string, Record<string, string>>();
+    for (const row of rows) {
+      const urls = this.urls(row);
+      if (urls) out.set(row.id, urls);
+    }
+    return out;
   }
 
   private async enforceCaps(userId: string): Promise<void> {

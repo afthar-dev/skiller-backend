@@ -72,6 +72,13 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     for (const name of ["courses.seats.sweep", "courses.progress.recompute", "courses.popularity.refresh"]) expect(jobs).toContain(name);
   });
 
+  it("Phase 4: the worker publishes a reel when its video is ready and fails it when processing fails (ReelPublisher with the daily limit, attach without the upload machinery)", async () => {
+    const { ReelPublisher } = await import("./modules/reels/reel-publisher");
+    const { MediaAttachments } = await import("./modules/media");
+    expect(app.get(ReelPublisher)).toBeDefined();
+    expect(app.get(MediaAttachments)).toBeDefined();
+  });
+
   it("registers the COURSE sellable and its refund rule in the worker: webhook-first fulfilment runs here", async () => {
     const { SellableRegistry, RefundEligibilityRegistry } = await import("./modules/billing");
     const provider = app.get(SellableRegistry).find("COURSE");

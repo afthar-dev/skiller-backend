@@ -35,6 +35,9 @@ export const NOTIFICATION_TYPES = {
   "course.review_reply": { transactional: false },
   "course.question": { transactional: false },
   "course.answer": { transactional: false },
+  "reel.published": { transactional: false },
+  "reel.failed": { transactional: false },
+  "reel.limit_reached": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

@@ -12,6 +12,7 @@ import { CatalogController } from "./catalog.controller";
 import { CatalogCursor } from "./catalog-cursor";
 import { CatalogService } from "./catalog.service";
 import { CertificatesController } from "./certificates.controller";
+import { CourseLookup } from "./course-lookup";
 import { CourseMedia } from "./course-media";
 import { CoursePlaybackPolicy } from "./course-playback.policy";
 import { CourseNotifier } from "./course-notifier";
@@ -41,7 +42,7 @@ import { StudioCoursesController } from "./studio-courses.controller";
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule, forwardRef(() => OrganizationsWorkerModule)],
   controllers: [CatalogController, StudioAnalyticsController, StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController, CertificatesController, ReviewsController, StudioReviewsController, AdminContentController, QaController],
-  providers: [AnalyticsService, CatalogCursor, CatalogService, CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, ReviewsService, QaService, ContentModerationService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
-  exports: [CoursePolicy, CoursesService, CategoriesService, EnrolmentsService],
+  providers: [AnalyticsService, CatalogCursor, CatalogService, CoursePolicy, CourseLookup, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, ReviewsService, QaService, ContentModerationService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
+  exports: [CoursePolicy, CourseLookup, CoursesService, CategoriesService, EnrolmentsService],
 })
 export class CoursesModule {}

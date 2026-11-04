@@ -1384,3 +1384,55 @@ model Answer {
   @@index([questionId, hiddenAt, id])
   @@map("answers")
 }
+
+// ─── reels ───────────────────────────────────────────────────────────────
+// A reel is one REEL media asset (mediaAssetId, no FK: media is another module's table) plus a plain-text caption. It starts PROCESSING while the
+// video is transcoded (the media.ready / media.failed handlers move it), is PUBLISHED when the creator's reels_per_day allows it (counted per IST day
+// on `publishedAt`, under a per-creator advisory lock) and LIMIT_REACHED when it does not. DELETED rows keep `publishedAt` on purpose: the
+// daily limit counts publish events, so deleting and re-posting never gives a slot back. Counters are denormalised and only ever moved in the
+// transaction of the row change that justifies them. linkedCourseId points at a course (no FK: courses is another module).
+
+enum ReelStatus {
+  PROCESSING
+  PUBLISHED
+  HIDDEN
+  REMOVED
+  DELETED
+  FAILED
+  LIMIT_REACHED
+}
+
+model Reel {
+  id              String     @id @default(uuid(7))
+  creatorId       String
+  mediaAssetId    String     @unique
+  caption         String     @default("")
+  /// Parsed from the caption on every write (lower-case NFC, at most 10); `hashtags` rows count the PUBLISHED reels that carry each tag.
+  hashtags        String[]
+  linkedCourseId  String?
+  status          ReelStatus @default(PROCESSING)
+  commentsEnabled Boolean    @default(true)
+  failureReason   String?
+  publishedAt     DateTime?
+  deletedAt       DateTime?
+  likeCount       Int        @default(0)
+  commentCount    Int        @default(0)
+  saveCount       Int        @default(0)
+  shareCount      Int        @default(0)
+  viewCount       Int        @default(0)
+  watchSecTotal   Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([creatorId, publishedAt, id])
+  @@index([creatorId, status, id])
+  @@map("reels")
+}
+
+model Hashtag {
+  tag        String   @id
+  reelCount  Int      @default(0)
+  lastUsedAt DateTime
+
+  @@map("hashtags")
+}

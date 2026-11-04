@@ -10,3 +10,6 @@ export { COURSE_PROGRESS_READER } from "./course-progress";
 export type { CourseProgressReader } from "./course-progress";
 export { CoursesModule } from "./courses.module";
 export { assertSafeMarkdown, createMarkdownRenderer, isSafeLinkDestination } from "./markdown";
+export { sanitizePlainText, sanitizeSingleLine } from "./plain-text";
+export { CourseLookup } from "./course-lookup";
+export type { CourseCard } from "./course-lookup";
