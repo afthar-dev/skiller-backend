@@ -3475,7 +3475,8 @@
                             "payout.rejected",
                             "payout.paid",
                             "payout.failed",
-                            "payout.review"
+                            "payout.review",
+                            "payout_account.changed"
                           ]
                         },
                         "inApp": {
@@ -4548,7 +4549,7 @@
             }
           },
           "403": {
-            "description": "Requires permission `org.manage`.",
+            "description": "Requires permission `org.wallet.manage`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4612,7 +4613,7 @@
             }
           },
           "403": {
-            "description": "Requires permission `org.manage`.",
+            "description": "Requires permission `org.wallet.manage`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4696,7 +4697,7 @@
             }
           },
           "403": {
-            "description": "Requires permission `org.manage`.",
+            "description": "Requires permission `org.wallet.manage`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7735,7 +7736,7 @@
             }
           },
           "403": {
-            "description": "Requires permission `org.manage`.",
+            "description": "Requires permission `org.wallet.manage`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8139,7 +8140,7 @@
             }
           },
           "403": {
-            "description": "Requires permission `org.manage`.",
+            "description": "Requires permission `org.wallet.manage`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8627,6 +8628,111 @@
           }
         ],
         "summary": "Approve a payout: it is sent to RazorpayX by a background job (step-up required, audited). Repeating it never sends twice.",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/v1/admin/payouts/{id}/resolve": {
+      "post": {
+        "operationId": "AdminWallet_resolve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "PAID",
+                      "RETURNED"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "note"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payout"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "PAYOUT_SELF_RESOLUTION: the approver or requester cannot resolve it.\n\nRequires permission `payout.approve`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "PAYOUT_NOT_IN_REVIEW: the payout is not in MANUAL_REVIEW.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Resolve a MANUAL_REVIEW payout: PAID posts the settlement as a processed event would, RETURNED gives the locked funds back to the seller. Someone other than the approver (step-up required, audited, note required)",
         "tags": [
           "Admin"
         ]
