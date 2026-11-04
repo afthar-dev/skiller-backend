@@ -133,7 +133,7 @@ jobs:
         -e RAZORPAY_KEY_SECRET=smoke
         -e RAZORPAY_WEBHOOK_SECRET=smoke
         -e RAZORPAYX_ACCOUNT_NUMBER=2323230000000001
-        -e RAZORPAYX_WEBHOOK_SECRET=smoke
+        -e RAZORPAYX_WEBHOOK_SECRET=smoke-x
         -e SUPER_ADMIN_EMAIL=admin@skiller.test
     steps:
       - uses: actions/checkout@v4

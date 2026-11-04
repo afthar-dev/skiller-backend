@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { Prisma, type Payout, type PayoutMode, type PayoutStatus } from "@prisma/client";
+import { Prisma, type Payout, type PayoutAccount, type PayoutMode, type PayoutStatus } from "@prisma/client";
 import type { Queue } from "bullmq";
 import { v7 as uuidv7 } from "uuid";
 import { CLOCK, type Clock } from "../../common/clock/clock";
@@ -54,11 +54,26 @@ export interface PayoutView {
   createdAt: string;
   approvedAt: string | null;
   paidAt: string | null;
+  destination: PayoutDestination | null;
+}
+
+/** Where the money goes: masked details of the account snapshotted on the payout. `reviewFlag` is for finance only. */
+export interface PayoutDestination {
+  type: "BANK" | "UPI";
+  ifsc: string | null;
+  accountLast4: string | null;
+  vpaMasked: string | null;
+  status: "PENDING" | "VERIFIED" | "FAILED" | "INACTIVE";
+  reviewFlag?: string | null;
 }
 
 export const netOf = (p: Pick<Payout, "amountPaise" | "tdsPaise">): bigint => p.amountPaise - p.tdsPaise;
 
-export const toPayoutView = (p: Payout): PayoutView => ({
+type AccountForView = Pick<PayoutAccount, "type" | "ifsc" | "accountLast4" | "vpaMasked" | "status" | "reviewFlag">;
+const destinationOf = (a: AccountForView | undefined, admin: boolean): PayoutDestination | null =>
+  a ? { type: a.type, ifsc: a.ifsc, accountLast4: a.accountLast4, vpaMasked: a.vpaMasked, status: a.status, ...(admin ? { reviewFlag: a.reviewFlag } : {}) } : null;
+
+export const toPayoutView = (p: Payout, account?: AccountForView, admin = false): PayoutView => ({
   id: p.id,
   ownerType: p.ownerType,
   ownerId: p.ownerId,
@@ -76,6 +91,7 @@ export const toPayoutView = (p: Payout): PayoutView => ({
   createdAt: p.createdAt.toISOString(),
   approvedAt: p.approvedAt?.toISOString() ?? null,
   paidAt: p.paidAt?.toISOString() ?? null,
+  destination: destinationOf(account, admin),
 });
 
 /** What a payout.* webhook says about the payout. */
@@ -86,6 +102,18 @@ export interface PayoutWebhookEntity {
   amountPaise: bigint | null;
   utr: string | null;
   failureReason: string | null;
+}
+
+/**
+ * Provider error text can carry internal detail, so what is stored on the payout and shown to the creator is one of three codes. The raw text
+ * goes only to the finance alert (and Sentry).
+ */
+export type FailureCode = "BANK_REJECTED" | "INVALID_ACCOUNT" | "PROVIDER_ERROR";
+export function failureCodeOf(raw: string | null | undefined): FailureCode {
+  const text = (raw ?? "").toLowerCase();
+  if (/invalid|ifsc|closed|blocked|frozen|dormant|beneficiary account|account (does not|not)|no such account/.test(text)) return "INVALID_ACCOUNT";
+  if (/reject|declin|bank|returned|failed/.test(text)) return "BANK_REJECTED";
+  return "PROVIDER_ERROR";
 }
 
 const notPending = () => new AppError("PAYOUT_NOT_PENDING", 409, "This payout has already been decided");
@@ -135,6 +163,10 @@ export class PayoutsService {
       // The same per-owner lock the payout account change takes: an account cannot be swapped between the check and the insert.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payout-owner:${owner.ownerType}:${owner.ownerId}`}))`;
       const account = await this.payoutAccounts.payableAccount(owner, tx);
+      if (account.type === "UPI") {
+        const upiMax = BigInt(await this.settings.get("upi_max_payout_paise"));
+        if (netPaise > upiMax) throw new AppError("PAYOUT_ABOVE_UPI_LIMIT", 422, "This amount is above the UPI limit; use a bank account for larger payouts", { maxPaise: toApi(upiMax) });
+      }
       const seller = await this.accounts.ensureSellerAccounts(tx, owner.ownerType, owner.ownerId);
       const created = await tx.payout.create({
         data: {
@@ -163,7 +195,7 @@ export class PayoutsService {
       return created;
     });
     this.logger.log(`payout ${payout.id} requested by ${actorId} for ${owner.ownerType}:${owner.ownerId}`);
-    return toPayoutView(payout);
+    return this.viewOf(payout);
   }
 
   private event<T extends "payout.requested" | "payout.approved" | "payout.rejected" | "payout.settled" | "payout.failed">(type: T, p: Payout, extra: Record<string, unknown> = {}) {
@@ -183,6 +215,14 @@ export class PayoutsService {
   async approve(actorId: string, payoutId: string, meta: MutationMeta = {}): Promise<PayoutView> {
     const { payout, enqueue } = await this.prisma.$transaction(async (tx) => {
       const current = await this.lockAndLoad(tx, payoutId);
+      if (current.status === "REQUESTED" && current.requestedBy === actorId) throw new AppError("PAYOUT_SELF_APPROVAL", 403, "A payout cannot be approved by the person who requested it");
+      if (current.status === "REQUESTED" || current.status === "APPROVED") {
+        const blocked = await this.accountBlock(tx, current);
+        if (blocked) {
+          const rejected = await this.autoReject(tx, current, blocked, actorId, meta);
+          return { payout: rejected, enqueue: false };
+        }
+      }
       if (current.status === "REQUESTED") {
         const approved = await tx.payout.update({ where: { id: current.id }, data: { status: "APPROVED", approvedBy: actorId, approvedAt: this.clock.now() } });
         await this.audit.record(tx, { actorId, action: "payout.approve", targetType: "payout", targetId: current.id, before: toPayoutView(current), after: toPayoutView(approved), ...meta });
@@ -194,7 +234,32 @@ export class PayoutsService {
       throw notPending();
     });
     if (enqueue) await this.enqueueSend(payout.id);
-    return toPayoutView(payout);
+    return this.viewOf(payout, true);
+  }
+
+  /** Why the payout's snapshotted account may no longer be paid (replaced, unverified, held for review, in cooldown), or null. */
+  private async accountBlock(tx: Prisma.TransactionClient, p: Payout): Promise<string | null> {
+    const account = await tx.payoutAccount.findUnique({ where: { id: p.payoutAccountId } });
+    return account ? this.payoutAccounts.blockReason(account) : "the payout account no longer exists";
+  }
+
+  /**
+   * The payout cannot go to its account any more: it is REJECTED with reason PAYOUT_ACCOUNT_CHANGED and the locked funds return to AVAILABLE
+   * (entry payout_reject), so the creator re-requests against the current account. Runs under the payout row lock; `why` is for the log only.
+   */
+  private async autoReject(tx: Prisma.TransactionClient, current: Payout, why: string, actorId: string, meta: MutationMeta = {}): Promise<Payout> {
+    const seller = await this.accounts.ensureSellerAccounts(tx, current.ownerType, current.ownerId);
+    await this.unlock(tx, current, seller, PAYOUT_REJECT_DESCRIPTION);
+    const updated = await tx.payout.update({ where: { id: current.id }, data: { status: "REJECTED", failureReason: "PAYOUT_ACCOUNT_CHANGED" } });
+    await this.audit.record(tx, { actorId: actorId === SYSTEM_ACTOR ? null : actorId, action: "payout.auto_reject", targetType: "payout", targetId: current.id, before: toPayoutView(current), after: { ...toPayoutView(updated), why }, ...meta });
+    await this.outbox.enqueue(tx, this.event("payout.rejected", updated, { note: "PAYOUT_ACCOUNT_CHANGED" }));
+    this.logger.warn(`payout ${current.id} rejected automatically: ${why}`);
+    return updated;
+  }
+
+  private async viewOf(p: Payout, admin = false): Promise<PayoutView> {
+    const account = await this.prisma.payoutAccount.findUnique({ where: { id: p.payoutAccountId } });
+    return toPayoutView(p, account ?? undefined, admin);
   }
 
   /** Finance rejects a REQUESTED payout: the locked funds go back to AVAILABLE. */
@@ -209,7 +274,7 @@ export class PayoutsService {
       await this.outbox.enqueue(tx, this.event("payout.rejected", updated, { note: note ?? null }));
       return updated;
     });
-    return toPayoutView(rejected);
+    return this.viewOf(rejected, true);
   }
 
   private async lockAndLoad(tx: Prisma.TransactionClient, payoutId: string): Promise<Payout> {
@@ -252,11 +317,22 @@ export class PayoutsService {
   async send(payoutId: string, opts: { recover?: boolean } = {}): Promise<Payout> {
     const payout = await this.prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
     if (payout.status !== "APPROVED" || payout.razorpayxPayoutId) return payout;
-    const account = await this.prisma.payoutAccount.findUniqueOrThrow({ where: { id: payout.payoutAccountId }, select: { razorpayxFundAccountId: true } });
+    const account = await this.prisma.payoutAccount.findUniqueOrThrow({ where: { id: payout.payoutAccountId } });
+    // The destination is re-checked at the last moment: if it was replaced or flagged since the approval, nothing is sent and the funds go back.
+    const blocked = this.payoutAccounts.blockReason(account);
+    const rejectBlocked = (why: string) =>
+      this.prisma.$transaction(async (tx) => {
+        const current = await this.lockAndLoad(tx, payout.id);
+        if (current.status !== "APPROVED" || current.razorpayxPayoutId) return current;
+        return this.autoReject(tx, current, why, SYSTEM_ACTOR);
+      });
+    if (blocked && !opts.recover) return rejectBlocked(blocked);
 
     let remote: RazorpayXPayout | null = null;
     try {
       if (opts.recover) remote = await this.razorpayx.findPayoutByReference(payout.id);
+      // A payout RazorpayX already has is adopted either way; a new one is not created for a destination that is no longer allowed.
+      if (!remote && blocked) return await rejectBlocked(blocked);
       if (!remote) {
         remote = await this.razorpayx.createPayout({
           fundAccountId: account.razorpayxFundAccountId,
@@ -296,8 +372,8 @@ export class PayoutsService {
       if (current.status !== "APPROVED" || current.razorpayxPayoutId) return null;
       const seller = await this.accounts.ensureSellerAccounts(tx, current.ownerType, current.ownerId);
       await this.unlock(tx, current, seller, PAYOUT_FAILED_DESCRIPTION);
-      const updated = await tx.payout.update({ where: { id: current.id }, data: { status: "FAILED", failureReason: why.slice(0, 500) } });
-      await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome: "FAILED", reason: why.slice(0, 500) }));
+      const updated = await tx.payout.update({ where: { id: current.id }, data: { status: "FAILED", failureReason: failureCodeOf(why) } });
+      await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome: "FAILED", reason: failureCodeOf(why) }));
       return updated;
     });
     if (failed) await this.alertFailed(failed, why);
@@ -349,14 +425,16 @@ export class PayoutsService {
     await this.prisma.$transaction(
       async (tx) => {
         const p = await this.lockAndLoad(tx, known.id);
-        if (p.status === "PAID") return;
+        if (p.status === "PAID" || p.status === "MANUAL_REVIEW") return;
         if (p.status === "REVERSED" || p.status === "FAILED" || p.status === "REJECTED") {
           this.logger.warn(`payout ${p.id}: processed event ignored, the payout is already ${p.status}`);
           return;
         }
         if (p.status === "REQUESTED") throw new Error(`payout ${p.id} was processed by RazorpayX but never approved`);
-        if (entity.amountPaise !== null && entity.amountPaise !== netOf(p)) {
-          mismatch = p; // settle nothing: finance decides what happened to the money
+        if (entity.amountPaise === null || entity.amountPaise !== netOf(p)) {
+          // Settle nothing and stop: the funds stay locked, the payout waits for finance, and the event is done (no retry loop).
+          await tx.payout.update({ where: { id: p.id }, data: { status: "MANUAL_REVIEW", failureReason: "AMOUNT_MISMATCH", ...(p.razorpayxPayoutId ? {} : { razorpayxPayoutId: entity.id }) } });
+          mismatch = p;
           return;
         }
         const seller = await this.accounts.ensureSellerAccounts(tx, p.ownerType, p.ownerId);
@@ -378,12 +456,11 @@ export class PayoutsService {
       const p: Payout = mismatch;
       await this.alerts.raise({
         kind: "PAYOUT_AMOUNT_MISMATCH",
-        message: `RazorpayX reports payout ${entity.id} (our payout ${p.id}) processed for ${entity.amountPaise} paise but we sent ${netOf(p)}. Nothing was settled: reconcile it by hand.`,
+        message: `RazorpayX reports payout ${entity.id} (our payout ${p.id}) processed for ${entity.amountPaise ?? "an unknown amount"} paise but we sent ${netOf(p)}. Nothing was settled and the payout is in MANUAL_REVIEW: reconcile it by hand.`,
         dedupeKey: `payout-mismatch:${p.id}`,
         link: "/admin/payouts",
         data: { payoutId: p.id },
       });
-      throw new AppError("PAYOUT_AMOUNT_MISMATCH", 422, "RazorpayX reported a different amount than the payout", { payoutId: p.id });
     }
   }
 
@@ -400,7 +477,8 @@ export class PayoutsService {
         if (p.status === "REVERSED" || p.status === "FAILED" || p.status === "REJECTED") return null;
         if (p.status === "REQUESTED") throw new Error(`payout ${p.id} was ${kind} by RazorpayX but never approved`);
         const seller = await this.accounts.ensureSellerAccounts(tx, p.ownerType, p.ownerId);
-        const reason = (entity.failureReason ?? `RazorpayX reported the payout ${kind}`).slice(0, 500);
+        const rawReason = (entity.failureReason ?? `RazorpayX reported the payout ${kind}`).slice(0, 500);
+        const reason = failureCodeOf(rawReason);
         const wasPaid = p.status === "PAID";
         if (wasPaid) {
           const clearing = await this.accounts.platformAccount("GATEWAY_CLEARING", tx);
@@ -421,7 +499,7 @@ export class PayoutsService {
         const updated = await tx.payout.update({ where: { id: p.id }, data: { status: outcome, failureReason: reason, utr: entity.utr ?? p.utr, ...(p.razorpayxPayoutId ? {} : { razorpayxPayoutId: entity.id }) } });
         await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome, reason }));
         this.logger.log(`payout ${p.id} ${outcome}${wasPaid ? " after settlement" : ""}`);
-        return { updated, reason, wasPaid };
+        return { updated, reason: rawReason, wasPaid };
       },
       { maxWait: 10_000, timeout: 20_000 },
     );
@@ -444,19 +522,22 @@ export class PayoutsService {
     return this.list({ ownerType: owner.ownerType, ownerId: owner.ownerId }, page);
   }
 
-  async list(filter: { ownerType?: "USER" | "ORG"; ownerId?: string; status?: PayoutStatus }, page: PageQuery) {
+  async list(filter: { ownerType?: "USER" | "ORG"; ownerId?: string; status?: PayoutStatus }, page: PageQuery, admin = false) {
     const rows = await this.prisma.payout.findMany({
       where: { ...(filter.ownerType ? { ownerType: filter.ownerType } : {}), ...(filter.ownerId ? { ownerId: filter.ownerId } : {}), ...(filter.status ? { status: filter.status } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
       orderBy: { id: "desc" },
       take: page.limit + 1,
     });
     const { items, nextCursor } = toPage(rows, page.limit);
-    return { items: items.map(toPayoutView), nextCursor };
+    const accounts = await this.prisma.payoutAccount.findMany({ where: { id: { in: [...new Set(items.map((p) => p.payoutAccountId))] } } });
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    return { items: items.map((p) => toPayoutView(p, byId.get(p.payoutAccountId), admin)), nextCursor };
   }
 
+  /** Finance's view of one payout, with its destination account and that account's status and review flag. */
   async get(id: string): Promise<PayoutView> {
     const p = await this.prisma.payout.findUnique({ where: { id } });
     if (!p) throw new AppError("PAYOUT_NOT_FOUND", 404, "Payout not found");
-    return toPayoutView(p);
+    return this.viewOf(p, true);
   }
 }

@@ -138,7 +138,7 @@ export class FakeRazorpayXClient implements RazorpayXClient {
   }
 
   /** payout.processed / reversed / failed / rejected for a payout RazorpayX holds (or, with `raw`, for any entity values). */
-  payoutWebhook(type: FakePayoutEvent, payoutId: string, opts: { eventId?: string; utr?: string; failureReason?: string; amountPaise?: Paise } = {}): FakeWebhook {
+  payoutWebhook(type: FakePayoutEvent, payoutId: string, opts: { eventId?: string; utr?: string; failureReason?: string; amountPaise?: Paise; omitAmount?: boolean } = {}): FakeWebhook {
     const p = this.payouts.get(payoutId);
     if (!p) throw new Error(`fake razorpayx: unknown payout ${payoutId}`);
     const status = { "payout.processed": "processed", "payout.reversed": "reversed", "payout.failed": "failed", "payout.rejected": "rejected" }[type];
@@ -146,7 +146,7 @@ export class FakeRazorpayXClient implements RazorpayXClient {
       id: p.id,
       entity: "payout",
       fund_account_id: p.fundAccountId,
-      amount: Number(opts.amountPaise ?? p.amountPaise),
+      ...(opts.omitAmount ? {} : { amount: Number(opts.amountPaise ?? p.amountPaise) }),
       currency: "INR",
       mode: p.mode,
       reference_id: p.referenceId,

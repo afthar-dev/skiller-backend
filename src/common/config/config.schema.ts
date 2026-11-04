@@ -2,7 +2,8 @@ import { z } from "zod";
 
 const secret = (name: string) => z.string({ required_error: `${name} is required` }).min(32, `${name} must be at least 32 characters`);
 
-const envSchema = z.object({
+const envSchema = z
+  .object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   DATABASE_URL: z.string().url(),
@@ -38,7 +39,13 @@ const envSchema = z.object({
   // Number of reverse-proxy hops in front of the API whose X-Forwarded-For is trusted (0 = none).
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
   SUPER_ADMIN_EMAIL: z.string().email(),
-});
+  })
+  .superRefine((e, ctx) => {
+    // A shared secret would let a body signed for the Razorpay endpoint pass for a RazorpayX one.
+    if (e.RAZORPAY_WEBHOOK_SECRET && e.RAZORPAY_WEBHOOK_SECRET === e.RAZORPAYX_WEBHOOK_SECRET) {
+      ctx.addIssue({ code: "custom", path: ["RAZORPAYX_WEBHOOK_SECRET"], message: "must differ from RAZORPAY_WEBHOOK_SECRET" });
+    }
+  });
 
 export class ConfigError extends Error {
   constructor(public readonly issues: string[]) {

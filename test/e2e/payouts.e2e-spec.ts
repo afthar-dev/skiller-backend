@@ -11,6 +11,7 @@ import {
   RAZORPAYX_CLIENT,
   RazorpayApiError,
   PayoutMaintenanceProcessor,
+  PayoutsService,
 } from "../../src/modules/billing";
 import { RolesService } from "../../src/modules/rbac";
 import { AccountsService, LedgerService } from "../../src/modules/wallet";
@@ -217,6 +218,12 @@ describe("payouts", () => {
       expect((await requestPayout(s, "50000")).body.error.code).toBe("PAYOUT_ACCOUNT_NOT_VERIFIED");
       const acc = await prisma.payoutAccount.findUniqueOrThrow({ where: { id: put.body.id } });
       await h.deliverX(fakeX.validationWebhook(acc.razorpayxFundAccountId, "active"));
+      // A first account is payable at once ...
+      const first = await requestPayout(s, "50000");
+      expect(first.status).toBe(201);
+      // ... a replacement is paused for 24 hours.
+      const change = await h.putAccount(s, h.bankBody());
+      await h.deliverX(fakeX.validationWebhook((await prisma.payoutAccount.findUniqueOrThrow({ where: { id: change.body.id } })).razorpayxFundAccountId, "active"));
       const blocked = await requestPayout(s, "50000");
       expect(blocked.status).toBe(409);
       expect(blocked.body.error.code).toBe("PAYOUT_ACCOUNT_COOLDOWN");
@@ -404,7 +411,7 @@ describe("payouts", () => {
       fakeX.failNext.set("createPayout", new RazorpayApiError(400, "BAD_REQUEST_ERROR", "The beneficiary account is blocked"));
       expect((await approve(res.body.id)).status).toBe(200);
       const row = await until(async () => (await payoutRow(res.body.id)).status === "FAILED" && (await payoutRow(res.body.id)));
-      expect(row.failureReason).toContain("blocked");
+      expect(row.failureReason).toBe("INVALID_ACCOUNT"); // a code, never the provider's text
       expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
       expect(await entry(res.body.id, "payout_failed")).toMatchObject({ byKind: { PAYOUT_LOCKED: -100_000n, AVAILABLE: 100_000n }, sum: 0n });
       const fin = await finance();
@@ -457,7 +464,7 @@ describe("payouts", () => {
         await deliver("payout.processed", p.id);
         await deliver("payout.reversed", p.id, { failureReason: "Account closed" });
         const row = await payoutRow(p.id);
-        expect(row).toMatchObject({ status: "REVERSED", failureReason: "Account closed" });
+        expect(row).toMatchObject({ status: "REVERSED", failureReason: "INVALID_ACCOUNT" });
         expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
         expect(await entry(p.id, "payout_reversed")).toMatchObject({ byKind: { GATEWAY_CLEARING: -99_000n, TAX_PAYABLE: -1_000n, AVAILABLE: 100_000n }, sum: 0n });
         await deliver("payout.reversed", p.id, { failureReason: "Account closed (again)" });
@@ -499,7 +506,7 @@ describe("payouts", () => {
       expect(await entry(res.body.id, "payout_settled")).toMatchObject({ sum: 0n });
     });
 
-    it("an event for a payout we do not know is stored and retried, never a 500; one for a different amount settles nothing and alerts finance", async () => {
+    it("an event for a payout we do not know is stored and retried, never a 500", async () => {
       const unknown = fakeX.unknownPayoutWebhook("payout.processed", { id: `pout_${randomUUID().slice(0, 12)}`, amountPaise: 100_000n });
       let r = http().post("/v1/webhooks/razorpayx");
       for (const [k, v] of Object.entries(unknown.headers)) r = r.set(k, v);
@@ -511,13 +518,6 @@ describe("payouts", () => {
       expect(stored.processedAt).toBeNull();
       expect(stored.lastError).toMatch(/unknown payout/);
 
-      const s = await ready();
-      const p = await sent(s, 100_000n);
-      await expect(h.deliverX(fakeX.payoutWebhook("payout.processed", p.razorpayxPayoutId!, { amountPaise: 90_000n }))).rejects.toThrow(/timed out/);
-      expect((await payoutRow(p.id)).status).toBe("PROCESSING");
-      expect(await entry(p.id, "payout_settled")).toBeNull();
-      const fin = await finance();
-      expect(await until(() => prisma.notification.findFirst({ where: { userId: fin.userId, type: "finance.alert", sourceEventId: `finance:payout-mismatch:${p.id}` } }))).toBeTruthy();
     }, 60_000);
   });
 
@@ -602,4 +602,188 @@ describe("payouts", () => {
     });
   });
 
+
+  describe("safeguards", () => {
+    const createCalls = () => fakeX.callsTo("createPayout").length;
+
+    it("a payout whose account was swapped between request and approval is rejected (PAYOUT_ACCOUNT_CHANGED) and the funds unlock", async () => {
+      const s = await ready(200_000n);
+      const res = await requestPayout(s, "100000");
+      expect((await h.putAccount(s, h.bankBody())).status).toBe(200);
+      const before = createCalls();
+      const approved = await approve(res.body.id);
+      expect(approved.status).toBe(200);
+      expect(approved.body).toMatchObject({ status: "REJECTED", failureReason: "PAYOUT_ACCOUNT_CHANGED" });
+      expect(approved.body.destination).toMatchObject({ status: "INACTIVE" });
+      expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
+      expect(await entry(res.body.id, "payout_reject")).toMatchObject({ byKind: { PAYOUT_LOCKED: -100_000n, AVAILABLE: 100_000n }, sum: 0n });
+      expect(createCalls()).toBe(before);
+      expect(await prisma.auditLog.count({ where: { action: "payout.auto_reject", targetId: res.body.id } })).toBe(1);
+      await replay("payout.rejected", res.body.id);
+      const note = await prisma.notification.findFirst({ where: { userId: s.userId, type: "payout.rejected" } });
+      expect(note?.body).toContain("request it again");
+    });
+
+    it("an account held for review (DUPLICATE_PAN / NAME_MISMATCH) or still in cooldown blocks the approval the same way", async () => {
+      for (const patch of [{ reviewFlag: "DUPLICATE_PAN" }, { reviewFlag: "NAME_MISMATCH" }, { cooldownUntil: new Date(Date.now() + 3 * DAY) }]) {
+        const s = await ready(200_000n);
+        const res = await requestPayout(s, "100000");
+        await prisma.payoutAccount.update({ where: { id: s.accountId }, data: patch });
+        const approved = await approve(res.body.id);
+        expect(approved.body).toMatchObject({ status: "REJECTED", failureReason: "PAYOUT_ACCOUNT_CHANGED" });
+        expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
+      }
+    });
+
+    it("the send re-checks the account too: an APPROVED payout whose account was replaced is rejected and unlocked, not sent", async () => {
+      const s = await ready(200_000n);
+      const res = await requestPayout(s, "100000");
+      await prisma.payout.update({ where: { id: res.body.id }, data: { status: "APPROVED", approvedBy: (await finance()).userId, approvedAt: new Date(t.clock.now().getTime() - 6 * 60_000) } });
+      expect((await h.putAccount(s, h.bankBody())).status).toBe(200);
+      const before = createCalls();
+      expect(await t.app.get(PayoutMaintenanceProcessor).redrive()).toBe(0);
+      expect(await payoutRow(res.body.id)).toMatchObject({ status: "REJECTED", failureReason: "PAYOUT_ACCOUNT_CHANGED" });
+      expect(await balances(s)).toMatchObject({ AVAILABLE: 200_000n, PAYOUT_LOCKED: 0n });
+      expect(createCalls()).toBe(before);
+    });
+
+    it("finance sees the masked destination and its status and review flag; the creator's view has no review flag", async () => {
+      const s = await ready(200_000n, h.upiBody("asha.rao@okhdfc"));
+      const res = await requestPayout(s, "100000");
+      expect(res.body.destination).toEqual({ type: "UPI", ifsc: null, accountLast4: null, vpaMasked: "as***@okhdfc", status: "VERIFIED" });
+      const fin = await finance();
+      const one = await http().get(`/v1/admin/payouts/${res.body.id}`).set(auth(fin));
+      expect(one.body.destination).toEqual({ type: "UPI", ifsc: null, accountLast4: null, vpaMasked: "as***@okhdfc", status: "VERIFIED", reviewFlag: null });
+      const listed = await http().get(`/v1/admin/payouts?ownerId=${s.userId}`).set(auth(fin));
+      expect(listed.body.items[0].destination.reviewFlag).toBeNull();
+      expect(JSON.stringify(one.body)).not.toContain("asha.rao@");
+      const mine = await http().get("/v1/wallet/payouts").set(auth(s));
+      expect(mine.body.items[0].destination).not.toHaveProperty("reviewFlag");
+    });
+
+    it("the requester cannot approve their own payout (PAYOUT_SELF_APPROVAL)", async () => {
+      const s = await ready(200_000n);
+      const res = await requestPayout(s, "100000");
+      const fin = await finance();
+      await prisma.payout.update({ where: { id: res.body.id }, data: { requestedBy: fin.userId } });
+      const before = createCalls();
+      const denied = await approve(res.body.id, fin);
+      expect(denied.status).toBe(403);
+      expect(denied.body.error.code).toBe("PAYOUT_SELF_APPROVAL");
+      expect((await payoutRow(res.body.id)).status).toBe("REQUESTED");
+      expect(createCalls()).toBe(before);
+    });
+
+    it("a UPI payout above the UPI limit is refused at request time (PAYOUT_ABOVE_UPI_LIMIT); the limit itself is allowed", async () => {
+      const s = await ready(30_000_000n, h.upiBody());
+      const over = await requestPayout(s, "10000001");
+      expect(over.status).toBe(422);
+      expect(over.body.error.code).toBe("PAYOUT_ABOVE_UPI_LIMIT");
+      expect((await requestPayout(s, "10000000")).status).toBe(201);
+      expect(await balances(s)).toMatchObject({ AVAILABLE: 20_000_000n, PAYOUT_LOCKED: 10_000_000n });
+      await withSettings({ upi_max_payout_paise: 60_000 }, async () => {
+        expect((await requestPayout(s, "60001")).body.error.code).toBe("PAYOUT_ABOVE_UPI_LIMIT");
+        expect((await requestPayout(s, "60000")).status).toBe(201);
+      });
+    });
+
+    it("provider error text is stored and shown as a code (BANK_REJECTED / INVALID_ACCOUNT / PROVIDER_ERROR); the raw text goes only to finance", async () => {
+      const s = await ready(200_000n);
+      const res = await requestPayout(s, "100000");
+      fakeX.failNext.set("createPayout", new RazorpayApiError(400, "BAD_REQUEST_ERROR", "Insufficient funds in RazorpayX account 2323230000000001, ref ABC-999"));
+      expect((await approve(res.body.id)).status).toBe(200);
+      const row = await until(async () => (await payoutRow(res.body.id)).status === "FAILED" && (await payoutRow(res.body.id)));
+      expect(row.failureReason).toBe("PROVIDER_ERROR");
+      await replay("payout.failed", res.body.id);
+      const note = await prisma.notification.findFirstOrThrow({ where: { userId: s.userId, type: "payout.failed" } });
+      for (const leak of ["Insufficient", "2323230000000001", "ABC-999"]) expect(note.body).not.toContain(leak);
+      const fin = await finance();
+      const alert = await until(() => prisma.notification.findFirst({ where: { userId: fin.userId, type: "finance.alert", sourceEventId: `finance:payout-failed:${res.body.id}` } }));
+      expect(alert.body).toContain("Insufficient funds");
+
+      // The same for a failure the webhook reports.
+      const p = await sent(s, 100_000n);
+      await deliver("payout.failed", p.id, { failureReason: "Beneficiary bank rejected the payment (code 51)" });
+      expect((await payoutRow(p.id)).failureReason).toBe("BANK_REJECTED");
+      const p2 = await sent(s, 50_000n);
+      await deliver("payout.failed", p2.id, { failureReason: "Beneficiary account is closed" });
+      expect((await payoutRow(p2.id)).failureReason).toBe("INVALID_ACCOUNT");
+    });
+
+    it("a payout.* or fund_account.validation.* event signed with the Razorpay webhook secret on /webhooks/razorpay changes nothing", async () => {
+      const s = await ready();
+      const p = await sent(s, 100_000n);
+      const forged = fake.webhook("payout.processed", { payout: { entity: { id: p.razorpayxPayoutId, reference_id: p.id, amount: 100000, status: "processed", utr: "FORGED" } } });
+      const pending = await h.putAccount(s, h.bankBody());
+      const acc = await prisma.payoutAccount.findUniqueOrThrow({ where: { id: pending.body.id } });
+      const forgedValidation = fake.webhook("fund_account.validation.completed", { "fund_account.validation": { entity: { status: "completed", fund_account: { id: acc.razorpayxFundAccountId }, results: { account_status: "active" } } } });
+      for (const hook of [forged, forgedValidation]) {
+        let r = http().post("/v1/webhooks/razorpay");
+        for (const [k, v] of Object.entries(hook.headers)) r = r.set(k, v);
+        expect((await r.send(hook.body)).status).toBe(200);
+        await until(async () => (await prisma.webhookEvent.findUniqueOrThrow({ where: { provider_eventId: { provider: "RAZORPAY", eventId: hook.headers["x-razorpay-event-id"] } } })).processedAt);
+      }
+      expect(await payoutRow(p.id)).toMatchObject({ status: "PROCESSING", utr: null });
+      expect(await entry(p.id, "payout_settled")).toBeNull();
+      expect((await prisma.payoutAccount.findUniqueOrThrow({ where: { id: acc.id } })).status).toBe("PENDING");
+      // The same body signed with the RazorpayX secret on the RazorpayX endpoint is what counts.
+      await deliver("payout.processed", p.id);
+      expect((await payoutRow(p.id)).status).toBe("PAID");
+    });
+
+    it("a processed event for a different or missing amount puts the payout in MANUAL_REVIEW with one finance alert, funds stay locked, and the event is done (no retries)", async () => {
+      const s = await ready(400_000n);
+      const p = await sent(s, 100_000n);
+      const row = await h.deliverX(fakeX.payoutWebhook("payout.processed", p.razorpayxPayoutId!, { amountPaise: 90_000n }));
+      expect(await payoutRow(p.id)).toMatchObject({ status: "MANUAL_REVIEW", failureReason: "AMOUNT_MISMATCH" });
+      expect(await entry(p.id, "payout_settled")).toBeNull();
+      expect(await balances(s)).toMatchObject({ AVAILABLE: 300_000n, PAYOUT_LOCKED: 100_000n });
+      expect((await prisma.webhookEvent.findUniqueOrThrow({ where: { id: row.id } })).attempts).toBe(1);
+      const fin = await finance();
+      expect(await prisma.notification.count({ where: { userId: fin.userId, type: "finance.alert", sourceEventId: `finance:payout-mismatch:${p.id}` } })).toBe(1);
+      // A repeat does nothing more; a later reversal still returns the money.
+      await deliver("payout.processed", p.id, { amountPaise: 100_000n });
+      expect((await payoutRow(p.id)).status).toBe("MANUAL_REVIEW");
+      await deliver("payout.reversed", p.id);
+      expect(await payoutRow(p.id)).toMatchObject({ status: "REVERSED" });
+      expect(await balances(s)).toMatchObject({ AVAILABLE: 400_000n, PAYOUT_LOCKED: 0n });
+
+      const q = await sent(s, 100_000n);
+      await h.deliverX(fakeX.payoutWebhook("payout.processed", q.razorpayxPayoutId!, { omitAmount: true }));
+      expect((await payoutRow(q.id)).status).toBe("MANUAL_REVIEW");
+      expect(await entry(q.id, "payout_settled")).toBeNull();
+    });
+
+    it("the send job racing the 5-minute re-drive creates one RazorpayX payout, adopted by reference", async () => {
+      const s = await ready(200_000n);
+      const res = await requestPayout(s, "100000");
+      await prisma.payout.update({ where: { id: res.body.id }, data: { status: "APPROVED", approvedBy: (await finance()).userId, approvedAt: new Date(t.clock.now().getTime() - 6 * 60_000) } });
+      const svc = t.app.get(PayoutsService);
+      const results = await Promise.allSettled([svc.send(res.body.id), svc.send(res.body.id, { recover: true }), t.app.get(PayoutMaintenanceProcessor).redrive()]);
+      expect(results.every((r) => r.status === "fulfilled")).toBe(true);
+      const remote = [...fakeX.payouts.values()].filter((x) => x.referenceId === res.body.id);
+      expect(remote).toHaveLength(1);
+      expect(await payoutRow(res.body.id)).toMatchObject({ status: "PROCESSING", razorpayxPayoutId: remote[0].id });
+    });
+
+    it("one organization's owner cannot see, list or request another organization's payouts", async () => {
+      const mk = async () => {
+        const o = await t.login();
+        const org = (await http().post("/v1/orgs").set(auth(o)).send({ name: "Wall Org", slug: `wo-${h.uid()}` })).body as { id: string; slug: string };
+        await h.stepUp(o);
+        return { o, org };
+      };
+      const a = await mk();
+      const b = await mk();
+      await fund({ ownerType: "ORG", ownerId: a.org.id }, 150_000n);
+      for (const path of ["me", "ledger", "payouts", "payout-account"]) {
+        expect((await http().get(`/v1/orgs/${a.org.slug}/wallet/${path}`).set(auth(b.o))).status).toBe(403);
+      }
+      const denied = await http().post(`/v1/orgs/${a.org.slug}/wallet/payouts`).set(auth(b.o)).set("Idempotency-Key", randomUUID()).send({ amountPaise: "100000" });
+      expect(denied.status).toBe(403);
+      expect((await http().put(`/v1/orgs/${a.org.slug}/wallet/payout-account`).set(auth(b.o)).send(h.bankBody())).status).toBe(403);
+      expect((await ledger.balancesFor("ORG", a.org.id)).AVAILABLE).toBe(150_000n);
+      expect((await http().get(`/v1/orgs/${b.org.slug}/wallet/payouts`).set(auth(b.o))).body.items).toEqual([]);
+    });
+  });
 });

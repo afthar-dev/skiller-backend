@@ -13,7 +13,7 @@ import { PayoutAccountsService } from "./payout-accounts.service";
 import { PayoutsService } from "./payouts.service";
 import { metaOf } from "./wallet.controller";
 
-const payoutStatusSchema = z.enum(["REQUESTED", "APPROVED", "PROCESSING", "PAID", "REJECTED", "REVERSED", "FAILED"]);
+const payoutStatusSchema = z.enum(["REQUESTED", "APPROVED", "PROCESSING", "PAID", "REJECTED", "REVERSED", "FAILED", "MANUAL_REVIEW"]);
 const rejectSchema = z.object({ note: z.string().trim().min(1).max(500).optional() }).strict();
 const listSchema = z.object({ status: payoutStatusSchema.optional(), ownerType: z.enum(["USER", "ORG"]).optional(), ownerId: z.string().min(1).max(100).optional() });
 
@@ -40,7 +40,7 @@ export class AdminWalletController {
   @ApiPagination()
   list(@Query() query: Record<string, unknown>) {
     const { status, ownerType, ownerId } = listSchema.parse({ status: query.status, ownerType: query.ownerType, ownerId: query.ownerId });
-    return this.payouts.list({ status, ownerType, ownerId }, parsePage(query));
+    return this.payouts.list({ status, ownerType, ownerId }, parsePage(query), true);
   }
 
   @Get("payouts/:id")

@@ -63,10 +63,7 @@ export function payoutHelpers(t: AuthTestApp, prisma: PrismaService, fakeX: Fake
     return row;
   }
 
-  /**
-   * A creator with a VERIFIED payout account whose cooldown has passed. Advances the shared fake clock by 24 h + 1 s, which expires every
-   * session created before, so the creator is returned logged in again (no step-up yet) and earlier sessions must be renewed by the caller.
-   */
+  /** A creator with a VERIFIED first payout account (a first account has no cooldown). The clock is not touched. */
   async function creatorWithAccount(body: object = bankBody()): Promise<Session & { accountId: string }> {
     const s = await creator();
     await stepUp(s);
@@ -74,8 +71,7 @@ export function payoutHelpers(t: AuthTestApp, prisma: PrismaService, fakeX: Fake
     if (res.status !== 200) throw new Error(`put payout account failed: ${res.status} ${JSON.stringify(res.body)}`);
     const row = await prisma.payoutAccount.findUniqueOrThrow({ where: { id: res.body.id } });
     await deliverX(fakeX.validationWebhook(row.razorpayxFundAccountId, "active"));
-    t.clock.advance(DAY + 1000);
-    return Object.assign(await t.login(s.email), { accountId: row.id });
+    return Object.assign(s, { accountId: row.id });
   }
 
   return { http, auth, stepUp, creator, bankBody, upiBody, putAccount, deliverX, creatorWithAccount, uid: () => randomUUID().slice(0, 8) };

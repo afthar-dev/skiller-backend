@@ -28,7 +28,7 @@ const defaults: Record<string, string> = {
   RAZORPAY_KEY_SECRET: "openapi",
   RAZORPAY_WEBHOOK_SECRET: "openapi",
   RAZORPAYX_ACCOUNT_NUMBER: "2323230000000001",
-  RAZORPAYX_WEBHOOK_SECRET: "openapi",
+  RAZORPAYX_WEBHOOK_SECRET: "openapi-x",
   SUPER_ADMIN_EMAIL: "admin@skiller.test",
 };
 for (const [key, value] of Object.entries(defaults)) process.env[key] ??= value;

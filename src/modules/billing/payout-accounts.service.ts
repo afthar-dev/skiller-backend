@@ -15,7 +15,7 @@ import { last4, maskVpa, namesMatch, panHash } from "./kyc";
 import { RazorpayApiError } from "./razorpay.client";
 import { RAZORPAYX_CLIENT, type RazorpayXClient } from "./razorpayx.client";
 
-/** Payouts to a new or changed account are blocked for this long (anti-fraud: a hijacked session cannot add an account and cash out at once). */
+/** Payouts to a replacement account are blocked for this long (anti-fraud: a hijacked session cannot add an account and cash out at once). */
 export const PAYOUT_ACCOUNT_COOLDOWN = 24 * 60 * 60 * 1000;
 export const DUPLICATE_PAN_FLAG = "DUPLICATE_PAN";
 export const NAME_MISMATCH_FLAG = "NAME_MISMATCH";
@@ -150,7 +150,8 @@ export class PayoutAccountsService {
           panHash: hash,
           razorpayxContactId: ids.contactId,
           razorpayxFundAccountId: ids.fundAccountId,
-          cooldownUntil: new Date(now.getTime() + PAYOUT_ACCOUNT_COOLDOWN),
+          // Only REPLACING an account starts the pause: a first account has nothing to be hijacked from.
+          cooldownUntil: live ? new Date(now.getTime() + PAYOUT_ACCOUNT_COOLDOWN) : now,
           createdBy: actorId,
           ...(other ? { reviewFlag: DUPLICATE_PAN_FLAG } : {}),
         },
@@ -207,6 +208,15 @@ export class PayoutAccountsService {
    * fund_account.validation.completed / .failed. Only a PENDING account changes (a repeat, or an account replaced meanwhile, is a no-op).
    * An unknown fund account throws so the queue retries: the webhook can outrun the transaction that stores the account.
    */
+  /** Why a payout to this account must not go ahead now, or null: replaced, not verified, held for review, or still in its post-change pause. */
+  blockReason(a: Pick<PayoutAccount, "status" | "reviewFlag" | "cooldownUntil">): string | null {
+    if (a.status === "INACTIVE") return "the payout account was replaced";
+    if (a.status !== "VERIFIED") return "the payout account is not verified";
+    if (a.reviewFlag) return `the payout account is held for review (${a.reviewFlag})`;
+    if (this.clock.now() < a.cooldownUntil) return "the payout account was changed less than 24 hours ago";
+    return null;
+  }
+
   async onValidation(result: ValidationResult): Promise<void> {
     const account = await this.prisma.payoutAccount.findUnique({ where: { razorpayxFundAccountId: result.fundAccountId } });
     if (!account) throw new Error(`unknown fund account ${result.fundAccountId}: not stored yet, will retry`);

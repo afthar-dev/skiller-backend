@@ -30,6 +30,11 @@ export class PayoutAccountHandlers implements OnModuleInit {
   }
 
   private async handle(event: WebhookEventContext): Promise<void> {
+    // Only the RazorpayX endpoint (its own secret) may verify an account; the same type from the Razorpay endpoint is ignored.
+    if (event.provider !== "RAZORPAYX") {
+      this.logger.warn(`webhook ${event.webhookEventId} (${event.type}) came from ${event.provider}, not RAZORPAYX; ignored`);
+      return;
+    }
     const result = resultOf(event.payload);
     if (!result) {
       this.logger.warn(`webhook ${event.webhookEventId} (${event.type}) has no fund account or status; ignored`);

@@ -71,6 +71,10 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnv, KYC_PEPPER: "short" })).toThrow(/KYC_PEPPER/);
   });
 
+  it("rejects one value for both webhook secrets", () => {
+    expect(() => loadConfig({ ...validEnv, RAZORPAYX_WEBHOOK_SECRET: validEnv.RAZORPAY_WEBHOOK_SECRET })).toThrow(/RAZORPAYX_WEBHOOK_SECRET.*differ/);
+  });
+
   it("rejects short jwt secret", () => {
     expect(() => loadConfig({ ...validEnv, JWT_SECRET: "short" })).toThrow(ConfigError);
     expect(() => loadConfig({ ...validEnv, JWT_SECRET: "short" })).toThrow(/JWT_SECRET/);

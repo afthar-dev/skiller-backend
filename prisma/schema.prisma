@@ -970,6 +970,8 @@ enum PayoutStatus {
   REVERSED
   /// Could not be sent, or RazorpayX failed / rejected it before settlement.
   FAILED
+  /// RazorpayX reported it processed for an amount (or without one) that does not match what was sent; funds stay locked until finance resolves it.
+  MANUAL_REVIEW
 }
 
 enum PayoutMode {

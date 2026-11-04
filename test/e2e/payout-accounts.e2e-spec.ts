@@ -56,7 +56,7 @@ describe("payout accounts and KYC", () => {
       });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ type: "BANK", status: "PENDING", ifsc: "HDFC0001234", accountLast4: accountNumber.slice(-4), panLast4: pan.slice(-4), holderName: "Asha Rao" });
-      expect(res.body.cooldownEndsAt).toBe(new Date(t.clock.now().getTime() + PAYOUT_ACCOUNT_COOLDOWN).toISOString());
+      expect(res.body.cooldownEndsAt).toBe(t.clock.now().toISOString()); // a first account has no cooldown
       expect(JSON.stringify(res.body)).not.toContain(accountNumber);
       expect(JSON.stringify(res.body)).not.toContain(pan);
 
@@ -241,16 +241,11 @@ describe("payout accounts and KYC", () => {
       const owner = { ownerType: "USER" as const, ownerId: s.userId };
       const first = await h.putAccount(s, h.bankBody());
       await h.deliverX(fakeX.validationWebhook((await prisma.payoutAccount.findUniqueOrThrow({ where: { id: first.body.id } })).razorpayxFundAccountId, "active"));
-      await expect(accounts.payableAccount(owner)).rejects.toMatchObject({ code: "PAYOUT_ACCOUNT_COOLDOWN" });
-      t.clock.advance(PAYOUT_ACCOUNT_COOLDOWN - 1000);
-      await expect(accounts.payableAccount(owner)).rejects.toMatchObject({ code: "PAYOUT_ACCOUNT_COOLDOWN" });
-      t.clock.advance(1000);
+      // The first account is payable as soon as it is verified: there is nothing to be hijacked from.
       expect((await accounts.payableAccount(owner)).id).toBe(first.body.id);
 
-      // Change: new row PENDING (not payable), old row INACTIVE, cooldown restarts.
-      const s2 = await t.login(s.email);
-      await h.stepUp(s2);
-      const second = await h.putAccount(s2, h.bankBody());
+      // Change: new row PENDING (not payable), old row INACTIVE, the 24 h pause starts.
+      const second = await h.putAccount(s, h.bankBody());
       expect(second.status).toBe(200);
       expect(await prisma.payoutAccount.findUniqueOrThrow({ where: { id: first.body.id } })).toMatchObject({ status: "INACTIVE" });
       expect(await prisma.payoutAccount.findUniqueOrThrow({ where: { id: second.body.id } })).toMatchObject({ status: "PENDING" });
@@ -258,7 +253,9 @@ describe("payout accounts and KYC", () => {
       await h.deliverX(fakeX.validationWebhook((await prisma.payoutAccount.findUniqueOrThrow({ where: { id: second.body.id } })).razorpayxFundAccountId, "active"));
       const blocked = await accounts.payableAccount(owner).catch((e: AppError) => e);
       expect(blocked).toMatchObject({ code: "PAYOUT_ACCOUNT_COOLDOWN", status: 409 });
-      t.clock.advance(DAY);
+      t.clock.advance(PAYOUT_ACCOUNT_COOLDOWN - 1000);
+      await expect(accounts.payableAccount(owner)).rejects.toMatchObject({ code: "PAYOUT_ACCOUNT_COOLDOWN" });
+      t.clock.advance(1000);
       expect((await accounts.payableAccount(owner)).id).toBe(second.body.id);
     });
 
