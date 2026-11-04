@@ -52,6 +52,10 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     app = await createWorker();
 
     const registered = app.get(EventBus).registeredTypes().sort();
+    // The search index follows renames only if the worker consumes both rename events and ProfilesService can emit them.
+    expect(registered).toEqual(expect.arrayContaining(["user.profile_updated", "org.renamed"]));
+    const { ProfilesService } = await import("./modules/users");
+    expect((app.get(ProfilesService) as unknown as { outbox?: unknown }).outbox).toBeDefined();
     const expected = Object.entries(HANDLED).filter(([, handled]) => handled).map(([type]) => type).sort();
     expect(registered).toEqual(expected);
 

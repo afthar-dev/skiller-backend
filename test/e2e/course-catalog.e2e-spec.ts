@@ -3,6 +3,7 @@ import { EventBus } from "../../src/common/outbox/event-bus";
 import type { DomainEvent } from "../../src/common/outbox/events";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
+import { CatalogCursor } from "../../src/modules/courses/catalog-cursor";
 import { CoursePopularity } from "../../src/modules/courses/course-popularity";
 import { refreshCourseSearch } from "../../src/modules/courses/course-search";
 import { OrganizationsService } from "../../src/modules/organizations/organizations.service";
@@ -304,6 +305,36 @@ describe("course search and catalog", () => {
       expect(titles(await search({ category: cat.slug }))).toEqual(["Busy", "Quiet"]);
     });
 
+    it("rejects forged cursors with 400, never 500: wrong hash, overflowing keys, impossible dates, a forged mode", async () => {
+      const cat = await category();
+      for (let i = 0; i < 3; i++) await course(cat.id, { title: `Forge ${i}`, enrolments30d: i });
+      const codec = t.app.get(CatalogCursor);
+      const real = async (params: Record<string, string | number>) => codec.verify((await search({ ...params, limit: 1 })).body.nextCursor);
+      const bad = async (params: Record<string, string | number>, cursor: string) => {
+        const res = await search({ ...params, limit: 1, cursor });
+        return [res.status, res.body.error?.code];
+      };
+      const popular = { category: cat.slug, sort: "popular" };
+      const p = await real(popular);
+      // A cursor this server did not sign: even with the right query hash.
+      const unsigned = Buffer.from(JSON.stringify(p)).toString("base64url");
+      expect(await bad(popular, unsigned)).toEqual([400, "BAD_CURSOR"]);
+      expect(await bad(popular, `${unsigned}.AAAA`)).toEqual([400, "BAD_CURSOR"]);
+      // Signed, right hash, but out-of-range keys (these used to reach the database and fail there).
+      expect(await bad(popular, codec.sign({ ...p, k: ["9999999999", "1"] }))).toEqual([400, "BAD_CURSOR"]);
+      const newest = { category: cat.slug, sort: "newest" };
+      const n = await real(newest);
+      expect(await bad(newest, codec.sign({ ...n, k: ["9999-99-99 99:99:99"] }))).toEqual([400, "BAD_CURSOR"]);
+      expect(await bad(newest, codec.sign({ ...n, k: ["2026-02-30 10:00:00"] }))).toEqual([400, "BAD_CURSOR"]);
+      // A forged mode: none with a text query, or fts / trgm without one.
+      const withQ = { category: cat.slug, q: "forge", sort: "newest" };
+      const f = await real(withQ);
+      expect(await bad(withQ, codec.sign({ ...f, m: "none" }))).toEqual([400, "BAD_CURSOR"]);
+      expect(await bad(newest, codec.sign({ ...n, m: "fts" }))).toEqual([400, "BAD_CURSOR"]);
+      // The genuine ones still work.
+      expect((await search({ ...popular, limit: 1, cursor: codec.sign(p) })).status).toBe(200);
+    });
+
     it("rejects a cursor that belongs to another query", async () => {
       const cat = await category();
       for (let i = 0; i < 3; i++) await course(cat.id, { title: `Cur ${i}` });
@@ -312,8 +343,41 @@ describe("course search and catalog", () => {
       expect((await search({ category: cat.slug, sort: "popular", limit: 1, cursor: p1.body.nextCursor })).status).toBe(400);
       expect((await search({ category: cat.slug, sort: "newest", level: "BEGINNER", limit: 1, cursor: p1.body.nextCursor })).status).toBe(400);
       const forged = Buffer.from(JSON.stringify({ v: 1, s: "newest", m: "none", h: "x".repeat(12), k: ["2026-01-01 00:00:00"], id: "a" })).toString("base64url");
+      expect((await search({ category: cat.slug, sort: "newest", cursor: `${forged}.${forged}` })).status).toBe(400);
       expect((await search({ category: cat.slug, sort: "newest", cursor: forged })).status).toBe(400);
       expect((await search({ category: cat.slug, sort: "newest", limit: 1, cursor: p1.body.nextCursor })).status).toBe(200);
+    });
+  });
+
+  describe("NUL characters", () => {
+    it("rejects U+0000 in any query string with 400 VALIDATION_FAILED", async () => {
+      for (const qs of ["q=%00", "q=a%00b", "category=%00", "category=a%00", "level=%00"]) {
+        const res = await http().get(`/v1/courses?${qs}`).set("X-Forwarded-For", uniqueIp());
+        expect([qs, res.status, res.body.error?.code]).toEqual([qs, 400, "VALIDATION_FAILED"]);
+      }
+      const pathRes = await http().get(`/v1/courses/${"a%00b"}`);
+      expect(JSON.stringify([pathRes.status, pathRes.body])).toContain("[400");
+    });
+
+    it("rejects U+0000 anywhere in a JSON body, on any route", async () => {
+      const s = await t.login();
+      const authz = { Authorization: `Bearer ${s.accessToken}` };
+      const nul = "a b";
+      const cat = await category();
+      const valid = { description: "d", categoryId: cat.id, language: "en" };
+      await http().post("/v1/me/become-creator").set(authz).send({ acceptTerms: true });
+      const post = (path: string, body: unknown, h: Record<string, string> = authz) => http().post(path).set(h).set("Content-Type", "application/json").send(JSON.stringify(body));
+      for (const body of [{ ...valid, title: `Title ${nul}` }, { ...valid, title: "Fine title", tags: [nul] }, { ...valid, title: "Fine title", nested: { list: [{ deep: nul }] } }, { ...valid, title: "Fine title", [nul]: 1 }]) {
+        const res = await post("/v1/studio/courses", body);
+        expect([res.status, res.body.error?.code]).toEqual([400, "VALIDATION_FAILED"]);
+      }
+      const anon = await post("/v1/auth/otp/request", { email: `x${nul}@example.com` }, {});
+      expect([anon.status, anon.body.error?.code]).toEqual([400, "VALIDATION_FAILED"]);
+    });
+
+    it("accepts a category slug only in slug form", async () => {
+      for (const bad of ["Upper", "has space", "a_b", "x".repeat(61), "a/b"]) expect((await search({ category: bad })).status).toBe(400);
+      expect((await search({ category: "development" })).status).toBe(200);
     });
   });
 

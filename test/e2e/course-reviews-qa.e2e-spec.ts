@@ -71,7 +71,7 @@ describe("course reviews and lesson Q&A", () => {
     it("a second review is an update, never a duplicate; text is plain and sanitised", async () => {
       const c = await course(await creator());
       const me = await learner(c);
-      const first = await review(me, c.slug, { rating: 4, body: "Good‮ course\u0000\n\n\n\nreally" });
+      const first = await review(me, c.slug, { rating: 4, body: "Good‮ course​\n\n\n\nreally" });
       expect(first.status).toBe(200);
       expect(first.body).toMatchObject({ rating: 4, body: "Good course\n\nreally" });
       const second = await review(me, c.slug, { rating: 2, body: "Changed my mind" });
@@ -208,6 +208,40 @@ describe("course reviews and lesson Q&A", () => {
       expect((await http().post(`/v1/admin/reviews/${id}/hide`).set(auth(moderator)).send({ reason: "Spam" })).status).toBe(200);
       await prisma.$transaction((tx) => enrolments.grant(tx, { courseId: c.id, userId: d.userId, source: "PURCHASE", orderId: "order-m2" }));
       expect((await publicCourse(c.slug)).ratingCount).toBe(0);
+    });
+
+    it("keeps the average and count exact when ten learners rate at the same time", async () => {
+      const c = await course(await creator());
+      const users = await Promise.all(Array.from({ length: 10 }, () => learner(c)));
+      const ratings = [5, 4, 4, 3, 5, 2, 1, 5, 4, 3];
+      const results = await Promise.all(users.map((u, i) => review(u, c.slug, { rating: ratings[i], body: `r${i}` })));
+      expect(results.map((r) => r.status)).toEqual(Array(10).fill(200));
+      const row = await rowOf(c.id);
+      expect(row.ratingCount).toBe(10);
+      expect(Number(row.ratingAvg)).toBe(3.6);
+      expect(await prisma.review.count({ where: { courseId: c.id } })).toBe(10);
+      // And again, all editing at once.
+      await Promise.all(users.map((u) => review(u, c.slug, { rating: 5 })));
+      expect(Number((await rowOf(c.id)).ratingAvg)).toBe(5);
+    });
+
+    it("refuses a moderator who authors the course: they cannot hide or restore its reviews, questions or answers", async () => {
+      const owner = await creator();
+      await grantRole(owner.userId, "moderator");
+      const c = await course(owner);
+      const me = await learner(c);
+      const reviewId = (await review(me, c.slug, { rating: 1 })).body.id as string;
+      const q = (await http().post(`/v1/learn/lessons/${c.lessonId}/questions`).set(auth(me)).send({ body: "Q" })).body.id as string;
+      const a = (await http().post(`/v1/learn/questions/${q}/answers`).set(auth(me)).send({ body: "A" })).body.id as string;
+      for (const [kind, id] of [["reviews", reviewId], ["questions", q], ["answers", a]] as const) {
+        for (const verb of ["hide", "unhide"]) {
+          const res = await http().post(`/v1/admin/${kind}/${id}/${verb}`).set(auth(owner)).send({ reason: "Own course" });
+          expect([kind, verb, res.status, res.body.error?.code]).toEqual([kind, verb, 403, "COURSE_REVIEW_SELF"]);
+        }
+      }
+      expect((await prisma.review.findUniqueOrThrow({ where: { id: reviewId } })).hiddenAt).toBeNull();
+      // Another moderator still can.
+      expect((await http().post(`/v1/admin/reviews/${reviewId}/hide`).set(auth(moderator)).send({ reason: "Spam" })).status).toBe(200);
     });
 
     it("limits review writes to 10 per hour per user", async () => {

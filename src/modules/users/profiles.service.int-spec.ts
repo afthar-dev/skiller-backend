@@ -5,6 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { ConfigModule } from "../../common/config/config.module";
 import { applyTestEnv } from "../../../test/setup/env";
 import * as handles from "./handles";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { AccountService } from "../identity";
 import { ProfilesService } from "./profiles.service";
 
@@ -15,7 +16,7 @@ describe("ProfilesService.ensure", () => {
 
   beforeAll(async () => {
     applyTestEnv({ DATABASE_URL: process.env.DATABASE_URL!, REDIS_URL: process.env.REDIS_URL! });
-    const mod = await Test.createTestingModule({ imports: [ConfigModule, PrismaModule], providers: [AccountService, ProfilesService] }).compile();
+    const mod = await Test.createTestingModule({ imports: [ConfigModule, PrismaModule], providers: [AccountService, OutboxService, ProfilesService] }).compile();
     await mod.init();
     prisma = mod.get(PrismaService);
     service = mod.get(ProfilesService);

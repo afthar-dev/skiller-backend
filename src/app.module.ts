@@ -5,6 +5,7 @@ import { ClockModule } from "./common/clock/clock";
 import { ConfigModule, APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 import { ErrorFilter } from "./common/errors/error.filter";
+import { NulGuardMiddleware } from "./common/http/nul-guard.middleware";
 import { RequestIdMiddleware } from "./common/http/request-id.middleware";
 import { buildLoggerParams } from "./common/observability/logger";
 import { OutboxModule } from "./common/outbox/outbox.module";
@@ -37,6 +38,6 @@ import { HealthController } from "./health.controller";
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RequestIdMiddleware).forRoutes("*");
+    consumer.apply(RequestIdMiddleware, NulGuardMiddleware).forRoutes("*");
   }
 }

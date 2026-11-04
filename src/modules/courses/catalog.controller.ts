@@ -13,7 +13,7 @@ const paise = z.string().regex(/^\d{1,12}$/, "integer paise as a decimal string,
 const querySchema = z
   .object({
     q: z.string().trim().max(100).optional(),
-    category: z.string().trim().min(1).max(60).optional(),
+    category: z.string().regex(/^[a-z0-9-]{1,60}$/, "a category slug").optional(),
     level: z.enum(COURSE_LEVELS).optional(),
     language: z.enum(COURSE_LANGUAGES).optional(),
     price: z.enum(["free", "paid"]).optional(),
