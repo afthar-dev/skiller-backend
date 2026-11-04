@@ -19,14 +19,17 @@ import { ModerationService } from "./moderation.service";
 import { PublishingService } from "./publishing.service";
 import { CurriculumService } from "./curriculum.service";
 import { PublicCurriculumController, StudioCurriculumController } from "./curriculum.controller";
+import { QuizAttemptsService } from "./quiz-attempts.service";
+import { LearnQuizzesController, StudioQuizzesController } from "./quizzes.controller";
+import { QuizzesService } from "./quizzes.service";
 import { SelfEnrolmentService } from "./self-enrolment.service";
 import { StudioCoursesController } from "./studio-courses.controller";
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule],
-  controllers: [StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController],
-  providers: [CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
+  controllers: [StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController],
+  providers: [CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
   exports: [CoursePolicy, CoursesService, CategoriesService, EnrolmentsService],
 })
 export class CoursesModule {}

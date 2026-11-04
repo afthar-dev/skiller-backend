@@ -72,6 +72,7 @@ const toLessonView = (l: Lesson): LessonView => ({
   quizId: l.quizId,
 });
 
+const quizPreview = () => new AppError("QUIZ_PREVIEW_NOT_ALLOWED", 422, "A quiz lesson cannot be a free preview");
 const sectionNotFound = () => new AppError("SECTION_NOT_FOUND", 404, "Section not found");
 const lessonNotFound = () => new AppError("LESSON_NOT_FOUND", 404, "Lesson not found");
 const wrongField = (field: string, type: LessonType) => new AppError("VALIDATION_FAILED", 400, "Request validation failed", { fields: { [field]: [`not applicable to a ${type} lesson`] } });
@@ -130,6 +131,7 @@ export class CurriculumService {
   async createLesson(user: { id: string }, courseId: string, input: CreateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
     assertFieldsMatchType(input.type, input);
+    if (input.type === "QUIZ" && input.isFreePreview) throw quizPreview();
     let deferred = false;
     const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
@@ -172,6 +174,7 @@ export class CurriculumService {
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
       if (!lesson) throw lessonNotFound();
       assertFieldsMatchType(lesson.type, patch);
+      if (lesson.type === "QUIZ" && patch.isFreePreview) throw quizPreview();
 
       const data: Prisma.LessonUpdateInput = {};
       if (patch.title !== undefined) data.title = patch.title;
@@ -275,9 +278,10 @@ export class CurriculumService {
     return rows.map((s) => ({ id: s.id, title: s.title, position: s.position, lessons: s.lessons.map(toLessonView) }));
   }
 
-  private async releaseLessonMedia(tx: Prisma.TransactionClient, lesson: Pick<Lesson, "videoAssetId" | "resourceAssetId">): Promise<void> {
+  private async releaseLessonMedia(tx: Prisma.TransactionClient, lesson: Pick<Lesson, "videoAssetId" | "resourceAssetId" | "quizId">): Promise<void> {
     if (lesson.videoAssetId) await this.media.detach(tx, lesson.videoAssetId);
     if (lesson.resourceAssetId) await this.media.detach(tx, lesson.resourceAssetId);
+    if (lesson.quizId) await tx.quiz.deleteMany({ where: { id: lesson.quizId } });
   }
 }
 

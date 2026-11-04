@@ -162,6 +162,12 @@ export class ProgressService implements CourseProgressReader {
     await this.refresh(tx, courseId, { userId });
   }
 
+  /** The learner's enrolment row, locked: everything that changes their progress (and quiz attempts) serialises on it. Returns whether an active enrolment exists. */
+  async lockLearner(tx: Prisma.TransactionClient, courseId: string, userId: string): Promise<boolean> {
+    await this.lockEnrolments(tx, courseId, { userId });
+    return (await tx.enrolment.count({ where: { courseId, userId, revokedAt: null } })) > 0;
+  }
+
   /** Row locks on active enrolments, always in id order so two lockers cannot deadlock. */
   private async lockEnrolments(tx: Prisma.TransactionClient, courseId: string, scope: { userId?: string; ids?: string[] }): Promise<void> {
     const filter = scope.userId ? Prisma.sql`AND "userId" = ${scope.userId}` : scope.ids ? Prisma.sql`AND "id" = ANY(${scope.ids})` : Prisma.empty;

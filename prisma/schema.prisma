@@ -1103,6 +1103,7 @@ model Course {
   sections   CourseSection[]
   lessons    Lesson[]
   enrolments Enrolment[]
+  quizzes    Quiz[]
 
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
@@ -1162,6 +1163,7 @@ model Lesson {
   @@index([sectionId, position])
   @@index([courseId])
   @@index([videoAssetId])
+  @@index([quizId])
   @@map("lessons")
 }
 
@@ -1214,4 +1216,59 @@ model LessonProgress {
   @@id([userId, lessonId])
   @@index([courseId, userId])
   @@map("lesson_progress")
+}
+
+// ─── quizzes ─────────────────────────────────────────────────────────────
+// One quiz per QUIZ lesson (Lesson.quizId). Options are stored as [{id, text}] with ids that stay stable across edits; `correct` is the
+// list of right option ids and is never serialised to a learner before they hold a passing attempt. Attempts keep the answers as given
+// (option ids per question id) and the score at the time, so editing a quiz later never revokes a pass.
+
+enum QuizQuestionKind {
+  SINGLE
+  MULTIPLE
+}
+
+model Quiz {
+  id        String   @id @default(uuid(7))
+  courseId  String
+  passPct   Int      @default(70)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@index([courseId])
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id       String           @id @default(uuid(7))
+  quizId   String
+  prompt   String
+  kind     QuizQuestionKind
+  options  Json
+  correct  Json
+  position Int
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, position])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id        String   @id @default(uuid(7))
+  quizId    String
+  userId    String
+  answers   Json
+  scorePct  Int
+  passed    Boolean
+  createdAt DateTime @default(now())
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, userId, createdAt])
+  @@map("quiz_attempts")
 }

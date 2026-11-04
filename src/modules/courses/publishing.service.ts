@@ -13,7 +13,7 @@ import { toCourseView, type CourseView } from "./course-view";
 import { CoursePolicy, courseNotFound } from "./course.policy";
 
 export interface PublishReason {
-  code: "NO_SECTIONS" | "NO_REQUIRED_LESSON" | "VIDEO_NOT_READY" | "NO_THUMBNAIL";
+  code: "NO_SECTIONS" | "NO_REQUIRED_LESSON" | "VIDEO_NOT_READY" | "QUIZ_EMPTY" | "NO_THUMBNAIL";
   message: string;
 }
 
@@ -96,7 +96,7 @@ export class PublishingService {
   private async reasonsNotPublishable(db: Prisma.TransactionClient, course: Course): Promise<PublishReason[]> {
     const [sections, lessons] = await Promise.all([
       db.courseSection.count({ where: { courseId: course.id } }),
-      db.lesson.findMany({ where: { courseId: course.id }, select: { type: true, isRequired: true, videoAssetId: true } }),
+      db.lesson.findMany({ where: { courseId: course.id }, select: { type: true, isRequired: true, videoAssetId: true, quizId: true } }),
     ]);
     const reasons: PublishReason[] = [];
     if (sections === 0) reasons.push({ code: "NO_SECTIONS", message: "Add at least one section" });
@@ -106,6 +106,13 @@ export class PublishingService {
       const statuses = await this.media.assetStatuses(videos.flatMap((l) => (l.videoAssetId ? [l.videoAssetId] : [])));
       const notReady = videos.filter((l) => !l.videoAssetId || statuses.get(l.videoAssetId) !== "READY").length;
       if (notReady > 0) reasons.push({ code: "VIDEO_NOT_READY", message: `${notReady} video lesson${notReady === 1 ? " has" : "s have"} no video that is ready to play` });
+    }
+    const quizLessons = lessons.filter((l) => l.type === "QUIZ");
+    if (quizLessons.length > 0) {
+      const filled = await db.quiz.findMany({ where: { id: { in: quizLessons.flatMap((l) => (l.quizId ? [l.quizId] : [])) }, questions: { some: {} } }, select: { id: true } });
+      const withQuestions = new Set(filled.map((q) => q.id));
+      const empty = quizLessons.filter((l) => !l.quizId || !withQuestions.has(l.quizId)).length;
+      if (empty > 0) reasons.push({ code: "QUIZ_EMPTY", message: `${empty} quiz lesson${empty === 1 ? " has" : "s have"} no questions` });
     }
     if (!course.thumbnailAssetId) reasons.push({ code: "NO_THUMBNAIL", message: "Add a thumbnail" });
     return reasons;
