@@ -8,6 +8,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { PlatformRoleDirectory } from "../rbac";
 import { ORG_LEARNER_ROLE } from "./course-access-rules";
 import { revokeCertificates } from "./certificate-revocation";
+import { lockCourse } from "./course-lock";
 import { hideReviewOfEndedEnrolment, restoreReviewOfReactivatedEnrolment } from "./course-rating";
 import { ProgressService } from "./progress.service";
 
@@ -49,6 +50,8 @@ export const withCourse = { course: { select: { slug: true, title: true, thumbna
  * events happen there), so it needs nothing but the database, the clock and the role directory.
  * A learner has at most one row per course: revoking sets `revokedAt`, enrolling again reactivates that row.
  * `Course.enrolmentCount` counts the rows with `revokedAt` null and is only changed here, in the transaction of the change.
+ * Lock order everywhere in the module (curriculum edits, progress recomputes, this service): the course row first, then enrolment rows
+ * in id order. Every change here that touches an enrolment row therefore takes the course row before it.
  */
 @Injectable()
 export class EnrolmentsService {
@@ -68,6 +71,7 @@ export class EnrolmentsService {
   async grant(tx: Prisma.TransactionClient, input: { courseId: string; userId: string; source: EnrolmentSource; orderId?: string }): Promise<{ enrolment: Enrolment; changed: boolean }> {
     const key = { courseId_userId: { courseId: input.courseId, userId: input.userId } };
     const orderId = input.source === "PURCHASE" ? (input.orderId ?? null) : null;
+    await lockCourse(tx, input.courseId);
 
     // ON CONFLICT DO NOTHING: a concurrent insert of the same pair waits for the other transaction instead of aborting this one.
     const created = await tx.enrolment.createMany({ data: [{ courseId: input.courseId, userId: input.userId, source: input.source, orderId }], skipDuplicates: true });
@@ -87,6 +91,8 @@ export class EnrolmentsService {
       if (row.completedAt) await this.outbox.enqueue(tx, { type: "course.completed", userId: input.userId, courseId: input.courseId });
       return { enrolment: await tx.enrolment.findUniqueOrThrow({ where: key }), changed: true };
     }
+    // A seat that is still in the table but no longer backed by a live org_learner grant (the buyer relation says NONE): the user now holds the course on their own terms.
+    if (input.source === "FREE" && row.source === "ORG_SEAT") return { enrolment: await tx.enrolment.update({ where: key, data: { source: "FREE", orderId: null } }), changed: true };
     if (input.source !== "PURCHASE") return { enrolment: row, changed: false };
     if (row.source !== "PURCHASE") return { enrolment: await tx.enrolment.update({ where: key, data: { source: "PURCHASE", orderId } }), changed: true };
     if (row.orderId === orderId) return { enrolment: row, changed: false };
@@ -95,6 +101,7 @@ export class EnrolmentsService {
 
   /** A refunded order takes back the access it gave. An enrolment that came from another order is left alone. */
   async revokeForOrder(tx: Prisma.TransactionClient, input: { courseId: string; userId: string; orderId: string }): Promise<void> {
+    await lockCourse(tx, input.courseId);
     const revoked = await tx.enrolment.updateMany({ where: { courseId: input.courseId, userId: input.userId, orderId: input.orderId, revokedAt: null }, data: { revokedAt: this.clock.now() } });
     if (revoked.count > 0) {
       await this.bump(tx, input.courseId, -1);
@@ -114,6 +121,7 @@ export class EnrolmentsService {
     let revoked = 0;
     for (const seat of seats) {
       revoked += await this.prisma.$transaction(async (tx) => {
+        await lockCourse(tx, seat.courseId);
         const res = await tx.enrolment.updateMany({ where: { id: seat.id, source: "ORG_SEAT", revokedAt: null }, data: { revokedAt: this.clock.now() } });
         if (res.count > 0) {
           await this.bump(tx, seat.courseId, -1);

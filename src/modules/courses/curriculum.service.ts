@@ -75,8 +75,15 @@ const toLessonView = (l: Lesson): LessonView => ({
 
 const quizPreview = () => new AppError("QUIZ_PREVIEW_NOT_ALLOWED", 422, "A quiz lesson cannot be a free preview");
 const sectionNotFound = () => new AppError("SECTION_NOT_FOUND", 404, "Section not found");
+const requiredLessonKept = () => new AppError("COURSE_REQUIRED_LESSON", 409, "A live course keeps at least one required lesson: make another lesson required first");
 const lessonNotFound = () => new AppError("LESSON_NOT_FOUND", 404, "Lesson not found");
 const wrongField = (field: string, type: LessonType) => new AppError("VALIDATION_FAILED", 400, "Request validation failed", { fields: { [field]: [`not applicable to a ${type} lesson`] } });
+
+/** A live course (published or flagged) with no required lesson could never be completed by anyone: the change that would leave none is refused. Call after the change, inside its transaction. */
+async function assertRequiredLessonRemains(tx: Prisma.TransactionClient, courseId: string): Promise<void> {
+  if (!(await courseIsLive(tx, courseId))) return;
+  if ((await tx.lesson.count({ where: { courseId, isRequired: true } })) === 0) throw requiredLessonKept();
+}
 
 @Injectable()
 export class CurriculumService {
@@ -124,6 +131,7 @@ export class CurriculumService {
       for (const lesson of section.lessons) await this.releaseLessonMedia(tx, lesson);
       await tx.courseSection.delete({ where: { id: sectionId } });
       await tx.courseSection.updateMany({ where: { courseId, position: { gt: section.position } }, data: { position: { decrement: 1 } } });
+      if (section.lessons.some((l) => l.isRequired)) await assertRequiredLessonRemains(tx, courseId);
       if (section.lessons.some(affectsProgress)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
     });
     if (deferred) await this.progress.scheduleRecompute(courseId);
@@ -195,6 +203,7 @@ export class CurriculumService {
         data.resourceAssetId = patch.resourceAssetId;
       }
       const updated = await tx.lesson.update({ where: { id: lessonId }, data });
+      if (lesson.isRequired && patch.isRequired === false) await assertRequiredLessonRemains(tx, courseId);
       if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
       return toLessonView(updated);
     });
@@ -212,6 +221,7 @@ export class CurriculumService {
       await this.releaseLessonMedia(tx, lesson);
       await tx.lesson.delete({ where: { id: lessonId } });
       await tx.lesson.updateMany({ where: { sectionId: lesson.sectionId, position: { gt: lesson.position } }, data: { position: { decrement: 1 } } });
+      if (lesson.isRequired) await assertRequiredLessonRemains(tx, courseId);
       if (affectsProgress(lesson)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
     });
     if (deferred) await this.progress.scheduleRecompute(courseId);

@@ -6,7 +6,7 @@ import { ORG_AUTHOR_ROLES } from "./org-roles";
 
 export const ORG_LEARNER_ROLE = "org_learner";
 
-/** How a user stands to a course when they want to get it. Precedence: OWN, ORG_AUTHOR, ENROLLED, ORG_LEARNER, NONE. */
+/** How a user stands to a course when they want to get it. Precedence: OWN, ORG_AUTHOR, ENROLLED, ORG_LEARNER, NONE. An ORG_SEAT enrolment without a live seat does not make ENROLLED. */
 export type BuyerRelation = "OWN" | "ORG_AUTHOR" | "ENROLLED" | "ORG_LEARNER" | "NONE";
 
 type Owned = Pick<Course, "id" | "ownerType" | "ownerId">;
@@ -42,7 +42,9 @@ export class CourseAccessRules {
       orgRoles = await this.roles.roleKeysInOrg(userId, course.ownerId);
       if (orgRoles.some((r) => (ORG_AUTHOR_ROLES as readonly string[]).includes(r))) return "ORG_AUTHOR";
     }
-    if (await this.prisma.enrolment.findFirst({ where: { userId, courseId: course.id, revokedAt: null }, select: { id: true } })) return "ENROLLED";
+    const enrolment = await this.prisma.enrolment.findFirst({ where: { userId, courseId: course.id, revokedAt: null }, select: { source: true } });
+    // A seat only counts while the org_learner grant behind it is live: after it expired and before the daily sweep revoked the row, the user may buy or enrol again.
+    if (enrolment && (enrolment.source !== "ORG_SEAT" || orgRoles.includes(ORG_LEARNER_ROLE))) return "ENROLLED";
     return orgRoles.includes(ORG_LEARNER_ROLE) ? "ORG_LEARNER" : "NONE";
   }
 
