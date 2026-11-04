@@ -58,10 +58,11 @@ export class CheckoutService {
     if (!provider) throw new AppError("UNKNOWN_ITEM_TYPE", 400, `Unknown item type ${req.itemType}`);
 
     const item = await provider.describe(req.itemId, { buyerId });
+    // The provider explains first why an item cannot be bought (its own item, a seat in the selling organization, ...).
+    if (!item.purchasable) throw new AppError("ITEM_NOT_PURCHASABLE", 409, item.reason ?? "This item cannot be purchased", item.reason ? { reason: item.reason } : {});
     // Your own item, or one sold by an organization you hold any role in (a wash sale that would dodge the platform fee).
     const own = item.sellerOwnerType === "USER" ? item.sellerOwnerId === buyerId : await this.roles.isOrgMember(item.sellerOwnerId, buyerId);
     if (own) throw new AppError("CHECKOUT_SELF_PURCHASE", 422, "You cannot buy your own item");
-    if (!item.purchasable) throw new AppError("ITEM_NOT_PURCHASABLE", 409, item.reason ?? "This item cannot be purchased", item.reason ? { reason: item.reason } : {});
     if (item.pricePaise < MIN_CHARGE_PAISE) throw new AppError("CHECKOUT_PRICE_TOO_LOW", 422, "This item has no payable price");
 
     const plan = await this.entitlements.planFor(item.sellerOwnerType, item.sellerOwnerId);

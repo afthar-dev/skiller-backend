@@ -1100,8 +1100,9 @@ model Course {
   enrolmentCount    Int             @default(0)
 
   category Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  sections CourseSection[]
-  lessons  Lesson[]
+  sections   CourseSection[]
+  lessons    Lesson[]
+  enrolments Enrolment[]
 
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
@@ -1160,4 +1161,33 @@ model Lesson {
   @@index([sectionId, position])
   @@index([courseId])
   @@map("lessons")
+}
+
+// ─── enrolment ───────────────────────────────────────────────────────────
+// One row per (course, learner). A refund or a lost organization seat sets revokedAt; buying or enrolling again reactivates the same row.
+// orderId points at a billing order (no FK: orders belong to another module). Course.enrolmentCount counts rows with revokedAt null.
+
+enum EnrolmentSource {
+  PURCHASE
+  FREE
+  ORG_SEAT
+}
+
+model Enrolment {
+  id          String          @id @default(uuid(7))
+  courseId    String
+  userId      String
+  source      EnrolmentSource
+  orderId     String?
+  createdAt   DateTime        @default(now())
+  revokedAt   DateTime?
+  completedAt DateTime?
+  progressPct Int             @default(0)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, userId])
+  @@index([userId, id])
+  @@index([orderId])
+  @@map("enrolments")
 }

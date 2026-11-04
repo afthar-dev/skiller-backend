@@ -4,9 +4,9 @@ import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PermissionService, PlatformRoleDirectory } from "../rbac";
 import { ProfilesService } from "../users";
+import { ORG_AUTHOR_ROLES } from "./org-roles";
 
-/** Org roles that may author the organization's courses. Platform-wide grants of these roles do not count: only org-scoped membership does. */
-export const ORG_AUTHOR_ROLES = ["org_owner", "org_instructor"] as const;
+export { ORG_AUTHOR_ROLES };
 
 type Owned = Pick<Course, "ownerType" | "ownerId">;
 

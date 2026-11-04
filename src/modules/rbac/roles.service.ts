@@ -159,6 +159,7 @@ export class RolesService {
       if (grants.length === 0) return false;
       await this.enqueueInvalidation(tx, [userId]);
       await tx.userRole.deleteMany({ where: { id: { in: grants.map((g) => g.id) } } });
+      await this.outbox.enqueue(tx, { type: "org.member_removed", orgId, userId });
       for (const g of grants) {
         await this.audit.record(tx, { actorId, action: "role.revoke", targetType: "user_role", targetId: g.id, before: this.userRoleShape(g, g.role.key), after: null, ...meta });
       }
@@ -322,6 +323,7 @@ export class RolesService {
       await this.enqueueInvalidation(tx, [target.userId]);
       const deleted = await tx.userRole.deleteMany({ where: { id: target.id } });
       if (deleted.count === 0) throw new AppError("NOT_FOUND", 404, "Role grant not found");
+      if (target.orgId) await this.outbox.enqueue(tx, { type: "org.member_removed", orgId: target.orgId, userId: target.userId });
       await this.audit.record(tx, {
         actorId,
         action: "role.revoke",

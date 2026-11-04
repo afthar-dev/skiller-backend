@@ -62,3 +62,4 @@ export { WebhookProcessor } from "./webhook.processor";
 export { OrdersService } from "./orders.service";
 export type { OrderView } from "./orders.service";
 export { BillingModule } from "./billing.module";
+export { BillingWorkerModule } from "./billing-worker.module";

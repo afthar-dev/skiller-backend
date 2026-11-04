@@ -13,6 +13,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "rbac.permissions_changed": true,
   "user.became_creator": true,
   "org.created": true,
+  "org.member_removed": true,
   "subscription.changed": true,
   "order.paid": true,
   "order.fulfilment_failed": true,
@@ -51,6 +52,16 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(registered).toEqual(expected);
 
     expect(app.get(QueueWorkerRunner).startedQueues.sort()).toEqual(Object.values(QueueNames).sort());
+  });
+
+  it("registers the COURSE sellable and its refund rule in the worker: webhook-first fulfilment runs here", async () => {
+    const { SellableRegistry, RefundEligibilityRegistry } = await import("./modules/billing");
+    const provider = app.get(SellableRegistry).find("COURSE");
+    expect(provider).toBeDefined();
+    expect(provider!.type).toBe("COURSE");
+    const rule = app.get(RefundEligibilityRegistry).forType("COURSE");
+    expect(rule.constructor.name).toBe("CourseRefundEligibility");
+    expect(app.get(RefundEligibilityRegistry).forType("TEST_ITEM").constructor.name).toBe("DefaultRefundEligibility");
   });
 
   it("schedules every repeatable job: outbox relay, media cleanup, order expiry, idempotency cleanup, grace expiry, hold release, invoices, refunds, payouts re-drive, reconciliation", async () => {
