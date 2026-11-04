@@ -71,3 +71,25 @@ export interface CategoryView {
 }
 
 export const toCategoryView = (c: Category): CategoryView => ({ id: c.id, slug: c.slug, name: c.name, position: c.position, isActive: c.isActive });
+
+/** What anyone may see of a published course: no moderation fields, no draft state. The rating shows once at least 3 learners rated. */
+export const toPublicCourseView = (c: Course) => ({
+  id: c.id,
+  ownerType: c.ownerType,
+  ownerId: c.ownerId,
+  slug: c.slug,
+  title: c.title,
+  subtitle: c.subtitle,
+  description: c.description,
+  categoryId: c.categoryId,
+  level: c.level,
+  language: c.language,
+  tags: c.tags,
+  pricePaise: c.pricePaise.toString(),
+  thumbnailAssetId: c.thumbnailAssetId,
+  promoVideoAssetId: c.promoVideoAssetId,
+  publishedAt: c.publishedAt?.toISOString() ?? null,
+  ratingAvg: c.ratingCount >= 3 && c.ratingAvg !== null ? Number(c.ratingAvg.toString()) : null,
+  ratingCount: c.ratingCount,
+  enrolmentCount: c.enrolmentCount,
+});

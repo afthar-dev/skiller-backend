@@ -675,37 +675,37 @@ enum IdempotencyStatus {
 }
 
 model Order {
-  id                String          @id @default(uuid(7))
-  buyerId           String
-  status            OrderStatus     @default(CREATED)
-  currency          String          @default("INR")
+  id                 String          @id @default(uuid(7))
+  buyerId            String
+  status             OrderStatus     @default(CREATED)
+  currency           String          @default("INR")
   /// Price before any coupon.
-  listPricePaise    BigInt
-  discountPaise     BigInt          @default(0)
+  listPricePaise     BigInt
+  discountPaise      BigInt          @default(0)
   /// What the buyer pays: list - discount. This is the Razorpay order amount.
-  totalPaise        BigInt
-  couponId          String?
-  couponFundedBy    CouponFunding?
-  sellerOwnerType   SellerOwnerType
-  sellerOwnerId     String
+  totalPaise         BigInt
+  couponId           String?
+  couponFundedBy     CouponFunding?
+  sellerOwnerType    SellerOwnerType
+  sellerOwnerId      String
   /// Snapshots taken at checkout.
-  commissionBps     Int
-  gstBps            Int
-  planVersionId     String
-  razorpayOrderId   String?         @unique
-  razorpayPaymentId String?         @unique
-  paidAt            DateTime?
+  commissionBps      Int
+  gstBps             Int
+  planVersionId      String
+  razorpayOrderId    String?         @unique
+  razorpayPaymentId  String?         @unique
+  paidAt             DateTime?
   /// Set when the payment was captured and the sale posted but the seller module refused to deliver (permanent error); a refund follows.
   fulfilmentFailedAt DateTime?
-  fulfilmentError   String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  fulfilmentError    String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   items             OrderItem[]
   invoice           Invoice?
   refunds           Refund[]
-  coupon            Coupon?         @relation(fields: [couponId], references: [id], onDelete: Restrict)
-  planVersion       PlanVersion     @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+  coupon            Coupon?            @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  planVersion       PlanVersion        @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
   duplicatePayments DuplicatePayment[]
 
   @@index([buyerId, id])
@@ -745,9 +745,9 @@ model DuplicatePayment {
 }
 
 model Coupon {
-  id        String        @id @default(uuid(7))
+  id        String           @id @default(uuid(7))
   /// Upper-case, unique platform-wide.
-  code      String        @unique
+  code      String           @unique
   kind      CouponKind
   /// PERCENT: basis points (2000 = 20%). FLAT: paise.
   value     BigInt
@@ -755,14 +755,14 @@ model Coupon {
   /// The seller the coupon belongs to (CREATOR) or targets (PLATFORM with scope SELLER).
   ownerType SellerOwnerType?
   ownerId   String?
-  scope     CouponScope   @default(ALL)
+  scope     CouponScope      @default(ALL)
   itemType  String?
   itemId    String?
   maxUses   Int?
   expiresAt DateTime?
-  isActive  Boolean       @default(true)
+  isActive  Boolean          @default(true)
   createdBy String?
-  createdAt DateTime      @default(now())
+  createdAt DateTime         @default(now())
 
   redemptions CouponRedemption[]
   orders      Order[]
@@ -1099,7 +1099,7 @@ model Course {
   ratingCount       Int             @default(0)
   enrolmentCount    Int             @default(0)
 
-  category Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category   Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   sections   CourseSection[]
   lessons    Lesson[]
   enrolments Enrolment[]
@@ -1155,8 +1155,9 @@ model Lesson {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  course  Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section  CourseSection    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  progress LessonProgress[]
 
   @@index([sectionId, position])
   @@index([courseId])
@@ -1190,4 +1191,26 @@ model Enrolment {
   @@index([userId, id])
   @@index([orderId])
   @@map("enrolments")
+}
+
+// ─── progress ────────────────────────────────────────────────────────────
+// One row per (learner, lesson), written by the server only. positionSec is where the learner is in the video (resume point);
+// watchedSec is the plausible watch time the server credited (never more than real elapsed time allows); lastHeartbeatAt is the
+// server clock at the last accepted heartbeat. Rows outlive a refund (kept for analytics, hidden) and go with their lesson.
+
+model LessonProgress {
+  userId          String
+  lessonId        String
+  courseId        String
+  positionSec     Int       @default(0)
+  watchedSec      Float     @default(0)
+  lastHeartbeatAt DateTime?
+  completedAt     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@id([userId, lessonId])
+  @@index([courseId, userId])
+  @@map("lesson_progress")
 }

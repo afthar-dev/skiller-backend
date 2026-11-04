@@ -7,8 +7,8 @@ import { CourseMedia } from "./course-media";
 import { lockCourse, lockCourseForEdit } from "./course-lock";
 import { assertSafeMarkdown } from "./markdown";
 import { assertValidCoursePrice, firstFreeSlug, randomSlug, slugify } from "./course-rules";
-import { toCourseView, type CourseView } from "./course-view";
-import { CoursePolicy } from "./course.policy";
+import { toCourseView, toPublicCourseView, type CourseView } from "./course-view";
+import { CoursePolicy, courseNotFound } from "./course.policy";
 
 export interface CreateCourseInput {
   ownerType: CourseOwnerType;
@@ -47,6 +47,13 @@ export class CoursesService {
     private readonly policy: CoursePolicy,
     private readonly media: CourseMedia,
   ) {}
+
+  /** The public page of a PUBLISHED, unflagged course; anything else does not exist for the public. */
+  async publicPage(slug: string) {
+    const course = await this.prisma.course.findUnique({ where: { slug } });
+    if (!course || course.status !== "PUBLISHED" || course.flaggedAt) throw courseNotFound();
+    return toPublicCourseView(course);
+  }
 
   async create(user: { id: string }, input: CreateCourseInput): Promise<CourseView> {
     const ownerId = input.ownerType === "ORG" ? (input.orgId as string) : user.id;

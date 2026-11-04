@@ -194,6 +194,12 @@ export class MediaService {
     return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, purpose: true, status: true, durationSec: true } });
   }
 
+  /** Where a READY private file (a course resource) lives, for a caller that has already decided the user may download it. */
+  async privateFile(assetId: string): Promise<{ objectKey: string; filename: string | null } | null> {
+    const a = await this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { objectKey: true, filename: true, bucket: true, status: true } });
+    return a && a.bucket === "PRIVATE" && a.status === "READY" ? { objectKey: a.objectKey, filename: a.filename } : null;
+  }
+
   /**
    * Marks the asset as in use. Call it inside the same transaction that stores the reference (profile, org, ...).
    * The asset must belong to `ownerId`, have the given purpose and be READY. Unattached assets are deleted after 24 h.

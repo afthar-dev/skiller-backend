@@ -4,8 +4,10 @@ import type { Response } from "express";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiPagination } from "../../common/openapi/zod-schema";
+import { CoursesService } from "./courses.service";
 import { EnrolmentsService } from "./enrolments.service";
 import { SelfEnrolmentService } from "./self-enrolment.service";
 
@@ -15,7 +17,15 @@ export class LearningController {
   constructor(
     private readonly selfEnrolment: SelfEnrolmentService,
     private readonly enrolments: EnrolmentsService,
+    private readonly courses: CoursesService,
   ) {}
+
+  @Public()
+  @Get("courses/:slug")
+  @ApiOperation({ summary: "Public page of a published course (hidden when flagged, unpublished or archived)" })
+  page(@Param("slug") slug: string) {
+    return this.courses.publicPage(slug);
+  }
 
   @AuthenticatedOnly()
   @Post("courses/:slug/enrol")
