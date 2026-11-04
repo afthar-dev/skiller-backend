@@ -13,6 +13,21 @@ export function generateCertificateCode(): string {
   return code;
 }
 
+/** Caps for the text frozen on a certificate (in characters). */
+export const CERTIFICATE_NAME_MAX = 80;
+export const CERTIFICATE_TITLE_MAX = 120;
+
+const BIDI_CONTROLS = /[‎‏‪-‮⁦-⁩]/gu;
+
+/**
+ * Text that is frozen on a certificate and printed on a public page and a PDF: NFC, every run of whitespace (newlines included) one
+ * space, no control, format, zero-width or bidi-override characters, trimmed and cut to `max` characters. One visual line, always.
+ */
+export function sanitizeSnapshotText(input: string, max: number): string {
+  const text = input.normalize("NFC").replace(/\s+/gu, " ").replace(BIDI_CONTROLS, "").replace(/\p{C}/gu, "").replace(/\s+/gu, " ").trim();
+  return Array.from(text).slice(0, max).join("").trim();
+}
+
 /** Everything a certificate prints; frozen on the certificate row at issue time. */
 export interface CertificateFacts {
   code: string;

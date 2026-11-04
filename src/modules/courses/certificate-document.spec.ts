@@ -1,4 +1,4 @@
-import { CERTIFICATE_CODE_ALPHABET, CERTIFICATE_CODE_LENGTH, certificateLines, generateCertificateCode, renderCertificatePdf, type CertificateFacts } from "./certificate-document";
+import { CERTIFICATE_CODE_ALPHABET, CERTIFICATE_CODE_LENGTH, certificateLines, generateCertificateCode, renderCertificatePdf, sanitizeSnapshotText, type CertificateFacts } from "./certificate-document";
 
 const facts: CertificateFacts = {
   code: "AB23CD45EF",
@@ -44,5 +44,15 @@ describe("renderCertificatePdf", () => {
     expect(dev.subarray(0, 5).toString()).toBe("%PDF-");
     expect(dev.toString("latin1")).toMatch(/NotoSansDevanagari/);
     expect(dev.toString("latin1")).toMatch(/NotoSans/);
+  });
+});
+
+describe("sanitizeSnapshotText", () => {
+  it("NFC, whitespace to single spaces, no controls, zero-width or bidi controls, trimmed, capped by characters", () => {
+    expect(sanitizeSnapshotText("  Asha\n\t Verma​‮⁦ Rao‏ ", 80)).toBe("Asha Verma Rao");
+    expect(sanitizeSnapshotText("é", 80)).toBe("é"); // NFC
+    expect(sanitizeSnapshotText("a".repeat(100), 80)).toHaveLength(80);
+    expect(Array.from(sanitizeSnapshotText("\u{1F600}".repeat(100), 80))).toHaveLength(80);
+    expect(sanitizeSnapshotText("​ \n\u0007", 80)).toBe("");
   });
 });

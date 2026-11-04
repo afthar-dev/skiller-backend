@@ -4,6 +4,7 @@ import { BillingWorkerModule } from "../billing";
 import { AccountService } from "../identity";
 import { ObjectStorageModule } from "../media";
 import { NotificationsWorkerModule } from "../notifications";
+import { OrganizationsWorkerModule } from "../organizations";
 import { RbacWorkerModule } from "../rbac";
 import { ProfilesService } from "../users";
 import { CourseMaintenanceProcessor } from "./course-maintenance.processor";
@@ -14,7 +15,7 @@ import { COURSES_CORE_PROVIDERS } from "./courses-core";
  * rule, the handler that ends organization seats when a member is removed, and the certificate handlers (issue on completion, revoke on refund).
  */
 @Module({
-  imports: [ClockModule, BillingWorkerModule, RbacWorkerModule, ObjectStorageModule, NotificationsWorkerModule],
+  imports: [ClockModule, BillingWorkerModule, RbacWorkerModule, ObjectStorageModule, NotificationsWorkerModule, OrganizationsWorkerModule],
   // Certificates print the learner's name: the worker has no users module, so it builds the small ProfilesService itself (as billing does for invoices).
   providers: [...COURSES_CORE_PROVIDERS, AccountService, ProfilesService],
   exports: [CourseMaintenanceProcessor],

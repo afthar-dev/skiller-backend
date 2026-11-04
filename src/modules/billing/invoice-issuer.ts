@@ -9,6 +9,7 @@ import { ObjectStorage } from "../media";
 import { ProfilesService } from "../users";
 import { allocateNumber, invoiceKey, platformIdentity } from "./document-support";
 import { documentLines, renderInvoicePdf, type DocumentFacts, type InvoiceDetails } from "./invoice-document";
+import { OrganizationDirectory } from "../organizations";
 import { toApi } from "./money";
 import { splitSale } from "./sale-split";
 import { SUBSCRIPTION_CHARGE_REF } from "./subscriptions.service";
@@ -53,6 +54,7 @@ export class InvoiceIssuer {
     private readonly settings: SettingsService,
     private readonly profiles: ProfilesService,
     private readonly accounts: AccountService,
+    private readonly orgs: OrganizationDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -206,10 +208,8 @@ export class InvoiceIssuer {
     return order.sellerOwnerType === "USER" ? this.profiles.displayNameOf(order.sellerOwnerId) : this.orgName(order.sellerOwnerId);
   }
 
-  /** Organization names are read straight from the row: billing's worker process has no organizations service to ask. */
-  private async orgName(orgId: string): Promise<string> {
-    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } });
-    return org?.name ?? "Organization";
+  private orgName(orgId: string): Promise<string> {
+    return this.orgs.nameOf(orgId);
   }
 }
 

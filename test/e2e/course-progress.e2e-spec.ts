@@ -244,6 +244,9 @@ describe("lesson progress", () => {
     it("a course with quizzes is complete only when every quiz lesson is done too", async () => {
       const owner = await creator();
       const c = await course(owner, [{ type: "ARTICLE" }, { type: "QUIZ", isRequired: false }]);
+      // a quiz lesson only blocks completion when there is something to attempt
+      const quiz = await prisma.quiz.create({ data: { courseId: c.id, questions: { create: [{ prompt: "p", kind: "SINGLE", options: [{ id: "a", text: "a" }, { id: "b", text: "b" }], correct: ["a"], position: 0 }] } } });
+      await prisma.lesson.update({ where: { id: c.lessons[1].id }, data: { quizId: quiz.id } });
       const me = await enrolled(c.slug);
       await complete(me, c.lessons[0].id);
       const waiting = await enrolment(me.userId, c.id);

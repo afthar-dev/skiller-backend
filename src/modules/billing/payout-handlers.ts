@@ -5,6 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { NotificationsService } from "../notifications";
 import { PlatformRoleDirectory } from "../rbac";
 import { FinanceAlerts } from "./finance-alerts.service";
+import { OrganizationDirectory } from "../organizations";
 import { formatIstDateTime } from "./ist";
 import { formatInr, fromApi, fromGatewayAmount } from "./money";
 import { PayoutsService, type PayoutWebhookEntity } from "./payouts.service";
@@ -49,6 +50,7 @@ export class PayoutHandlers implements OnModuleInit {
     private readonly alerts: FinanceAlerts,
     private readonly prisma: PrismaService,
     private readonly roleDirectory: PlatformRoleDirectory,
+    private readonly orgs: OrganizationDirectory,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -65,8 +67,7 @@ export class PayoutHandlers implements OnModuleInit {
       if (e.ownerType === "USER") recipients = [e.ownerId];
       else {
         recipients = await this.roleDirectory.userIdsWithRoleInOrg("org_owner", e.ownerId);
-        const org = await this.prisma.organization.findUnique({ where: { id: e.ownerId }, select: { name: true } });
-        ownerLabel = org?.name ?? "your organization";
+        ownerLabel = await this.orgs.nameOf(e.ownerId);
       }
       const until = new Date(e.cooldownUntil);
       const cooldownEnds = formatIstDateTime(until);

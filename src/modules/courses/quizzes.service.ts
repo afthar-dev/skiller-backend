@@ -98,6 +98,7 @@ export class QuizzesService {
     await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const lesson = await this.quizLesson(tx, courseId, lessonId);
+      await assertQuizMayGo(tx, courseId);
       if (!lesson.quizId) throw new AppError("QUIZ_NOT_FOUND", 404, "This lesson has no quiz yet");
       await tx.lesson.update({ where: { id: lessonId }, data: { quizId: null } });
       await tx.quiz.deleteMany({ where: { id: lesson.quizId } });
@@ -111,6 +112,22 @@ export class QuizzesService {
     return lesson;
   }
 }
+
+/**
+ * A live course (published, flagged or archived) keeps every quiz it has: learners who have not passed yet could never finish a course whose
+ * quiz lesson has nothing to attempt. Quizzes can be edited there, not removed.
+ */
+async function assertQuizMayGo(tx: Prisma.TransactionClient, courseId: string): Promise<void> {
+  if (await courseIsLive(tx, courseId)) throw quizRequired();
+}
+
+/** The course is out of draft: learners may be part-way through it. */
+export async function courseIsLive(tx: Prisma.TransactionClient, courseId: string): Promise<boolean> {
+  const course = await tx.course.findUnique({ where: { id: courseId }, select: { status: true, flaggedAt: true } });
+  return course !== null && (course.status === "PUBLISHED" || course.status === "ARCHIVED" || course.flaggedAt !== null);
+}
+
+export const quizRequired = () => new AppError("COURSE_QUIZ_REQUIRED", 409, "A live course keeps its quizzes: edit the questions instead of removing the quiz, and add new quiz lessons while the course is a draft");
 
 /** What the shape check cannot see: the right answers must fit the question kind, and option ids must be unique within a question. */
 function assertSemantics(input: QuizInput): void {

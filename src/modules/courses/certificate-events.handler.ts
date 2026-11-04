@@ -17,6 +17,17 @@ export class CertificateEventHandlers implements OnModuleInit {
       const cert = await this.certificates.issue(e.userId, e.courseId);
       if (!cert) return;
       // Keyed by the event id: a redelivery neither adds a second in-app row nor sends a second mail.
+      if (cert.state === "PENDING_NAME") {
+        await this.notifications.notify(e.userId, {
+          type: "certificate.name_needed",
+          title: "Choose the name for your certificate",
+          body: `You completed ${cert.courseTitle}. Tell us the name to print on your certificate; it is shown publicly when someone verifies it.`,
+          link: "/me/certificates",
+          data: { certificateId: cert.id, courseId: cert.courseId },
+          sourceEventId: eventId,
+        });
+        return;
+      }
       await this.notifications.notify(e.userId, {
         type: "certificate.issued",
         title: "Your certificate is ready",

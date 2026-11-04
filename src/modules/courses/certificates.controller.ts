@@ -1,13 +1,16 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
-import { ApiPagination } from "../../common/openapi/zod-schema";
+import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
+import { z } from "zod";
 import { CertificatesService } from "./certificates.service";
+
+const nameSchema = z.object({ name: z.string().min(1).max(200) }).strict();
 
 @ApiTags("Certificates")
 @Controller()
@@ -20,6 +23,15 @@ export class CertificatesController {
   @ApiPagination()
   mine(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     return this.certificates.mine(user.id, parsePage(query));
+  }
+
+  @AuthenticatedOnly()
+  @Post("me/certificates/:id/name")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Name a certificate that is waiting for it (the learner never set a display name), once. Generates the PDF and makes the certificate valid and public" })
+  @ApiZodBody(nameSchema)
+  setName(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
+    return this.certificates.setName(user.id, id, nameSchema.parse(body).name);
   }
 
   @Public()

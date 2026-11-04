@@ -7,6 +7,7 @@ import { lockCourseForEdit } from "./course-lock";
 import { CoursePolicy } from "./course.policy";
 import { ProgressService } from "./progress.service";
 import { assertSafeMarkdown } from "./markdown";
+import { courseIsLive, quizRequired } from "./quizzes.service";
 
 export const MAX_SECTIONS_PER_COURSE = 50;
 export const MAX_LESSONS_PER_COURSE = 500;
@@ -135,6 +136,8 @@ export class CurriculumService {
     let deferred = false;
     const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
+      // A quiz lesson starts empty: on a live course learners would be blocked by it until questions exist.
+      if (input.type === "QUIZ" && (await courseIsLive(tx, courseId))) throw quizRequired();
       const section = await tx.courseSection.findFirst({ where: { id: input.sectionId, courseId } });
       if (!section) throw sectionNotFound();
       if ((await tx.lesson.count({ where: { courseId } })) >= MAX_LESSONS_PER_COURSE) throw limit("lessons", MAX_LESSONS_PER_COURSE);

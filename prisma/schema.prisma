@@ -1280,17 +1280,24 @@ model QuizAttempt {
 // (userId, courseId): the partial unique index certificates_live_key is hand-written in the migration (Prisma cannot express it), so
 // every later migration must keep it out of its DROP/CREATE. A revoked one stays (verify says REVOKED) and a new one may be issued.
 
+enum CertificateState {
+  PENDING_NAME
+  VALID
+}
+
 model Certificate {
-  id          String    @id @default(uuid(7))
-  code        String    @unique
+  id          String           @id @default(uuid(7))
+  code        String           @unique
   courseId    String
   userId      String
-  learnerName String
+  /// Null while PENDING_NAME: the learner never set a name, so nothing derived from their email is printed or published.
+  learnerName String?
   courseTitle String
   issuerName  String
   issuedAt    DateTime
-  /// Private storage key of the PDF: certificates/{id}.pdf
-  objectKey   String
+  /// Private storage key of the PDF (certificates/{id}.pdf); null until the certificate is VALID.
+  objectKey   String?
+  state       CertificateState @default(VALID)
   revokedAt   DateTime?
 
   course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)

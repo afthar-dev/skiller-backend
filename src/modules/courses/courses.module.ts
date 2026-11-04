@@ -1,6 +1,7 @@
 import { Module, forwardRef } from "@nestjs/common";
 import { BillingModule, EntitlementsModule } from "../billing";
 import { MediaModule, ObjectStorageModule } from "../media";
+import { OrganizationsWorkerModule } from "../organizations";
 import { UsersModule } from "../users";
 import { AdminCategoriesController, CategoriesController } from "./categories.controller";
 import { CategoriesService } from "./categories.service";
@@ -28,7 +29,7 @@ import { StudioCoursesController } from "./studio-courses.controller";
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
-  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule],
+  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule, forwardRef(() => OrganizationsWorkerModule)],
   controllers: [StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController, CertificatesController],
   providers: [CoursePolicy, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
   exports: [CoursePolicy, CoursesService, CategoriesService, EnrolmentsService],

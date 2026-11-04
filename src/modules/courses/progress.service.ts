@@ -20,6 +20,13 @@ export const WATCH_SPEED_FACTOR = 2;
 
 export const COURSE_PROGRESS_RECOMPUTE_JOB = "courses.progress.recompute";
 
+/**
+ * SQL condition: the lesson can be done at all. A QUIZ lesson with no questions cannot be attempted, so it must not block a course
+ * (live courses cannot reach that state any more; this keeps older ones from locking learners out). `alias` is a trusted constant.
+ */
+const playable = (alias: string) =>
+  `NOT (${alias}."type" = 'QUIZ' AND NOT EXISTS (SELECT 1 FROM "quiz_questions" qq WHERE qq."quizId" = ${alias}."quizId"))`;
+
 export type CompletionSource = "WATCHED" | "MANUAL" | "QUIZ";
 
 export interface ProgressResult {
@@ -201,8 +208,8 @@ export class ProgressService implements CourseProgressReader {
       FROM (
         SELECT e2."id", CASE WHEN r.n = 0 THEN 0 ELSE floor(100.0 * (
           SELECT count(*) FROM "lesson_progress" p JOIN "lessons" l ON l."id" = p."lessonId"
-          WHERE p."userId" = e2."userId" AND l."courseId" = e2."courseId" AND l."isRequired" AND p."completedAt" IS NOT NULL) / r.n)::int END AS pct
-        FROM "enrolments" e2, (SELECT count(*) AS n FROM "lessons" WHERE "courseId" = ${courseId} AND "isRequired") r
+          WHERE p."userId" = e2."userId" AND l."courseId" = e2."courseId" AND l."isRequired" AND p."completedAt" IS NOT NULL AND ${Prisma.raw(playable("l"))}) / r.n)::int END AS pct
+        FROM "enrolments" e2, (SELECT count(*) AS n FROM "lessons" x WHERE x."courseId" = ${courseId} AND x."isRequired" AND ${Prisma.raw(playable("x"))}) r
         WHERE e2."courseId" = ${courseId} AND e2."revokedAt" IS NULL ${scopeFor("e2")}
       ) c
       WHERE e."id" = c."id" AND e."progressPct" IS DISTINCT FROM c.pct`;
@@ -211,7 +218,7 @@ export class ProgressService implements CourseProgressReader {
       UPDATE "enrolments" e SET "completedAt" = ${this.clock.now()}
       WHERE e."courseId" = ${courseId} AND e."revokedAt" IS NULL AND e."completedAt" IS NULL AND e."progressPct" = 100 ${who}
         AND NOT EXISTS (
-          SELECT 1 FROM "lessons" q WHERE q."courseId" = e."courseId" AND q."type" = 'QUIZ'
+          SELECT 1 FROM "lessons" q WHERE q."courseId" = e."courseId" AND q."type" = 'QUIZ' AND ${Prisma.raw(playable("q"))}
             AND NOT EXISTS (SELECT 1 FROM "lesson_progress" p WHERE p."lessonId" = q."id" AND p."userId" = e."userId" AND p."completedAt" IS NOT NULL))
       RETURNING e."userId"`;
     for (const f of finished) await this.outbox.enqueue(tx, { type: "course.completed", userId: f.userId, courseId });

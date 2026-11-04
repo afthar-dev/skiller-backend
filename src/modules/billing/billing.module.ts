@@ -3,7 +3,7 @@ import { ClockModule } from "../../common/clock/clock";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { IdempotencyCleanup } from "../../common/idempotency";
-import { OrganizationsModule } from "../organizations";
+import { OrganizationsModule, OrganizationsWorkerModule } from "../organizations";
 import { ObjectStorageModule } from "../media";
 import { UsersModule } from "../users";
 import { WalletModule } from "../wallet";
@@ -103,7 +103,7 @@ export const BILLING_CORE_EXPORTS = [RAZORPAY_CLIENT, RAZORPAYX_CLIENT, WebhookD
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
-  imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule)],
+  imports: [ClockModule, EntitlementsModule, WalletModule, ObjectStorageModule, forwardRef(() => UsersModule), forwardRef(() => OrganizationsModule), forwardRef(() => OrganizationsWorkerModule)],
   controllers: [WebhooksController, PlansController, SubscriptionsController, OrgSubscriptionsController, CheckoutController, OrdersController, OrderRefundsController, InvoicesController, CreditNotesController, AdminBillingController, AdminRefundsController, AdminFinanceController, AdminOrdersController, AdminCouponsController, CreatorCouponsController, WalletController, OrgWalletController, AdminWalletController],
   providers: [...BILLING_CORE_PROVIDERS, AdminFinanceService, CouponsAdminService, PlansService, CheckoutService, InvoicesService, RefundRequestsService],
   exports: [...BILLING_CORE_EXPORTS, CouponsService, EntitlementsModule],

@@ -133,6 +133,13 @@ export class ProfilesService {
     return row?.isCreator ?? false;
   }
 
+  /** The name is still the one made from the email address when the profile was created: showing it publicly would expose the address's local part. */
+  async isDefaultDisplayName(userId: string): Promise<boolean> {
+    const profile = await this.ensure(userId);
+    const email = await this.accounts.findEmail(userId);
+    return email !== null && profile.displayName === defaultDisplayName(email);
+  }
+
   async displayNameOf(userId: string): Promise<string> {
     return (await this.ensure(userId)).displayName;
   }

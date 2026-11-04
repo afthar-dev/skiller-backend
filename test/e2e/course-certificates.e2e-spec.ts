@@ -4,6 +4,7 @@ import type { DomainEvent } from "../../src/common/outbox/events";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
 import { EnrolmentsService } from "../../src/modules/courses";
+import { OrganizationDirectory } from "../../src/modules/organizations";
 import { ProfilesService } from "../../src/modules/users";
 import { CertificatesService } from "../../src/modules/courses/certificates.service";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
@@ -37,8 +38,12 @@ describe("course certificates", () => {
     return { ...c, lessonId: lesson.id };
   }
   /** A learner who enrols and finishes the course; the course.completed event is not yet delivered. */
-  async function finisher(c: { slug: string; lessonId: string; id: string }) {
+  async function finisher(c: { slug: string; lessonId: string; id: string }, name: string | null = "Asha Verma") {
     const s = await t.login();
+    if (name !== null) {
+      await t.app.get(ProfilesService).ensure(s.userId);
+      await prisma.profile.update({ where: { userId: s.userId }, data: { displayName: name } });
+    }
     expect((await http().post(`/v1/courses/${c.slug}/enrol`).set(auth(s))).status).toBe(201);
     expect((await http().post(`/v1/learn/lessons/${c.lessonId}/complete`).set(auth(s))).status).toBe(200);
     return s;
@@ -316,6 +321,136 @@ describe("course certificates", () => {
       expect(all.filter((x) => x.revokedAt === null)).toHaveLength(1);
       expect(all.find((x) => x.revokedAt === null)!.id).not.toBe(old.id);
       expect((await verify(old.code)).body.status).toBe("REVOKED");
+    });
+  });
+
+  describe("learner name privacy (pending name)", () => {
+    it("a learner who never set a name gets a PENDING_NAME certificate: no PDF, nothing public, a prompt to name it", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const me = await finisher(c, null);
+      await deliverCompleted(me.userId, c.id, 2);
+      const [cert] = await certs(me.userId, c.id);
+      expect(cert).toMatchObject({ state: "PENDING_NAME", learnerName: null, objectKey: null });
+      expect((await verify(cert.code)).status).toBe(404);
+      const list = await http().get("/v1/me/certificates").set(auth(me));
+      expect(list.body.items[0]).toMatchObject({ id: cert.id, status: "PENDING_NAME", learnerName: null });
+      const dl = await http().get("/v1/certificates/" + cert.code + "/download").set(auth(me));
+      expect(dl.status).toBe(409);
+      expect(dl.body.error.code).toBe("CERTIFICATE_NAME_REQUIRED");
+      const notes = await prisma.notification.findMany({ where: { userId: me.userId, type: "certificate.name_needed" } });
+      expect(notes).toHaveLength(1);
+      expect(await prisma.notification.count({ where: { userId: me.userId, type: "certificate.issued" } })).toBe(0);
+    });
+
+    it("the owner sets the name once: sanitised, PDF generated, then it is VALID and public; the snapshot never changes again", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const me = await finisher(c, null);
+      await deliverCompleted(me.userId, c.id);
+      const [cert] = await certs(me.userId, c.id);
+      const url = "/v1/me/certificates/" + cert.id + "/name";
+
+      const intruder = await t.login();
+      expect((await http().post(url).set(auth(intruder)).send({ name: "Mallory" })).status).toBe(404);
+      expect((await http().post(url).send({ name: "Mallory" })).status).toBe(401);
+      expect((await http().post(url).set(auth(me)).send({ name: "\u200B \n " })).status).toBe(422);
+      expect((await http().post(url).set(auth(me)).send({})).status).toBe(400);
+
+      const ok = await http().post(url).set(auth(me)).send({ name: "  Asha\n\u202EVerma\u200B  Rao " });
+      expect(ok.status).toBe(200);
+      expect(ok.body).toMatchObject({ id: cert.id, status: "VALID", learnerName: "Asha Verma Rao" });
+      const row = await prisma.certificate.findUniqueOrThrow({ where: { id: cert.id } });
+      expect(row).toMatchObject({ state: "VALID", learnerName: "Asha Verma Rao", objectKey: "certificates/" + cert.id + ".pdf" });
+      expect((await verify(cert.code)).body).toMatchObject({ learnerName: "Asha Verma Rao", status: "VALID" });
+      const dl = await http().get("/v1/certificates/" + cert.code + "/download").set(auth(me));
+      const bytes = Buffer.from(await (await fetch(dl.body.url)).arrayBuffer());
+      expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
+
+      const again = await http().post(url).set(auth(me)).send({ name: "Someone Else" });
+      expect(again.status).toBe(409);
+      expect(again.body.error.code).toBe("CERTIFICATE_NAME_SET");
+      expect((await prisma.certificate.findUniqueOrThrow({ where: { id: cert.id } })).learnerName).toBe("Asha Verma Rao");
+    });
+
+    it("the public page and the stored snapshot never carry the email-derived default name", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const me = await finisher(c, null);
+      await deliverCompleted(me.userId, c.id);
+      const [cert] = await certs(me.userId, c.id);
+      const local = me.email.split("@")[0];
+      expect((await verify(cert.code)).text).not.toContain(local);
+      expect(JSON.stringify(await prisma.certificate.findUniqueOrThrow({ where: { id: cert.id } }))).not.toContain(local);
+    });
+
+    it("a revoked pending certificate cannot be named", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const me = await finisher(c, null);
+      await deliverCompleted(me.userId, c.id);
+      const [cert] = await certs(me.userId, c.id);
+      await prisma.certificate.update({ where: { id: cert.id }, data: { revokedAt: t.clock.now() } });
+      expect((await http().post("/v1/me/certificates/" + cert.id + "/name").set(auth(me)).send({ name: "Asha" })).status).toBe(410);
+    });
+  });
+
+  describe("snapshot sanitising", () => {
+    it("normalises learner, course and issuer text: no newlines, controls, zero-width or bidi overrides, capped lengths", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      await t.app.get(ProfilesService).ensure(owner.userId);
+      await prisma.profile.update({ where: { userId: owner.userId }, data: { displayName: "Dr\u202E Rao\u2066\nMD" } });
+      await prisma.course.update({ where: { id: c.id }, data: { title: "Adv\nCardiology\u200B " + "x".repeat(200) } });
+      const me = await finisher(c, "Asha\n  has successfully completed\u202E the course\u200F\u0007 " + "y".repeat(100));
+      await deliverCompleted(me.userId, c.id);
+      const [cert] = await certs(me.userId, c.id);
+      expect(cert.learnerName).toBe(("Asha has successfully completed the course " + "y".repeat(100)).slice(0, 80));
+      expect(cert.issuerName).toBe("Dr Rao MD");
+      expect(cert.courseTitle).toMatch(/^Adv Cardiology x+$/);
+      expect(Array.from(cert.courseTitle).length).toBe(120);
+      const body = (await verify(cert.code)).text;
+      expect(body).not.toMatch(/[\p{C}\u200b-\u200f\u202a-\u202e\u2066-\u2069]/u);
+      expect(body).not.toContain("\\n");
+    });
+  });
+
+  describe("organization issuer and seats", () => {
+    it("an organization course prints the organization name; a missing organization fails (retryable) instead of an invented issuer", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const org = await prisma.organization.create({ data: { slug: "org-" + uniq(), name: "  Acme\nAcademy ", ownerId: owner.userId } });
+      await prisma.course.update({ where: { id: c.id }, data: { ownerType: "ORG", ownerId: org.id } });
+      const me = await finisher(c);
+      await deliverCompleted(me.userId, c.id);
+      expect((await certs(me.userId, c.id))[0].issuerName).toBe("Acme Academy");
+
+      await expect(t.app.get(OrganizationDirectory).nameOf("00000000-0000-7000-8000-000000000000")).rejects.toMatchObject({ code: "ORG_NOT_FOUND" });
+      const c2 = await course(owner);
+      await prisma.course.update({ where: { id: c2.id }, data: { ownerType: "ORG", ownerId: "00000000-0000-7000-8000-000000000000" } });
+      const me2 = await finisher(c2);
+      await expect(deliverCompleted(me2.userId, c2.id)).rejects.toMatchObject({ code: "ORG_NOT_FOUND" });
+      expect(await certs(me2.userId, c2.id)).toHaveLength(0);
+    });
+
+    it("an org seat whose grant has expired (sweep not yet run) is not certified; a live seat is", async () => {
+      const owner = await creator();
+      const c = await course(owner);
+      const org = await prisma.organization.create({ data: { slug: "org-" + uniq(), name: "Seat Org", ownerId: owner.userId } });
+      await prisma.course.update({ where: { id: c.id }, data: { ownerType: "ORG", ownerId: org.id } });
+      const role = await prisma.role.findUniqueOrThrow({ where: { key: "org_learner" } });
+
+      const expired = await finisher(c);
+      await prisma.enrolment.update({ where: { courseId_userId: { courseId: c.id, userId: expired.userId } }, data: { source: "ORG_SEAT" } });
+      await prisma.userRole.create({ data: { userId: expired.userId, roleId: role.id, orgId: org.id, expiresAt: new Date(t.clock.now().getTime() - 60_000) } });
+      await deliverCompleted(expired.userId, c.id);
+      expect(await certs(expired.userId, c.id)).toHaveLength(0);
+
+      const live = await finisher(c);
+      await prisma.enrolment.update({ where: { courseId_userId: { courseId: c.id, userId: live.userId } }, data: { source: "ORG_SEAT" } });
+      await prisma.userRole.create({ data: { userId: live.userId, roleId: role.id, orgId: org.id } });
+      await deliverCompleted(live.userId, c.id);
+      expect(await certs(live.userId, c.id)).toHaveLength(1);
     });
   });
 });

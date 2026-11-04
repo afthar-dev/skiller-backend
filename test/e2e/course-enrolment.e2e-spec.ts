@@ -418,6 +418,22 @@ describe("course enrolment, sellable and refunds", () => {
       expect(late.body.error.details.reason).toMatch(/7 days/);
     });
 
+    it("a refund through the real refund flow (order.refunded) revokes the learner's certificate, in step with the enrolment", async () => {
+      const seller = await creator();
+      const course = await publishedCourse(seller);
+      const buyer = await t.login();
+      const first = await buy(buyer, course.id);
+      await prisma.enrolment.update({ where: { courseId_userId: { courseId: course.id, userId: buyer.userId } }, data: { completedAt: t.clock.now() } });
+      const cert = await prisma.certificate.create({
+        data: { code: Array.from({ length: 10 }, () => "23456789ABCDEFGHJKMNPQRSTUVWXYZ"[Math.floor(Math.random() * 31)]).join(""), courseId: course.id, userId: buyer.userId, learnerName: "Asha Verma", courseTitle: "T", issuerName: "I", issuedAt: t.clock.now(), objectKey: "certificates/x.pdf" },
+      });
+      expect(cert.revokedAt).toBeNull();
+      expect((await refundOrder(buyer, first.orderId)).status).toBe(201);
+      expect((await prisma.certificate.findUniqueOrThrow({ where: { id: cert.id } })).revokedAt).not.toBeNull();
+      const verifyRes = await http().get("/v1/certificates/" + cert.code).set("X-Forwarded-For", uniqueIp());
+      expect(verifyRes.body.status).toBe("REVOKED");
+    });
+
     it("a refund revokes the enrolment at once; buying again reactivates the same row with the new order", async () => {
       const seller = await creator();
       const course = await publishedCourse(seller);

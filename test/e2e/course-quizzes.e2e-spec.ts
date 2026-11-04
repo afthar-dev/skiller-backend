@@ -372,4 +372,43 @@ describe("course quizzes", () => {
       expect(res.body.error.code).toBe("QUIZ_EMPTY");
     });
   });
+
+  describe("quiz lockout on live courses", () => {
+    it("a published (or flagged) course cannot lose its quiz or gain a quiz lesson without questions", async () => {
+      const { owner, c, lesson } = await quizCourse();
+      const del = await http().delete(studio(c.id) + "/lessons/" + lesson.id + "/quiz").set(auth(owner));
+      expect(del.status).toBe(409);
+      expect(del.body.error.code).toBe("COURSE_QUIZ_REQUIRED");
+      expect((await prisma.lesson.findUniqueOrThrow({ where: { id: lesson.id } })).quizId).not.toBeNull();
+      const add = await http().post(studio(c.id) + "/lessons").set(auth(owner)).send({ sectionId: c.sectionId, title: "Late quiz", type: "QUIZ" });
+      expect(add.status).toBe(409);
+      expect(add.body.error.code).toBe("COURSE_QUIZ_REQUIRED");
+      // questions can still be replaced, never emptied
+      expect((await putQuiz(owner, c.id, lesson.id, twoQuestions())).status).toBe(200);
+      expect((await putQuiz(owner, c.id, lesson.id, { passPct: 70, questions: [] })).status).toBe(400);
+
+      await prisma.course.update({ where: { id: c.id }, data: { flaggedAt: new Date() } });
+      expect((await http().delete(studio(c.id) + "/lessons/" + lesson.id + "/quiz").set(auth(owner))).status).toBe(409);
+      // other lessons are still free to add
+      expect((await http().post(studio(c.id) + "/lessons").set(auth(owner)).send({ sectionId: c.sectionId, title: "A", type: "ARTICLE", articleBody: "x" })).status).toBe(201);
+    });
+
+    it("defensively, a quiz lesson with no questions never blocks completion of the rest of the course", async () => {
+      const owner = await creator();
+      const c = await draft(owner);
+      await http().post(studio(c.id) + "/lessons").set(auth(owner)).send({ sectionId: c.sectionId, title: "Read", type: "ARTICLE", articleBody: "x" });
+      const article = await prisma.lesson.findFirstOrThrow({ where: { courseId: c.id, type: "ARTICLE" } });
+      await publish(c.id);
+      // legacy state, written straight to the tables: a required quiz lesson whose quiz has no questions
+      const quiz = await prisma.quiz.create({ data: { courseId: c.id } });
+      await prisma.lesson.create({ data: { courseId: c.id, sectionId: c.sectionId, title: "Empty quiz", type: "QUIZ", position: 1, quizId: quiz.id } });
+      const bare = await prisma.lesson.create({ data: { courseId: c.id, sectionId: c.sectionId, title: "No quiz at all", type: "QUIZ", position: 2 } });
+      expect(bare.quizId).toBeNull();
+      const me = await enrolled(c.slug);
+      expect((await http().post("/v1/learn/lessons/" + article.id + "/complete").set(auth(me))).status).toBe(200);
+      const e = await enrolmentOf(me.userId, c.id);
+      expect(e.progressPct).toBe(100);
+      expect(e.completedAt).not.toBeNull();
+    });
+  });
 });
