@@ -1095,9 +1095,63 @@ model Course {
   enrolmentCount    Int             @default(0)
 
   category Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  sections CourseSection[]
+  lessons  Lesson[]
 
   @@index([ownerType, ownerId, id])
   @@index([categoryId])
   @@index([status, publishedAt])
   @@map("courses")
+}
+
+// ─── curriculum ──────────────────────────────────────────────────────────
+// Positions are dense (0..n-1): sections within a course, lessons within a section. Reordering rewrites them in one transaction.
+// videoAssetId / resourceAssetId point at media assets (no FK: media is another module's table); quizId is set by the quizzes feature.
+
+enum LessonType {
+  VIDEO
+  ARTICLE
+  QUIZ
+  RESOURCE
+}
+
+model CourseSection {
+  id        String   @id @default(uuid(7))
+  courseId  String
+  title     String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId, position])
+  @@map("course_sections")
+}
+
+model Lesson {
+  id              String     @id @default(uuid(7))
+  courseId        String
+  sectionId       String
+  title           String
+  type            LessonType
+  position        Int
+  isFreePreview   Boolean    @default(false)
+  isRequired      Boolean    @default(true)
+  videoAssetId    String?
+  durationSec     Int?
+  /// Sanitised Markdown, at most 50,000 characters.
+  articleBody     String?
+  resourceAssetId String?
+  quizId          String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  course  Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId, position])
+  @@index([courseId])
+  @@map("lessons")
 }

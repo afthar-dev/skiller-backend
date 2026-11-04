@@ -4,6 +4,8 @@ import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseMedia } from "./course-media";
+import { lockCourse } from "./course-lock";
+import { sanitizeMarkdown } from "./markdown-sanitizer";
 import { assertValidCoursePrice, firstFreeSlug, randomSlug, slugify } from "./course-rules";
 import { toCourseView, type CourseView } from "./course-view";
 import { CoursePolicy } from "./course.policy";
@@ -38,9 +40,6 @@ export interface UpdateCourseInput {
 const isUniqueViolation = (err: unknown, field: string) =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002" && String((err.meta?.target as string[] | string | undefined) ?? "").includes(field);
 
-/** Row lock: concurrent edits / deletes of one course serialise. */
-export const lockCourse = (tx: Prisma.TransactionClient, id: string) => tx.$queryRaw`SELECT "id" FROM "courses" WHERE "id" = ${id} FOR UPDATE`;
-
 @Injectable()
 export class CoursesService {
   constructor(
@@ -66,7 +65,7 @@ export class CoursesService {
             slug,
             title: input.title,
             subtitle: input.subtitle ?? null,
-            description: input.description,
+            description: sanitizeMarkdown(input.description),
             categoryId: input.categoryId,
             level: input.level,
             language: input.language,
@@ -114,7 +113,7 @@ export class CoursesService {
         const data: Prisma.CourseUpdateInput = {};
         if (patch.title !== undefined) data.title = patch.title;
         if (patch.subtitle !== undefined) data.subtitle = patch.subtitle;
-        if (patch.description !== undefined) data.description = patch.description;
+        if (patch.description !== undefined) data.description = sanitizeMarkdown(patch.description);
         if (patch.categoryId !== undefined) data.category = { connect: { id: patch.categoryId } };
         if (patch.level !== undefined) data.level = patch.level;
         if (patch.language !== undefined) data.language = patch.language;
@@ -152,14 +151,15 @@ export class CoursesService {
       if (course.status !== "DRAFT" || course.slugLockedAt || course.publishedAt) {
         throw new AppError("COURSE_NOT_DELETABLE", 409, "Only a draft that was never published can be deleted; archive the course instead");
       }
-      for (const assetId of this.assetIdsOf(course)) await this.media.detach(tx, assetId);
+      for (const assetId of await this.assetIdsOf(tx, course)) await this.media.detach(tx, assetId);
       await tx.course.delete({ where: { id } });
     });
   }
 
-  /** Every media asset a course holds: thumbnail, promo, and (via curriculum) lesson videos and resources. */
-  private assetIdsOf(course: Course): string[] {
-    return [course.thumbnailAssetId, course.promoVideoAssetId].filter((x): x is string => x !== null);
+  /** Every media asset a course holds: thumbnail, promo, lesson videos and resource files. */
+  private async assetIdsOf(tx: Prisma.TransactionClient, course: Course): Promise<string[]> {
+    const lessons = await tx.lesson.findMany({ where: { courseId: course.id }, select: { videoAssetId: true, resourceAssetId: true } });
+    return [course.thumbnailAssetId, course.promoVideoAssetId, ...lessons.flatMap((l) => [l.videoAssetId, l.resourceAssetId])].filter((x): x is string => x !== null);
   }
 
   private async assertCategory(categoryId: string): Promise<void> {

@@ -19,13 +19,14 @@ export function assertValidCoursePrice(pricePaise: bigint): void {
   }
 }
 
+const COMBINING_MARKS = new RegExp(`[\\u0300-\\u036f]`, "g");
 export const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** ASCII-folded kebab-case. Returns "" when nothing ASCII is left (e.g. a Devanagari title): callers then use randomSlug(). */
 export function slugify(text: string, maxLength = 60): string {
   const folded = text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(COMBINING_MARKS, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
