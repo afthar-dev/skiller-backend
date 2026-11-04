@@ -6,6 +6,7 @@ import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PlatformRoleDirectory } from "../rbac";
 import { ORG_LEARNER_ROLE } from "./course-access-rules";
+import { ProgressService } from "./progress.service";
 
 export interface EnrolmentView {
   id: string;
@@ -51,6 +52,7 @@ export class EnrolmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly roles: PlatformRoleDirectory,
+    private readonly progress: ProgressService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -73,9 +75,10 @@ export class EnrolmentsService {
     await tx.$queryRaw`SELECT "id" FROM "enrolments" WHERE "courseId" = ${input.courseId} AND "userId" = ${input.userId} FOR UPDATE`;
     const row = await tx.enrolment.findUniqueOrThrow({ where: key });
     if (row.revokedAt) {
-      const updated = await tx.enrolment.update({ where: key, data: { revokedAt: null, source: input.source, orderId } });
+      await tx.enrolment.update({ where: key, data: { revokedAt: null, source: input.source, orderId } });
       await this.bump(tx, input.courseId, 1);
-      return { enrolment: updated, changed: true };
+      await this.progress.refreshEnrolment(tx, input.courseId, input.userId); // curriculum changes while revoked left the old figures behind
+      return { enrolment: await tx.enrolment.findUniqueOrThrow({ where: key }), changed: true };
     }
     if (input.source !== "PURCHASE") return { enrolment: row, changed: false };
     if (row.source !== "PURCHASE") return { enrolment: await tx.enrolment.update({ where: key, data: { source: "PURCHASE", orderId } }), changed: true };

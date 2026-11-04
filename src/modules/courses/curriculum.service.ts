@@ -114,6 +114,7 @@ export class CurriculumService {
 
   async deleteSection(user: { id: string }, courseId: string, sectionId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
+    let deferred = false;
     await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: sectionId, courseId }, include: { lessons: true } });
@@ -121,14 +122,16 @@ export class CurriculumService {
       for (const lesson of section.lessons) await this.releaseLessonMedia(tx, lesson);
       await tx.courseSection.delete({ where: { id: sectionId } });
       await tx.courseSection.updateMany({ where: { courseId, position: { gt: section.position } }, data: { position: { decrement: 1 } } });
-      if (section.lessons.length > 0) await this.progress.recomputeCourse(tx, courseId);
+      if (section.lessons.some(affectsProgress)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
     });
+    if (deferred) await this.progress.scheduleRecompute(courseId);
   }
 
   async createLesson(user: { id: string }, courseId: string, input: CreateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
     assertFieldsMatchType(input.type, input);
-    return this.prisma.$transaction(async (tx) => {
+    let deferred = false;
+    const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: input.sectionId, courseId } });
       if (!section) throw sectionNotFound();
@@ -154,14 +157,17 @@ export class CurriculumService {
           resourceAssetId: input.resourceAssetId ?? null,
         },
       });
-      await this.progress.recomputeCourse(tx, courseId);
+      if (affectsProgress(row)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
       return toLessonView(row);
     });
+    if (deferred) await this.progress.scheduleRecompute(courseId);
+    return view;
   }
 
   async updateLesson(user: { id: string }, courseId: string, lessonId: string, patch: UpdateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
-    return this.prisma.$transaction(async (tx) => {
+    let deferred = false;
+    const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
       if (!lesson) throw lessonNotFound();
@@ -183,13 +189,16 @@ export class CurriculumService {
         data.resourceAssetId = patch.resourceAssetId;
       }
       const updated = await tx.lesson.update({ where: { id: lessonId }, data });
-      if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) await this.progress.recomputeCourse(tx, courseId);
+      if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
       return toLessonView(updated);
     });
+    if (deferred) await this.progress.scheduleRecompute(courseId);
+    return view;
   }
 
   async deleteLesson(user: { id: string }, courseId: string, lessonId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
+    let deferred = false;
     await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
@@ -197,8 +206,9 @@ export class CurriculumService {
       await this.releaseLessonMedia(tx, lesson);
       await tx.lesson.delete({ where: { id: lessonId } });
       await tx.lesson.updateMany({ where: { sectionId: lesson.sectionId, position: { gt: lesson.position } }, data: { position: { decrement: 1 } } });
-      await this.progress.recomputeCourse(tx, courseId);
+      if (affectsProgress(lesson)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
     });
+    if (deferred) await this.progress.scheduleRecompute(courseId);
   }
 
   /**
@@ -270,6 +280,9 @@ export class CurriculumService {
     if (lesson.resourceAssetId) await this.media.detach(tx, lesson.resourceAssetId);
   }
 }
+
+/** Only required lessons count towards the percentage and quizzes towards completion; any other lesson leaves every learner's progress as it is. */
+const affectsProgress = (l: Pick<Lesson, "isRequired" | "type">) => l.isRequired || l.type === "QUIZ";
 
 const limit = (what: string, max: number) => new AppError("CURRICULUM_LIMIT", 422, `A course can have at most ${max} ${what}`, { max });
 

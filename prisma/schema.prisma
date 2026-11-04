@@ -1161,6 +1161,7 @@ model Lesson {
 
   @@index([sectionId, position])
   @@index([courseId])
+  @@index([videoAssetId])
   @@map("lessons")
 }
 

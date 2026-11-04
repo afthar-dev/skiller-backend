@@ -303,4 +303,110 @@ describe("lesson progress", () => {
       expect(await reader.completedRequiredPct((await t.login()).userId, c.id)).toBe(0);
     });
   });
+
+  describe("fix round 1: enrolment-level locking, recompute cost, reactivation", () => {
+    const until = async <T,>(read: () => Promise<T | null | undefined | false>, ms = 15_000): Promise<T> => {
+      const deadline = Date.now() + ms;
+      for (;;) {
+        const v = await read();
+        if (v) return v;
+        if (Date.now() > deadline) throw new Error("timed out waiting for condition");
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    };
+
+    it("two last required lessons completed in parallel still reach 100%, complete the enrolment and emit one event", async () => {
+      for (let round = 0; round < 3; round++) {
+        const owner = await creator();
+        const c = await course(owner, [{ type: "ARTICLE" }, { type: "ARTICLE" }, { type: "RESOURCE" }]);
+        const me = await enrolled(c.slug);
+        await Promise.all(c.lessons.map((l) => complete(me, l.id)));
+        const e = await enrolment(me.userId, c.id);
+        expect(e.progressPct).toBe(100);
+        expect(e.completedAt).not.toBeNull();
+        expect(await completedEvents(me.userId, c.id)).toBe(1);
+      }
+    });
+
+    it("parallel completions of the same final lesson emit one event", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "ARTICLE" }]);
+      const me = await enrolled(c.slug);
+      await Promise.all([complete(me, c.lessons[0].id), complete(me, c.lessons[0].id), complete(me, c.lessons[0].id)]);
+      expect(await completedEvents(me.userId, c.id)).toBe(1);
+    });
+
+    it("parallel heartbeats at the same instant are credited once", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "VIDEO", durationSec: 600 }]);
+      const me = await enrolled(c.slug);
+      await beat(me, c.lessons[0].id, 0);
+      t.clock.advanceSec(10);
+      const results = await Promise.all([beat(me, c.lessons[0].id, 10), beat(me, c.lessons[0].id, 10), beat(me, c.lessons[0].id, 10)]);
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      expect(results.filter((r) => r.status === 429)).toHaveLength(2);
+      expect((await row(me.userId, c.lessons[0].id))!.watchedSec).toBe(10);
+    });
+
+    it("an author edit racing a learner completion leaves the right percentage", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "ARTICLE" }, { type: "ARTICLE" }]);
+      const me = await enrolled(c.slug);
+      await Promise.all([
+        complete(me, c.lessons[0].id),
+        http().post(`/v1/studio/courses/${c.id}/lessons`).set(auth(owner)).send({ sectionId: c.sectionId, title: "New", type: "ARTICLE", articleBody: "x" }),
+      ]);
+      // 1 of 3 required completed
+      expect((await enrolment(me.userId, c.id)).progressPct).toBe(33);
+    });
+
+    it("lessons that cannot change a percentage do not trigger a recompute", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "ARTICLE" }]);
+      await enrolled(c.slug);
+      const spy = jest.spyOn(progressService, "recomputeCourse");
+      const post = (body: object) => http().post(`/v1/studio/courses/${c.id}/lessons`).set(auth(owner)).send({ sectionId: c.sectionId, title: "N", ...body });
+      const optional = await post({ type: "ARTICLE", articleBody: "x", isRequired: false });
+      expect(optional.status).toBe(201);
+      expect(spy.mock.calls.length).toBe(0);
+      expect((await http().delete(`/v1/studio/courses/${c.id}/lessons/${optional.body.id}`).set(auth(owner))).status).toBe(204);
+      expect(spy.mock.calls.length).toBe(0);
+      expect((await post({ type: "ARTICLE", articleBody: "x" })).status).toBe(201);
+      expect(spy.mock.calls.length).toBe(1);
+      spy.mockRestore();
+    });
+
+    it("large courses recompute in a background job", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "ARTICLE" }, { type: "ARTICLE" }]);
+      const a = await enrolled(c.slug);
+      await enrolled(c.slug);
+      await complete(a, c.lessons[0].id);
+      const previous = progressService.inlineLimit;
+      progressService.inlineLimit = 1;
+      try {
+        const added = await http().post(`/v1/studio/courses/${c.id}/lessons`).set(auth(owner)).send({ sectionId: c.sectionId, title: "New", type: "ARTICLE", articleBody: "x" });
+        expect(added.status).toBe(201);
+        await until(async () => (await enrolment(a.userId, c.id)).progressPct === 33);
+      } finally {
+        progressService.inlineLimit = previous;
+      }
+    });
+
+    it("re-enrolling after a refund refreshes the percentage and completion", async () => {
+      const owner = await creator();
+      const c = await course(owner, [{ type: "ARTICLE" }, { type: "ARTICLE" }]);
+      const me = await enrolled(c.slug);
+      await complete(me, c.lessons[0].id);
+      await prisma.enrolment.update({ where: { courseId_userId: { courseId: c.id, userId: me.userId } }, data: { revokedAt: t.clock.now() } });
+      // while revoked the author removes the lesson the learner had not finished: the learner is now fully done
+      expect((await http().delete(`/v1/studio/courses/${c.id}/lessons/${c.lessons[1].id}`).set(auth(owner))).status).toBe(204);
+      expect((await enrolment(me.userId, c.id)).progressPct).toBe(50);
+      expect((await http().post(`/v1/courses/${c.slug}/enrol`).set(auth(me))).status).toBe(201);
+      const e = await enrolment(me.userId, c.id);
+      expect(e.progressPct).toBe(100);
+      expect(e.completedAt).not.toBeNull();
+      expect(await completedEvents(me.userId, c.id)).toBe(1);
+    });
+  });
 });
