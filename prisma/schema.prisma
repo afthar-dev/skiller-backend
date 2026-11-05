@@ -1428,6 +1428,8 @@ model Reel {
   saves    ReelSave[]
   shares   ReelShare[]
   comments ReelComment[]
+  daily    ReelViewDaily[]
+  seen     ReelSeen[]
 
   @@index([creatorId, publishedAt, id])
   @@index([creatorId, status, id])
@@ -1516,4 +1518,46 @@ model ReelComment {
   @@index([reelId, parentId, id])
   @@index([parentId, status, id])
   @@map("reel_comments")
+}
+
+// ─── reel views ──────────────────────────────────────────────────────────
+// Views are counted in Redis first (see ReelViewTracker) and flushed to Postgres every minute (ReelViewFlusher). ReelViewFlush records every
+// flush batch that has been applied, so a batch re-applied after a crash changes nothing.
+
+model ReelViewDaily {
+  reelId        String
+  /// IST calendar day ("YYYY-MM-DD").
+  day           String
+  views         Int      @default(0)
+  watchSec      Int      @default(0)
+  /// Approximate (a HyperLogLog count of the viewers whose view was counted that day).
+  uniqueViewers Int      @default(0)
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@id([reelId, day])
+  @@map("reel_view_daily")
+}
+
+/// What a signed-in user has watched: feeds "already seen" ranking.
+model ReelSeen {
+  userId     String
+  reelId     String
+  lastSeenAt DateTime
+  /// Share of the reel's length watched in the latest beacon, 0..100.
+  watchedPct Int      @default(0)
+
+  reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, reelId])
+  @@index([userId, lastSeenAt])
+  @@map("reel_seen")
+}
+
+model ReelViewFlush {
+  id        String   @id
+  appliedAt DateTime
+
+  @@map("reel_view_flushes")
 }
