@@ -16,6 +16,7 @@ import { SubscriptionMaintenanceProcessor } from "./modules/billing/subscription
 import { CoursesWorkerModule } from "./modules/courses/courses-worker.module";
 import { CourseMaintenanceProcessor } from "./modules/courses/course-maintenance.processor";
 import { ReelsWorkerModule } from "./modules/reels/reels-worker.module";
+import { HashtagTrendingProcessor } from "./modules/reels/hashtag-trending.processor";
 import { ReelViewsFlushProcessor } from "./modules/reels/reel-views-flush.processor";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
@@ -48,6 +49,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly reconciliation: ReconciliationProcessor,
     private readonly courseMaintenance: CourseMaintenanceProcessor,
     private readonly reelViewsFlush: ReelViewsFlushProcessor,
+    private readonly hashtagTrending: HashtagTrendingProcessor,
   ) {}
 
   async onApplicationBootstrap() {
@@ -63,6 +65,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.reconciliation.schedule();
     await this.courseMaintenance.schedule();
     await this.reelViewsFlush.schedule();
+    await this.hashtagTrending.schedule();
   }
 
   async onApplicationShutdown() {

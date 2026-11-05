@@ -10,6 +10,9 @@ import { CommentsService } from "./comments.service";
 import { EngagementController, CommentsController } from "./engagement.controller";
 import { EngagementService } from "./engagement.service";
 import { FeedsController } from "./feeds.controller";
+import { HashtagReelsService } from "./hashtag-reels.service";
+import { HashtagsController, ReelSearchController } from "./hashtags.controller";
+import { ReelSearchService } from "./reel-search.service";
 import { FeedsService } from "./feeds.service";
 import { ReelVisibility } from "./reel-visibility";
 import { ReelViewTracker } from "./reel-view-tracker";
@@ -23,7 +26,7 @@ import { ViewerResolver } from "./viewer";
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
   imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => CoursesModule), EntitlementsModule],
-  controllers: [FeedsController, ReelsController, EngagementController, CommentsController, ReelViewsController],
+  controllers: [FeedsController, ReelSearchController, HashtagsController, ReelsController, EngagementController, CommentsController, ReelViewsController],
   providers: [
     ...REELS_CORE_PROVIDERS,
     ReelsService,
@@ -32,6 +35,8 @@ import { ViewerResolver } from "./viewer";
     ReelViews,
     ReelVisibility,
     FeedsService,
+    HashtagReelsService,
+    ReelSearchService,
     ReelViewTracker,
     ViewerResolver,
     { provide: SignedCursor, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new SignedCursor(config.jwtSecret) },

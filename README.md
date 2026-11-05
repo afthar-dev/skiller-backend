@@ -222,6 +222,7 @@ Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in ev
 - `user_roles_userId_roleId_orgId_key`, `ledger_accounts_owner_kind_key`: unique indexes `NULLS NOT DISTINCT` (a platform-wide grant / platform account has a NULL owner and must still be unique).
 - Partial unique indexes: `subscriptions_one_free_active_key`, `coupon_redemptions_live_user_key`, `refunds_order_live_key`, `payout_accounts_owner_live_key`, `certificates_live_key`.
 - Search: extension `pg_trgm`; `courses_search_vector_idx` (GIN on `searchVector`, `fastupdate = off`), `courses_title_trgm_idx` (GIN trigram on `title`).
+- Reels: `reels."searchVector"` (tsvector, `simple`: caption A, hashtags B) is set by the `reels_search_vector_trg` trigger (function `reels_search_vector_update()`), with `reels_search_vector_idx` (GIN, `fastupdate = off`) and `reels_caption_trgm_idx` (GIN trigram on `caption`, `fastupdate = off`); keep the three out of every `migrate dev` DROP/CREATE. `reels_hashtags_idx` (GIN on `hashtags`) and `reels_status_publishedAt_id_idx` are plain Prisma indexes.
 - Catalog: partial indexes `courses_pub_popular_idx`, `courses_pub_newest_idx`, `courses_pub_rating_idx` (published, unflagged courses), `enrolments_created_active_idx` (active enrolments by `createdAt`), and the stored generated column `courses."ratingShown"` (drop the `ALTER COLUMN "ratingShown"` Prisma proposes).
 
 ## API contract
