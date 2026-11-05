@@ -26,6 +26,35 @@ export class UserStatusCache {
   }
 
   /**
+   * Statuses of many users at once (one MGET, one query for the misses, which are cached like get()). Users that do not exist are absent from the map.
+   * Anything that changes a status must put() or bust() it, as suspend and unsuspend do, or readers see the old one for up to 60 s.
+   */
+  async getMany(userIds: string[]): Promise<Map<string, UserStatus>> {
+    const out = new Map<string, UserStatus>();
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return out;
+    const cached = await this.redis.mget(unique.map(key));
+    const missing: string[] = [];
+    unique.forEach((id, i) => {
+      const value = cached[i];
+      if (value) out.set(id, value as UserStatus);
+      else missing.push(id);
+    });
+    if (missing.length > 0) {
+      const rows = await this.prisma.user.findMany({ where: { id: { in: missing } }, select: { id: true, status: true } });
+      if (rows.length > 0) {
+        const pipeline = this.redis.pipeline();
+        for (const r of rows) {
+          out.set(r.id, r.status);
+          pipeline.set(key(r.id), r.status, "EX", USER_STATUS_TTL_SEC);
+        }
+        await pipeline.exec();
+      }
+    }
+    return out;
+  }
+
+  /**
    * Overwrites the cached value (retried). For suspension this replaces a bust: a stale ACTIVE can never survive a successful write,
    * and unlike DEL it needs no later read-through to become correct. Throws if every attempt fails.
    */

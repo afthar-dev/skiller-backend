@@ -3,7 +3,7 @@ import type { Reel, ReelComment } from "@prisma/client";
 import type { Redis } from "ioredis";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
-import { toPage, type PageQuery } from "../../common/http/pagination";
+import type { PageQuery } from "../../common/http/pagination";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
@@ -16,6 +16,7 @@ import { bumpCounter } from "./reel-counters";
 import { ReelNotifier } from "./reel-notifier";
 import { reelNotFound } from "./reel-rules";
 import { ReelVisibility } from "./reel-visibility";
+import { collectVisible } from "./visible-page";
 
 export const COMMENT_MAX = 1000;
 export const COMMENTS_PER_MINUTE = 30;
@@ -109,6 +110,7 @@ export class CommentsService {
   }
 
   async edit(userId: string, reelId: string, commentId: string, rawBody: string): Promise<CommentView> {
+    await this.restrictions.assertCanPost(userId);
     await this.visibleReel(reelId, userId);
     const body = this.requireBody(rawBody);
     await consumeRateLimit(this.redis, `reel-comment:${userId}`, COMMENTS_PER_MINUTE, 60);
@@ -134,19 +136,20 @@ export class CommentsService {
   async list(reelId: string, viewerId: string | null, page: PageQuery): Promise<{ items: CommentView[]; nextCursor: string | null }> {
     await this.visibleReel(reelId, viewerId);
     const blocked = [...(await this.blocks.relations(viewerId)).blocked];
-    const rows = await this.prisma.reelComment.findMany({
-      where: {
-        reelId,
-        parentId: null,
-        // Hidden and removed comments never show; neither do comments of people the viewer blocked or who blocked the viewer (a deleted placeholder stays while a visible reply remains).
-        OR: [{ status: "VISIBLE", userId: { notIn: blocked } }, { status: "DELETED", replies: { some: { status: "VISIBLE", userId: { notIn: blocked } } } }],
-        ...(page.cursor ? { id: { lt: page.cursor } } : {}),
-      },
-      orderBy: { id: "desc" },
-      take: page.limit + 1,
-    });
-    const { items, nextCursor } = toPage(rows, page.limit);
-    return { items: await this.views(items, viewerId), nextCursor };
+    const { items, next } = await this.visibleComments(page, (after, take) =>
+      this.prisma.reelComment.findMany({
+        where: {
+          reelId,
+          parentId: null,
+          // Hidden and removed comments never show; neither do comments of people the viewer blocked or who blocked the viewer (a deleted placeholder stays while a visible reply remains).
+          OR: [{ status: "VISIBLE", userId: { notIn: blocked } }, { status: "DELETED", replies: { some: { status: "VISIBLE", userId: { notIn: blocked } } } }],
+          ...(after ? { id: { lt: after } } : {}),
+        },
+        orderBy: { id: "desc" },
+        take,
+      }),
+    );
+    return { items: await this.views(items, viewerId), nextCursor: next };
   }
 
   /** Visible replies of one top-level comment, oldest first. */
@@ -154,14 +157,35 @@ export class CommentsService {
     await this.visibleReel(reelId, viewerId);
     const blocked = [...(await this.blocks.relations(viewerId)).blocked];
     const top = await this.prisma.reelComment.findFirst({ where: { id: commentId, reelId, parentId: null, status: { in: ["VISIBLE", "DELETED"] } } });
-    if (!top || (top.status === "VISIBLE" && blocked.includes(top.userId))) throw commentNotFound();
-    const rows = await this.prisma.reelComment.findMany({
-      where: { reelId, parentId: commentId, status: "VISIBLE", userId: { notIn: blocked }, ...(page.cursor ? { id: { gt: page.cursor } } : {}) },
-      orderBy: { id: "asc" },
-      take: page.limit + 1,
+    if (!top || (top.status === "VISIBLE" && (blocked.includes(top.userId) || (await this.visibility.inactiveUsers([top.userId])).has(top.userId)))) throw commentNotFound();
+    const { items, next } = await this.visibleComments(page, (after, take) =>
+      this.prisma.reelComment.findMany({
+        where: { reelId, parentId: commentId, status: "VISIBLE", userId: { notIn: blocked }, ...(after ? { id: { gt: after } } : {}) },
+        orderBy: { id: "asc" },
+        take,
+      }),
+    );
+    return { items: await this.views(items, viewerId), nextCursor: next };
+  }
+
+  /** A keyset page of comments (cursor = last id looked at) without those of suspended or deleted accounts; the page is topped up from the rows after them. */
+  private async visibleComments(page: PageQuery, fetch: (after: string | null, take: number) => Promise<ReelComment[]>): Promise<{ items: ReelComment[]; next: string | null }> {
+    const authors = new Map<string, { status: ReelComment["status"]; userId: string }>();
+    return collectVisible<ReelComment, string>({
+      limit: page.limit,
+      start: page.cursor ?? null,
+      fetch: async (after, take) => {
+        const rows = await fetch(after, take);
+        for (const r of rows) authors.set(r.id, { status: r.status, userId: r.userId });
+        return rows;
+      },
+      posOf: (r) => r.id,
+      idOf: (r) => r.id,
+      visible: async (commentIds) => {
+        const inactive = await this.visibility.inactiveUsers(commentIds.flatMap((id) => (authors.get(id)?.status === "VISIBLE" ? [authors.get(id)!.userId] : [])));
+        return commentIds.filter((id) => !inactive.has(authors.get(id)?.userId ?? ""));
+      },
     });
-    const { items, nextCursor } = toPage(rows, page.limit);
-    return { items: await this.views(items, viewerId), nextCursor };
   }
 
   private requireBody(raw: string): string {
@@ -190,9 +214,11 @@ export class CommentsService {
     const avatars = await this.media.publicUrls([...summaries.values()].flatMap((s) => (s.avatarAssetId ? [s.avatarAssetId] : [])));
     const blocked = [...(await this.blocks.relations(viewerId)).blocked];
     const topLevel = rows.filter((r) => r.parentId === null).map((r) => r.id);
-    const counts = new Map(
-      topLevel.length === 0 ? [] : (await this.prisma.reelComment.groupBy({ by: ["parentId"], where: { parentId: { in: topLevel }, status: "VISIBLE", userId: { notIn: blocked } }, _count: { _all: true } })).map((g) => [g.parentId, g._count._all] as const),
-    );
+    // Replies count unless their author is blocked or the account is suspended / deleted.
+    const replyGroups = topLevel.length === 0 ? [] : await this.prisma.reelComment.groupBy({ by: ["parentId", "userId"], where: { parentId: { in: topLevel }, status: "VISIBLE", userId: { notIn: blocked } }, _count: { _all: true } });
+    const inactive = await this.visibility.inactiveUsers(replyGroups.map((g) => g.userId));
+    const counts = new Map<string | null, number>();
+    for (const g of replyGroups) if (!inactive.has(g.userId)) counts.set(g.parentId, (counts.get(g.parentId) ?? 0) + g._count._all);
     return rows.map((r) => {
       const visible = r.status === "VISIBLE";
       const summary = visible ? summaries.get(r.userId) : undefined;
