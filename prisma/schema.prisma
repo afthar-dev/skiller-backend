@@ -1413,6 +1413,8 @@ model Reel {
   /// Parsed from the caption on every write (lower-case NFC, at most 10); `hashtags` rows count the PUBLISHED reels that carry each tag.
   hashtags        String[]
   linkedCourseId  String?
+  /// A live gig of the creator (no FK: gigs is another module). At most one of linkedCourseId / linkedGigId is set.
+  linkedGigId     String?
   status          ReelStatus               @default(PROCESSING)
   commentsEnabled Boolean                  @default(true)
   failureReason   String?
@@ -1595,6 +1597,7 @@ enum ReportTargetType {
   COURSE_REVIEW
   COURSE_QA
   GIG_MESSAGE
+  GIG
 }
 
 enum ReportReason {
@@ -1715,6 +1718,10 @@ model Gig {
   tags         String[]
   status       GigStatus @default(DRAFT)
   coverAssetId String?
+  /// The lowest package price (paise), kept by the gigs service on every package write; the catalog filters and sorts on it.
+  startingPricePaise BigInt?
+  /// Full-text document (simple config): title A, tags B, description C. Kept by the gigs_search_vector trigger, never by Prisma; its partial GIN indexes are hand-written.
+  searchVector Unsupported("tsvector")?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   publishedAt  DateTime?

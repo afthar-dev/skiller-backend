@@ -70,6 +70,7 @@ export class GigsService {
             data: { sellerId, slug, title: input.title, description, categoryId: input.categoryId, tags: input.tags },
           });
           await tx.gigPackage.createMany({ data: input.packages.map((p) => ({ gigId: gig.id, ...p })) });
+          await this.refreshStartingPrice(tx, gig.id);
           await tx.gigFaq.createMany({ data: input.faqs.map((f, position) => ({ gigId: gig.id, ...f, position })) });
           if (input.coverAssetId) {
             await this.useAsset(tx, sellerId, input.coverAssetId, "THUMBNAIL");
@@ -133,6 +134,7 @@ export class GigsService {
       if (patch.packages) {
         await tx.gigPackage.deleteMany({ where: { gigId: id } });
         await tx.gigPackage.createMany({ data: patch.packages.map((p) => ({ gigId: id, ...p })) });
+        await this.refreshStartingPrice(tx, id);
       }
       if (patch.faqs) {
         await tx.gigFaq.deleteMany({ where: { gigId: id } });
@@ -200,6 +202,11 @@ export class GigsService {
   /** How many gigs of this seller count against the plan. */
   countedFor(sellerId: string): Promise<number> {
     return this.prisma.gig.count({ where: { sellerId, status: { in: [...COUNTED_STATUSES] } } });
+  }
+
+  /** The catalog filters and sorts on the lowest package price; call in the transaction that writes the packages. */
+  private async refreshStartingPrice(tx: Prisma.TransactionClient, gigId: string): Promise<void> {
+    await tx.$executeRaw`UPDATE "gigs" SET "startingPricePaise" = (SELECT min("pricePaise") FROM "gig_packages" WHERE "gigId" = ${gigId}) WHERE "id" = ${gigId}`;
   }
 
   private async owned(sellerId: string, id: string): Promise<GigRow> {

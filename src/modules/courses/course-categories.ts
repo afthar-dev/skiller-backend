@@ -11,6 +11,11 @@ export class CourseCategories {
     return (await this.prisma.category.count({ where: { id: categoryId, isActive: true } })) > 0;
   }
 
+  /** The id of the active category with this slug, or null. */
+  async idBySlug(slug: string): Promise<string | null> {
+    return (await this.prisma.category.findFirst({ where: { slug, isActive: true }, select: { id: true } }))?.id ?? null;
+  }
+
   /** The category of each of these courses; unknown ids are absent. Availability does not matter: the link was valid when it was made. */
   async ofCourses(courseIds: string[]): Promise<Map<string, string>> {
     if (courseIds.length === 0) return new Map();

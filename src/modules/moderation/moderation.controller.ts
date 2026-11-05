@@ -33,7 +33,7 @@ export class ReportsController {
 
   @AuthenticatedOnly()
   @Post("reports")
-  @ApiOperation({ summary: "Report a reel, reel comment, course review, course Q&A item or a message you received (GIG_MESSAGE: only the other person in the conversation can). One report per member per item (repeating it answers 200 and changes nothing); not your own content; 20 reports an hour. Enough distinct reporters hide the item until a moderator decides" })
+  @ApiOperation({ summary: "Report a reel, reel comment, course review, course Q&A item, a live gig (GIG) or a message you received (GIG_MESSAGE: only the other person in the conversation can). One report per member per item (repeating it answers 200 and changes nothing); not your own content; 20 reports an hour. Enough distinct reporters hide the item until a moderator decides" })
   @ApiZodBody(reportSchema)
   async report(@CurrentUser() user: AuthUser, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const { id, created } = await this.moderation.report(user.id, reportSchema.parse(body));

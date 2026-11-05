@@ -1299,6 +1299,15 @@
                           "format": "date-time",
                           "nullable": true
                         },
+                        "allowMessagesFrom": {
+                          "type": "string",
+                          "enum": [
+                            "EVERYONE",
+                            "FOLLOWING",
+                            "NONE"
+                          ],
+                          "description": "Who may start a conversation with this person."
+                        },
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
@@ -1422,6 +1431,14 @@
                     "type": "string",
                     "format": "uuid",
                     "nullable": true
+                  },
+                  "allowMessagesFrom": {
+                    "type": "string",
+                    "enum": [
+                      "EVERYONE",
+                      "FOLLOWING",
+                      "NONE"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -1501,6 +1518,15 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "allowMessagesFrom": {
+                      "type": "string",
+                      "enum": [
+                        "EVERYONE",
+                        "FOLLOWING",
+                        "NONE"
+                      ],
+                      "description": "Who may start a conversation with this person."
+                    },
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
@@ -1536,7 +1562,7 @@
             "bearer": []
           }
         ],
-        "summary": "Update profile fields (avatar/banner by media asset id)",
+        "summary": "Update profile fields (avatar/banner by media asset id; allowMessagesFrom: EVERYONE | FOLLOWING (people you follow) | NONE decides who may start a conversation with you)",
         "tags": [
           "Me"
         ]
@@ -3056,7 +3082,9 @@
                       "REEL",
                       "REEL_COMMENT",
                       "COURSE_REVIEW",
-                      "COURSE_QA"
+                      "COURSE_QA",
+                      "GIG_MESSAGE",
+                      "GIG"
                     ]
                   },
                   "targetId": {
@@ -3119,7 +3147,7 @@
             "bearer": []
           }
         ],
-        "summary": "Report a reel, reel comment, course review or course Q&A item. One report per member per item (repeating it answers 200 and changes nothing); not your own content; 20 reports an hour. Enough distinct reporters hide the item until a moderator decides",
+        "summary": "Report a reel, reel comment, course review, course Q&A item, a live gig (GIG) or a message you received (GIG_MESSAGE: only the other person in the conversation can). One report per member per item (repeating it answers 200 and changes nothing); not your own content; 20 reports an hour. Enough distinct reporters hide the item until a moderator decides",
         "tags": [
           "Moderation"
         ]
@@ -4132,6 +4160,7 @@
                             "reel.like",
                             "reel.comment",
                             "reel.reply",
+                            "message.new",
                             "moderation.hidden",
                             "moderation.removed",
                             "moderation.restored",
@@ -6028,6 +6057,12 @@
                             "minimum": 0,
                             "maximum": 1000000000,
                             "nullable": true
+                          },
+                          "max_active_gigs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 1000000000,
+                            "nullable": true
                           }
                         },
                         "required": [
@@ -6173,6 +6208,12 @@
                         "type": "boolean"
                       },
                       "org_seats": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000000,
+                        "nullable": true
+                      },
+                      "max_active_gigs": {
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 1000000000,
@@ -13644,6 +13685,10 @@
                     "type": "string",
                     "format": "uuid"
                   },
+                  "linkedGigId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "commentsEnabled": {
                     "type": "boolean"
                   }
@@ -13729,6 +13774,11 @@
                     "format": "uuid",
                     "nullable": true
                   },
+                  "linkedGigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
                   "commentsEnabled": {
                     "type": "boolean"
                   }
@@ -13765,7 +13815,7 @@
             "bearer": []
           }
         ],
-        "summary": "Edit my reel: caption (hashtags follow), linked course, comments on/off",
+        "summary": "Edit my reel: caption (hashtags follow), linked course or gig (one of them), comments on/off",
         "tags": [
           "Reels"
         ]
@@ -14650,6 +14700,1299 @@
           "Reels"
         ]
       }
+    },
+    "/v1/studio/gigs": {
+      "post": {
+        "operationId": "StudioGigs_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 10000,
+                    "default": ""
+                  },
+                  "categoryId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 30
+                    },
+                    "maxItems": 10,
+                    "default": []
+                  },
+                  "packages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "BASIC",
+                            "STANDARD",
+                            "PREMIUM"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 500,
+                          "default": ""
+                        },
+                        "pricePaise": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}$"
+                        },
+                        "deliveryDays": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "revisions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "maxItems": 10,
+                          "default": []
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "name",
+                        "pricePaise",
+                        "deliveryDays",
+                        "revisions"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 3
+                  },
+                  "faqs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "answer": {
+                          "allOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "question",
+                        "answer"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10,
+                    "default": []
+                  },
+                  "coverAssetId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "galleryAssetIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 10
+                  }
+                },
+                "required": [
+                  "title",
+                  "categoryId",
+                  "packages"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a draft gig: one to three packages (BASIC required, prices 99 to 10,00,000 rupees as paise strings), FAQs, tags, optional cover and gallery pictures",
+        "tags": [
+          "Gig studio"
+        ]
+      },
+      "get": {
+        "operationId": "StudioGigs_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Your gigs, newest first (deleted ones are left out)",
+        "tags": [
+          "Gig studio"
+        ]
+      }
+    },
+    "/v1/studio/gigs/{id}": {
+      "get": {
+        "operationId": "StudioGigs_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "One of your gigs, in any state",
+        "tags": [
+          "Gig studio"
+        ]
+      },
+      "patch": {
+        "operationId": "StudioGigs_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "categoryId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 30
+                    },
+                    "maxItems": 10
+                  },
+                  "packages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "tier": {
+                          "type": "string",
+                          "enum": [
+                            "BASIC",
+                            "STANDARD",
+                            "PREMIUM"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60
+                        },
+                        "description": {
+                          "type": "string",
+                          "maxLength": 500,
+                          "default": ""
+                        },
+                        "pricePaise": {
+                          "type": "string",
+                          "pattern": "^\\d{1,12}$"
+                        },
+                        "deliveryDays": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 365
+                        },
+                        "revisions": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "maxItems": 10,
+                          "default": []
+                        }
+                      },
+                      "required": [
+                        "tier",
+                        "name",
+                        "pricePaise",
+                        "deliveryDays",
+                        "revisions"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 3
+                  },
+                  "faqs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "question": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "answer": {
+                          "allOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "question",
+                        "answer"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 10
+                  },
+                  "coverAssetId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
+                  "galleryAssetIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "maxItems": 10
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a gig (packages, FAQs and gallery are replaced as a whole). A live gig must stay complete. Not while it is hidden or removed by moderation",
+        "tags": [
+          "Gig studio"
+        ]
+      },
+      "delete": {
+        "operationId": "StudioGigs_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a gig (soft delete: it disappears everywhere and its pictures are released)",
+        "tags": [
+          "Gig studio"
+        ]
+      }
+    },
+    "/v1/studio/gigs/{id}/activate": {
+      "post": {
+        "operationId": "StudioGigs_activate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Put a draft or paused gig live (GIG_NOT_PUBLISHABLE lists what is missing; ENTITLEMENT_LIMIT_REACHED when the plan's max_active_gigs is full). Live already is a no-op",
+        "tags": [
+          "Gig studio"
+        ]
+      }
+    },
+    "/v1/studio/gigs/{id}/pause": {
+      "post": {
+        "operationId": "StudioGigs_pause",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `gig.create`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Take a live gig off every public surface and free its plan slot. Paused already is a no-op",
+        "tags": [
+          "Gig studio"
+        ]
+      }
+    },
+    "/v1/gigs": {
+      "get": {
+        "operationId": "Gigs_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Search and browse live gigs. q is full-text over title, tags and description, with fuzzy title matching when nothing matches as written; category is a course category slug; minPrice / maxPrice filter the starting (lowest package) price in paise; sort relevance (newest without q), newest, price_asc or price_desc. Gigs of suspended sellers, blocked sellers and anything not live are never listed",
+        "tags": [
+          "Gigs"
+        ]
+      }
+    },
+    "/v1/gigs/{slug}": {
+      "get": {
+        "operationId": "Gigs_get",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A live gig: seller, packages, gallery, FAQs and `paymentNotice` (payments happen outside Skiller and are not protected; show it as given). 404 for anything not live or not visible to you",
+        "tags": [
+          "Gigs"
+        ]
+      }
+    },
+    "/v1/profiles/{handle}/gigs": {
+      "get": {
+        "operationId": "Gigs_byHandle",
+        "parameters": [
+          {
+            "name": "handle",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "A seller's live gigs, newest first",
+        "tags": [
+          "Gigs"
+        ]
+      }
+    },
+    "/v1/conversations": {
+      "post": {
+        "operationId": "Conversations_start",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "recipientHandle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "gigId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "recipientHandle",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Message a person (get-or-create the conversation of the pair and append the message). 201 when the conversation is new, 200 when it existed. From a gig: send gigId (a live gig of that person). MESSAGING_NOT_ALLOWED never says why (block, the person's setting or their account); 20 new people a day and 60 messages an hour",
+        "tags": [
+          "Messaging"
+        ]
+      },
+      "get": {
+        "operationId": "Conversations_list",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My conversations, most recently active first, with unread counts. `archived=true` lists the archived ones",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/unread-count": {
+      "get": {
+        "operationId": "Conversations_unread",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "How many messages from others I have not read, over all my conversations",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/stream": {
+      "get": {
+        "operationId": "Conversations_stream",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Server-sent events: `message` events for my conversations as they happen (text/event-stream). A comment line every 25 s keeps it alive; the stream ends with an `expired` or `revoked` event when the access token or session ends, then reconnect with a fresh token. Send the Authorization header (fetch-based SSE clients; the browser EventSource cannot). Everything here is also available by polling GET /conversations/:id/messages?after=",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/{id}/messages": {
+      "get": {
+        "operationId": "Conversations_messages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Page size, 1-100 (default 20).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Messages of one of my conversations, newest first with a cursor. `after=<message id>` returns the messages since then, oldest first (polling). A hidden or removed message has no text. Anyone else's conversation is a 404",
+        "tags": [
+          "Messaging"
+        ]
+      },
+      "post": {
+        "operationId": "Conversations_send",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a plain-text message (at most 4000 characters) in one of my conversations. 60 messages an hour",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/{id}/read": {
+      "post": {
+        "operationId": "Conversations_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark everything in the conversation read",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/{id}/archive": {
+      "post": {
+        "operationId": "Conversations_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move the conversation out of my inbox (a new message brings it back)",
+        "tags": [
+          "Messaging"
+        ]
+      }
+    },
+    "/v1/conversations/{id}/unarchive": {
+      "post": {
+        "operationId": "Conversations_unarchive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Bring an archived conversation back",
+        "tags": [
+          "Messaging"
+        ]
+      }
     }
   },
   "info": {
@@ -15140,7 +16483,7 @@
           "limits": {
             "type": "object",
             "additionalProperties": true,
-            "description": "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats (null = unlimited)."
+            "description": "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats, max_active_gigs (null = unlimited; max_active_gigs may be left out on write: the plan key's default applies)."
           },
           "createdAt": {
             "type": "string",

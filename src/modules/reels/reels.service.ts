@@ -6,6 +6,7 @@ import type { PageQuery } from "../../common/http/pagination";
 import { badCursor, SignedCursor } from "../../common/http/signed-cursor";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService } from "../billing";
+import { GigLookup } from "../gigs";
 import { CourseLookup, sanitizePlainText } from "../courses";
 import { MediaAttachments } from "../media";
 import { OpenReports, PostingRestrictions } from "../moderation";
@@ -14,19 +15,21 @@ import { adjustHashtags } from "./hashtag-counts";
 import { extractHashtags } from "./hashtags";
 import { ReelPublisher } from "./reel-publisher";
 import { ReelVisibility } from "./reel-visibility";
-import { CAPTION_MAX, COUNTED_STATUS, courseNotLinkable, EDITABLE_STATUSES, mediaNotUsable, reelNotFound, stateInvalid } from "./reel-rules";
+import { CAPTION_MAX, COUNTED_STATUS, courseNotLinkable, EDITABLE_STATUSES, gigNotLinkable, linkConflict, mediaNotUsable, reelNotFound, stateInvalid } from "./reel-rules";
 import { ReelViews, type ReelView } from "./reel-views";
 
 export interface CreateReelInput {
   mediaAssetId: string;
   caption: string;
   linkedCourseId?: string;
+  linkedGigId?: string;
   commentsEnabled?: boolean;
 }
 
 export interface UpdateReelInput {
   caption?: string;
   linkedCourseId?: string | null;
+  linkedGigId?: string | null;
   commentsEnabled?: boolean;
 }
 
@@ -41,6 +44,7 @@ export class ReelsService {
     private readonly publisher: ReelPublisher,
     private readonly media: MediaAttachments,
     private readonly courses: CourseLookup,
+    private readonly gigs: GigLookup,
     private readonly profiles: ProfilesService,
     private readonly entitlements: EntitlementsService,
     private readonly views: ReelViews,
@@ -60,7 +64,9 @@ export class ReelsService {
     await this.restrictions.assertCanPost(userId);
     const info = await this.media.assetInfo(input.mediaAssetId);
     if (!info || info.ownerId !== userId || info.orgId !== null || info.purpose !== "REEL" || info.status === "FAILED" || info.status === "PENDING") throw mediaNotUsable();
+    if (input.linkedCourseId && input.linkedGigId) throw linkConflict();
     if (input.linkedCourseId && !(await this.courses.isLinkableBy(input.linkedCourseId, userId))) throw courseNotLinkable();
+    if (input.linkedGigId && !(await this.gigs.liveGigOf(input.linkedGigId, userId))) throw gigNotLinkable();
     const caption = sanitizePlainText(input.caption, CAPTION_MAX);
 
     let reel: Reel;
@@ -68,7 +74,7 @@ export class ReelsService {
       reel = await this.prisma.$transaction(async (tx) => {
         await this.media.reserve(tx, input.mediaAssetId, userId, "REEL");
         return tx.reel.create({
-          data: { creatorId: userId, mediaAssetId: input.mediaAssetId, caption, hashtags: extractHashtags(caption), linkedCourseId: input.linkedCourseId ?? null, commentsEnabled: input.commentsEnabled ?? true },
+          data: { creatorId: userId, mediaAssetId: input.mediaAssetId, caption, hashtags: extractHashtags(caption), linkedCourseId: input.linkedCourseId ?? null, linkedGigId: input.linkedGigId ?? null, commentsEnabled: input.commentsEnabled ?? true },
         });
       }, TX_OPTIONS);
     } catch (err) {
@@ -95,9 +101,11 @@ export class ReelsService {
 
   async update(userId: string, reelId: string, patch: UpdateReelInput): Promise<ReelView> {
     // A ban covers what goes on live surfaces: new text and a new course link. Turning comments off is not posting.
-    if (patch.caption !== undefined || patch.linkedCourseId !== undefined) await this.restrictions.assertCanPost(userId);
+    if (patch.caption !== undefined || patch.linkedCourseId !== undefined || patch.linkedGigId !== undefined) await this.restrictions.assertCanPost(userId);
     await this.owned(userId, reelId);
+    if (patch.linkedCourseId && patch.linkedGigId) throw linkConflict();
     if (patch.linkedCourseId && !(await this.courses.isLinkableBy(patch.linkedCourseId, userId))) throw courseNotLinkable();
+    if (patch.linkedGigId && !(await this.gigs.liveGigOf(patch.linkedGigId, userId))) throw gigNotLinkable();
     const caption = patch.caption === undefined ? undefined : sanitizePlainText(patch.caption, CAPTION_MAX);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -112,6 +120,9 @@ export class ReelsService {
         data.hashtags = extractHashtags(caption);
       }
       if (patch.linkedCourseId !== undefined) data.linkedCourseId = patch.linkedCourseId;
+      if (patch.linkedGigId !== undefined) data.linkedGigId = patch.linkedGigId;
+      // One link at a time: the result must not carry both (setting one while the other stays is refused; clear it in the same request).
+      if ((patch.linkedCourseId !== undefined ? patch.linkedCourseId : current.linkedCourseId) && (patch.linkedGigId !== undefined ? patch.linkedGigId : current.linkedGigId)) throw linkConflict();
       if (patch.commentsEnabled !== undefined) data.commentsEnabled = patch.commentsEnabled;
       const row = await tx.reel.update({ where: { id: reelId }, data });
       if (status === COUNTED_STATUS && caption !== undefined) {

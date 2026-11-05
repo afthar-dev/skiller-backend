@@ -16,6 +16,18 @@ DROP INDEX "reels_search_vector_idx";
 DROP INDEX "reels_caption_trgm_idx";
 
 -- DropIndex
+DROP INDEX "gigs_active_search_idx";
+
+-- DropIndex
+DROP INDEX "gigs_active_title_trgm_idx";
+
+-- DropIndex
+DROP INDEX "gigs_active_newest_idx";
+
+-- DropIndex
+DROP INDEX "gigs_active_price_idx";
+
+-- DropIndex
 DROP INDEX "profiles_handle_pattern_idx";
 
 -- DropIndex

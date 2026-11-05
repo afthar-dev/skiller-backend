@@ -15,10 +15,10 @@ import { ReelsService } from "./reels.service";
 import { ViewerResolver } from "../identity";
 
 const createSchema = z
-  .object({ mediaAssetId: z.string().min(1).max(64), caption: z.string().max(CAPTION_MAX), linkedCourseId: z.string().uuid().optional(), commentsEnabled: z.boolean().optional() })
+  .object({ mediaAssetId: z.string().min(1).max(64), caption: z.string().max(CAPTION_MAX), linkedCourseId: z.string().uuid().optional(), linkedGigId: z.string().uuid().optional(), commentsEnabled: z.boolean().optional() })
   .strict();
 const updateSchema = z
-  .object({ caption: z.string().max(CAPTION_MAX).optional(), linkedCourseId: z.string().uuid().nullable().optional(), commentsEnabled: z.boolean().optional() })
+  .object({ caption: z.string().max(CAPTION_MAX).optional(), linkedCourseId: z.string().uuid().nullable().optional(), linkedGigId: z.string().uuid().nullable().optional(), commentsEnabled: z.boolean().optional() })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: "Send at least one field to change" });
 
@@ -43,7 +43,7 @@ export class ReelsController {
 
   @AuthenticatedOnly()
   @Patch("reels/:id")
-  @ApiOperation({ summary: "Edit my reel: caption (hashtags follow), linked course, comments on/off" })
+  @ApiOperation({ summary: "Edit my reel: caption (hashtags follow), linked course or gig (one of them), comments on/off" })
   @ApiZodBody(updateSchema)
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.reels.update(user.id, id, updateSchema.parse(body));

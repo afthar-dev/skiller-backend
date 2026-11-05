@@ -8,7 +8,9 @@ import { ViewerResolver } from "../identity";
 import { MediaModule } from "../media";
 import { ModerationModule } from "../moderation";
 import { UsersModule } from "../users";
+import { GigCatalogService } from "./gig-catalog.service";
 import { GigLookup } from "./gig-lookup";
+import { GigModerationTargets } from "./gig-moderation-targets";
 import { GigVisibility } from "./gig-visibility";
 import { GigsController } from "./gigs.controller";
 import { GigsPublicService } from "./gigs-public.service";
@@ -22,6 +24,8 @@ import { StudioGigsController } from "./studio-gigs.controller";
   providers: [
     GigsService,
     GigsPublicService,
+    GigCatalogService,
+    GigModerationTargets,
     GigVisibility,
     GigLookup,
     ViewerResolver,

@@ -4,6 +4,7 @@ import type { AppConfig } from "../../common/config/config.schema";
 import { SignedCursor } from "../../common/http/signed-cursor";
 import { EntitlementsModule } from "../billing";
 import { CoursesModule } from "../courses";
+import { GigsModule } from "../gigs";
 import { MediaModule } from "../media";
 import { ModerationModule } from "../moderation";
 import { UsersModule } from "../users";
@@ -29,7 +30,7 @@ import { ViewerResolver } from "../identity";
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
-  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => CoursesModule), forwardRef(() => ModerationModule), EntitlementsModule],
+  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => CoursesModule), forwardRef(() => GigsModule), forwardRef(() => ModerationModule), EntitlementsModule],
   controllers: [ReelAnalyticsController, FeedsController, ReelSearchController, HashtagsController, ReelsController, EngagementController, CommentsController, ReelViewsController],
   providers: [
     ...REELS_CORE_PROVIDERS,

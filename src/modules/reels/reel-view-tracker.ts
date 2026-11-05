@@ -113,9 +113,9 @@ return w - best`;
    * but needs no watch time. Only a reel that links a course counts; the creator's own clicks do not.
    */
   async recordLinkClick(input: Omit<ViewInput, "watchedSec">): Promise<{ counted: boolean }> {
-    const reel = await this.prisma.reel.findUnique({ where: { id: input.reelId }, select: { id: true, status: true, creatorId: true, linkedCourseId: true } });
+    const reel = await this.prisma.reel.findUnique({ where: { id: input.reelId }, select: { id: true, status: true, creatorId: true, linkedCourseId: true, linkedGigId: true } });
     if (!reel || reel.status !== "PUBLISHED") throw reelNotFound();
-    if (!reel.linkedCourseId || reel.creatorId === input.userId) return { counted: false };
+    if ((!reel.linkedCourseId && !reel.linkedGigId) || reel.creatorId === input.userId) return { counted: false };
     if (!input.userId) {
       try {
         await consumeRateLimit(this.redis, `reellinks:anon:${input.ip}`, ANON_VIEWS_PER_IP_PER_HOUR, 3600);

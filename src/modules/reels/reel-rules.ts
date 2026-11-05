@@ -9,4 +9,6 @@ export const COUNTED_STATUS = "PUBLISHED";
 export const reelNotFound = () => new AppError("REEL_NOT_FOUND", 404, "Reel not found");
 export const mediaNotUsable = (status = 422) => new AppError("MEDIA_NOT_USABLE", status, "This video cannot be used for a reel: it must be your own upload of the reel type that did not fail processing");
 export const courseNotLinkable = () => new AppError("COURSE_NOT_LINKABLE", 422, "You can link only a published course that you author");
+export const gigNotLinkable = () => new AppError("GIG_NOT_LINKABLE", 422, "You can link only a live gig of your own");
+export const linkConflict = () => new AppError("REEL_LINK_CONFLICT", 422, "A reel links a course or a gig, not both");
 export const stateInvalid = (message: string) => new AppError("REEL_STATE_INVALID", 409, message);

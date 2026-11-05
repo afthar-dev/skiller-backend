@@ -17,7 +17,7 @@ export const REPORTS_PER_HOUR = 20;
 export const NOTE_MAX = 500;
 export const DECISION_NOTE_MAX = 1000;
 export const REPORT_REASONS = ["SPAM", "HARASSMENT", "HATE", "SEXUAL", "VIOLENCE", "MISINFORMATION", "COPYRIGHT", "OTHER"] as const satisfies readonly ReportReason[];
-export const REPORT_TARGET_TYPES = ["REEL", "REEL_COMMENT", "COURSE_REVIEW", "COURSE_QA", "GIG_MESSAGE"] as const satisfies readonly ReportTargetType[];
+export const REPORT_TARGET_TYPES = ["REEL", "REEL_COMMENT", "COURSE_REVIEW", "COURSE_QA", "GIG_MESSAGE", "GIG"] as const satisfies readonly ReportTargetType[];
 
 const TX_OPTIONS = { timeout: 15_000, maxWait: 15_000 } as const;
 const DAY_MS = 24 * 3600_000;

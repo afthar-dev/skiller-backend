@@ -224,6 +224,7 @@ Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in ev
 - Partial unique indexes: `subscriptions_one_free_active_key`, `coupon_redemptions_live_user_key`, `refunds_order_live_key`, `payout_accounts_owner_live_key`, `certificates_live_key`.
 - Search: extension `pg_trgm`; `courses_search_vector_idx` (GIN on `searchVector`, `fastupdate = off`), `courses_title_trgm_idx` (GIN trigram on `title`).
 - Reels: `reels."searchVector"` (tsvector, `simple`: caption A, hashtags B) is set by the `reels_search_vector_trg` trigger (function `reels_search_vector_update()`), with `reels_search_vector_idx` (GIN, `fastupdate = off`) and `reels_caption_trgm_idx` (GIN trigram on `caption`, `fastupdate = off`); keep the three out of every `migrate dev` DROP/CREATE. `reels_hashtags_idx` (GIN on `hashtags`) and `reels_status_publishedAt_id_idx` are plain Prisma indexes.
+- Gigs: `gigs."searchVector"` (tsvector, `simple`: title A, tags B, description C) is set by the `gigs_search_vector_trg` trigger (function `gigs_search_vector_update()`); partial indexes on ACTIVE gigs `gigs_active_search_idx` (GIN, `fastupdate = off`), `gigs_active_title_trgm_idx` (GIN trigram on `title`), `gigs_active_newest_idx`, `gigs_active_price_idx`; keep all four out of every `migrate dev` DROP/CREATE.
 - Catalog: partial indexes `courses_pub_popular_idx`, `courses_pub_newest_idx`, `courses_pub_rating_idx` (published, unflagged courses), `enrolments_created_active_idx` (active enrolments by `createdAt`), and the stored generated column `courses."ratingShown"` (drop the `ALTER COLUMN "ratingShown"` Prisma proposes).
 
 ## Reels
@@ -260,6 +261,12 @@ The 0.05 engagement floor keeps a brand-new reel nobody has reacted to from scor
 **Settings.** `reel_max_seconds` (default 90) and `report_autohide_threshold` (default 5), both in the platform settings table above. Phase 4 adds no other setting.
 
 **Hand-written database objects.** None were added after the feed task: see the list under Courses (the `reels_search_vector_trg` trigger with `reels_search_vector_idx` and `reels_caption_trgm_idx`). `reel_view_daily."linkClicks"` is a plain column.
+
+## Gigs
+
+Gig listings (creators sell, display-only prices, payments happen off-platform) live in `src/modules/gigs`. **Search.** `GET /v1/gigs?q=&category=&minPrice=&maxPrice=&sort=` (public, 300 reads a minute per IP) searches live gigs only: `q` is full-text over title (A), tags (B) and description (C) in the `simple` configuration, with fuzzy title matching when nothing matches as written; `category` is a course category slug; prices filter the starting price (lowest package, paise, kept in `gigs."startingPricePaise"` by the studio writes); `sort` is `relevance` (newest without `q`), `newest`, `price_asc`, `price_desc`. Pages use signed keyset cursors bound to the query (a cursor from another query or list, or a tampered one, is `400 BAD_CURSOR`). Seller visibility (suspended or deleted account, blocks either way) is applied through `GigVisibility` after the query and the page is refilled from the same keyset, so hidden sellers never leak and never shorten a page unless the matches run out.
+
+**Moderation.** Gigs are a report target (`GIG`): a live gig can be reported, `report_autohide_threshold` distinct reporters move it to `HIDDEN` (off every public surface, still the seller's, still counted against `max_active_gigs`); dismissed brings it back to `ACTIVE`, upheld makes it `REMOVED` plus a strike. **Reel links.** `POST/PATCH /v1/reels` accept `linkedGigId` (a live gig of the reel's creator; `422 GIG_NOT_LINKABLE`), mutually exclusive with `linkedCourseId` (`422 REEL_LINK_CONFLICT`). Reels show `gig` (id, slug, title, startingPricePaise, cover) only while the gig is ACTIVE; link clicks on a gig card are counted like course card clicks.
 
 ## Moderation
 
