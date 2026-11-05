@@ -1,0 +1,5 @@
+# Final fix wave report
+Status: DONE. Full suite 109 suites / 1220 tests green (run after last source edit), tsc, lint, build, test:scripts clean. No routes or schema changed (no openapi regen, no migration, drift unaffected).
+Items: C1 (ownerOf any state + reportable/onDismiss/afterUphold hooks, OpenReports keeps media on delete), I1 (assertCanPost on caption/link PATCH and comment edit), I2 (MediaPurger + MediaAttachments.takedown, inline purge after uphold commit, hourly cleanup fallback), I3 (Lua best-so-far watch accumulation), I4 (foryou:u:<id> single key with generation, anonymous shared list, 300 cap), I5 (newest 300 + top 300 engagement, no new index: existing status/publishedAt index), account-status hiding via UserStatusCache.getMany in ReelVisibility and comments.
+RED files: final-red-1..4.txt; green: final-green-*.txt.
+Rulings: purge deletes the asset row (moderation.e2e assertion updated); watch time for a cookie-dropping client can double-count up to 2x duration; status cache is 60 s and relies on suspend/unsuspend put/bust (no account-deletion code path exists yet); comment replyCount excludes inactive authors, commentCount still includes them.
