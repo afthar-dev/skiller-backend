@@ -9,6 +9,8 @@ import { consumeRateLimit } from "../../common/redis/rate-limiter";
 import { REDIS } from "../../common/redis/redis.constants";
 import { istDateOf } from "../billing";
 import { bumpCounter, readCounter } from "./reel-counters";
+import { ReelVisibility } from "./reel-visibility";
+import { collectVisible } from "./visible-page";
 import { ReelNotifier } from "./reel-notifier";
 import { reelNotFound } from "./reel-rules";
 import { ReelViews, type ReelView } from "./reel-views";
@@ -35,13 +37,14 @@ export class EngagementService {
     private readonly outbox: OutboxService,
     private readonly notifier: ReelNotifier,
     private readonly views: ReelViews,
+    private readonly visibility: ReelVisibility,
     private readonly cursors: SignedCursor,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async like(userId: string, reelId: string): Promise<{ liked: true; likeCount: number }> {
-    const reel = await this.visibleReel(reelId);
+    const reel = await this.visibleReel(reelId, userId);
     await consumeRateLimit(this.redis, `reel-like:${userId}`, LIKES_PER_MINUTE, 60);
     const { changed, count } = await this.prisma.$transaction(async (tx) => {
       const inserted = await tx.reelLike.createMany({ data: [{ reelId, userId, createdAt: this.clock.now() }], skipDuplicates: true });
@@ -56,7 +59,7 @@ export class EngagementService {
   }
 
   async unlike(userId: string, reelId: string): Promise<{ liked: false; likeCount: number }> {
-    await this.visibleReel(reelId);
+    await this.visibleReel(reelId, userId);
     await consumeRateLimit(this.redis, `reel-like:${userId}`, LIKES_PER_MINUTE, 60);
     const count = await this.prisma.$transaction(async (tx) => {
       const removed = await tx.reelLike.deleteMany({ where: { reelId, userId } });
@@ -66,7 +69,7 @@ export class EngagementService {
   }
 
   async save(userId: string, reelId: string): Promise<{ saved: true; saveCount: number }> {
-    await this.visibleReel(reelId);
+    await this.visibleReel(reelId, userId);
     await consumeRateLimit(this.redis, `reel-save:${userId}`, SAVES_PER_MINUTE, 60);
     const count = await this.prisma.$transaction(async (tx) => {
       const inserted = await tx.reelSave.createMany({ data: [{ reelId, userId, createdAt: this.clock.now() }], skipDuplicates: true });
@@ -78,7 +81,7 @@ export class EngagementService {
   }
 
   async unsave(userId: string, reelId: string): Promise<{ saved: false; saveCount: number }> {
-    await this.visibleReel(reelId);
+    await this.visibleReel(reelId, userId);
     await consumeRateLimit(this.redis, `reel-save:${userId}`, SAVES_PER_MINUTE, 60);
     const count = await this.prisma.$transaction(async (tx) => {
       const removed = await tx.reelSave.deleteMany({ where: { reelId, userId } });
@@ -92,7 +95,7 @@ export class EngagementService {
    * accepted (and rate limited per IP) but never counted: they cannot be told apart.
    */
   async share(userId: string | null, ip: string, reelId: string, channel: ShareChannel): Promise<{ counted: boolean; shareCount: number }> {
-    const reel = await this.visibleReel(reelId);
+    const reel = await this.visibleReel(reelId, userId);
     if (!userId) {
       await consumeRateLimit(this.redis, `reel-share-ip:${ip}`, SHARES_PER_MINUTE, 60);
       return { counted: false, shareCount: reel.shareCount };
@@ -116,26 +119,34 @@ export class EngagementService {
       if (typeof c.id !== "string" || Number.isNaN(t.getTime())) throw badCursor();
       after = { t, id: c.id };
     }
-    const rows = await this.prisma.reelSave.findMany({
-      where: {
-        userId,
-        reel: { status: "PUBLISHED" },
-        ...(after ? { OR: [{ createdAt: { lt: after.t } }, { createdAt: after.t, reelId: { lt: after.id } }] } : {}),
-      },
-      orderBy: [{ createdAt: "desc" }, { reelId: "desc" }],
-      take: page.limit + 1,
-      include: { reel: true },
+    type Pos = { t: Date; id: string };
+    // Hidden, removed and blocked reels drop out of the list (the page is topped up from the saves after them).
+    const { items, next } = await collectVisible({
+      limit: page.limit,
+      start: after ?? null,
+      fetch: (from: Pos | null, take: number) =>
+        this.prisma.reelSave.findMany({
+          where: {
+            userId,
+            reel: { status: "PUBLISHED" },
+            ...(from ? { OR: [{ createdAt: { lt: from.t } }, { createdAt: from.t, reelId: { lt: from.id } }] } : {}),
+          },
+          orderBy: [{ createdAt: "desc" }, { reelId: "desc" }],
+          take,
+          include: { reel: true },
+        }),
+      posOf: (r): Pos => ({ t: r.createdAt, id: r.reelId }),
+      idOf: (r) => r.reelId,
+      visible: (ids) => this.visibility.filterVisible(userId, { reelIds: ids }, { mutes: false }),
     });
-    const items = rows.slice(0, page.limit);
-    const last = items[items.length - 1];
-    const nextCursor = rows.length > page.limit && last ? this.cursors.sign(SAVED_REELS_CURSOR, { t: last.createdAt.toISOString(), id: last.reelId }) : null;
+    const nextCursor = next ? this.cursors.sign(SAVED_REELS_CURSOR, { t: next.t.toISOString(), id: next.id }) : null;
     return { items: await this.views.build(items.map((r) => r.reel), userId), nextCursor };
   }
 
-  /** A reel the public can see (published); anything else does not exist for engagement. */
-  private async visibleReel(reelId: string) {
+  /** A reel this viewer can see (published, and neither side blocked the other); anything else does not exist for engagement. */
+  private async visibleReel(reelId: string, viewerId: string | null) {
     const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
-    if (!reel || reel.status !== "PUBLISHED") throw reelNotFound();
+    if (!reel || reel.status !== "PUBLISHED" || (await this.visibility.filterVisible(viewerId, { reelIds: [reelId] }, { mutes: false })).length === 0) throw reelNotFound();
     return reel;
   }
 }

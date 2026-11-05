@@ -8,6 +8,8 @@ export const SETTINGS = {
   max_upload_mb_course_lesson: { schema: z.number().int().min(1).max(51200), default: 5120 },
   /** Max reel length in seconds. */
   reel_max_seconds: { schema: z.number().int().min(1).max(600), default: 90 },
+  /** Distinct members who must report the same content before it is hidden until a moderator decides. */
+  report_autohide_threshold: { schema: z.number().int().min(1).max(1000), default: 5 },
   /** GST rate in basis points (1800 = 18%). Platform fees and subscription prices are GST-inclusive (plan decision 1). */
   gst_bps: { schema: z.number().int().min(0).max(10_000), default: 1800 },
   /** TDS rate in basis points withheld on payouts; 0 until the CA confirms (plan decision 2). */

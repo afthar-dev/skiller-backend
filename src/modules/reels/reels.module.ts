@@ -5,6 +5,7 @@ import { SignedCursor } from "../../common/http/signed-cursor";
 import { EntitlementsModule } from "../billing";
 import { CoursesModule } from "../courses";
 import { MediaModule } from "../media";
+import { ModerationModule } from "../moderation";
 import { UsersModule } from "../users";
 import { CommentsService } from "./comments.service";
 import { EngagementController, CommentsController } from "./engagement.controller";
@@ -14,6 +15,7 @@ import { HashtagReelsService } from "./hashtag-reels.service";
 import { HashtagsController, ReelSearchController } from "./hashtags.controller";
 import { ReelSearchService } from "./reel-search.service";
 import { FeedsService } from "./feeds.service";
+import { ReelNotificationFilter } from "./reel-notification-filter";
 import { ReelVisibility } from "./reel-visibility";
 import { ReelViewTracker } from "./reel-view-tracker";
 import { ReelViews } from "./reel-views";
@@ -25,7 +27,7 @@ import { ViewerResolver } from "./viewer";
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.
-  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => CoursesModule), EntitlementsModule],
+  imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => CoursesModule), forwardRef(() => ModerationModule), EntitlementsModule],
   controllers: [FeedsController, ReelSearchController, HashtagsController, ReelsController, EngagementController, CommentsController, ReelViewsController],
   providers: [
     ...REELS_CORE_PROVIDERS,
@@ -38,6 +40,7 @@ import { ViewerResolver } from "./viewer";
     HashtagReelsService,
     ReelSearchService,
     ReelViewTracker,
+    ReelNotificationFilter,
     ViewerResolver,
     { provide: SignedCursor, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new SignedCursor(config.jwtSecret) },
   ],

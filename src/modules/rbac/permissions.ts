@@ -4,6 +4,7 @@ import "../billing/permissions";
 import "../wallet/permissions";
 import "../courses/permissions";
 import "../reels/permissions";
+import "../moderation/permissions";
 
 // Phase-1 permission keys. Later phases add their own definePermissions() calls next to their modules.
 export const ProfilePermissions = definePermissions("profile", { update_any: "Edit any user's profile" });

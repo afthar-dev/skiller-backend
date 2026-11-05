@@ -146,6 +146,7 @@ Stored in `platform_settings` (admin API), read through a typed registry; the de
 | `sac_code` | `998439` | Service accounting code on invoices. |
 | `max_upload_mb_course_lesson` | `5120` | Largest lesson video upload, MB. |
 | `reel_max_seconds` | `90` | Longest reel. |
+| `report_autohide_threshold` | `5` | Distinct members who must report the same content before it is hidden until a moderator decides. |
 
 ### Finance operations
 
@@ -224,6 +225,10 @@ Prisma cannot express them, so it proposes `DROP INDEX` / `ALTER` for them in ev
 - Search: extension `pg_trgm`; `courses_search_vector_idx` (GIN on `searchVector`, `fastupdate = off`), `courses_title_trgm_idx` (GIN trigram on `title`).
 - Reels: `reels."searchVector"` (tsvector, `simple`: caption A, hashtags B) is set by the `reels_search_vector_trg` trigger (function `reels_search_vector_update()`), with `reels_search_vector_idx` (GIN, `fastupdate = off`) and `reels_caption_trgm_idx` (GIN trigram on `caption`, `fastupdate = off`); keep the three out of every `migrate dev` DROP/CREATE. `reels_hashtags_idx` (GIN on `hashtags`) and `reels_status_publishedAt_id_idx` are plain Prisma indexes.
 - Catalog: partial indexes `courses_pub_popular_idx`, `courses_pub_newest_idx`, `courses_pub_rating_idx` (published, unflagged courses), `enrolments_created_active_idx` (active enrolments by `createdAt`), and the stored generated column `courses."ratingShown"` (drop the `ALTER COLUMN "ratingShown"` Prisma proposes).
+
+## Moderation
+
+The `moderation` module owns reports, strikes, posting restrictions, blocks and mutes; content stays with its owner, which registers a `ModerationTarget` (hide / remove / restore) with `ModerationTargetRegistry` (reels and reel comments in the reels module, course reviews and Q&A in courses). `POST /v1/reports` (20 an hour, one per member per item); `report_autohide_threshold` distinct open reporters hide the item until a moderator decides (`GET /v1/admin/moderation/reports`, `POST /v1/admin/moderation/targets/:type/:id/uphold|dismiss`, permission `moderation.review`, audited, never on your own content or courses). Upheld = content removed + one strike (90 days); 3 active strikes bar posting reels and comments for 7 days (`403 POSTING_RESTRICTED`, `details.until`). Blocks are symmetric in effect and end follows; mutes only hide a creator from the muter's feeds, hashtag pages and search. Every reel read path goes through `ReelVisibility.filterVisible`, fed by one per-viewer lookup cached 60 s in Redis (`rel:{user}:{epoch}`, epoch bumped on every block / mute change).
 
 ## API contract
 

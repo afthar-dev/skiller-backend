@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import type { Prisma } from "@prisma/client";
+import { UserBlocks } from "../moderation";
 import { ProfilesService, toSummary } from "./profiles.service";
 
 @Injectable()
@@ -9,6 +11,7 @@ export class FollowsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly profiles: ProfilesService,
+    private readonly blocks: UserBlocks,
   ) {}
 
   /** Idempotent: counters move only when a row is actually inserted. */
@@ -16,6 +19,8 @@ export class FollowsService {
     const target = await this.profiles.getByHandle(handle);
     if (target.userId === followerId) throw new AppError("FOLLOW_SELF", 400, "You cannot follow yourself");
     await this.profiles.ensure(followerId);
+    // A block works both ways: neither side can follow the other.
+    if (await this.blocks.isBlockedEitherWay(followerId, target.userId)) throw new AppError("FOLLOW_BLOCKED", 403, "You cannot follow this member");
 
     await this.prisma.$transaction(async (tx) => {
       const created = await tx.follow.createMany({ data: [{ followerId, followeeId: target.userId }], skipDuplicates: true });
@@ -34,6 +39,16 @@ export class FollowsService {
       await tx.profile.update({ where: { userId: target.userId }, data: { followersCount: { decrement: 1 } } });
       await tx.profile.update({ where: { userId: followerId }, data: { followingCount: { decrement: 1 } } });
     });
+  }
+
+  /** Removes the follow between two users in both directions inside `tx` and fixes the counters (a block ends any follow). */
+  async removeBetween(tx: Prisma.TransactionClient, a: string, b: string): Promise<void> {
+    for (const [followerId, followeeId] of [[a, b], [b, a]] as const) {
+      const removed = await tx.follow.deleteMany({ where: { followerId, followeeId } });
+      if (removed.count === 0) continue;
+      await tx.profile.updateMany({ where: { userId: followeeId, followersCount: { gt: 0 } }, data: { followersCount: { decrement: 1 } } });
+      await tx.profile.updateMany({ where: { userId: followerId, followingCount: { gt: 0 } }, data: { followingCount: { decrement: 1 } } });
+    }
   }
 
   /** Everyone this user follows (newest follow first), capped: the following feed filters on this list. */

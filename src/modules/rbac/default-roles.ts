@@ -27,7 +27,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
   // Invitable org roles; they carry no permissions yet (Phase 2 adds course/gig keys). Membership itself is the UserRole row.
   { key: "org_instructor", name: "Organization instructor", scope: "ORG", permissions: [] },
   { key: "org_learner", name: "Organization learner", scope: "ORG", permissions: [] },
-  { key: "moderator", name: "Moderator", scope: "PLATFORM", permissions: ["user.view", "media.manage_any", "course.review"] },
+  { key: "moderator", name: "Moderator", scope: "PLATFORM", permissions: ["user.view", "media.manage_any", "course.review", "moderation.review"] },
   { key: "support", name: "Support", scope: "PLATFORM", permissions: ["user.view", "user.revoke_sessions", "audit.view"] },
   {
     key: "finance_admin",

@@ -1579,3 +1579,102 @@ model UserInterest {
   @@index([userId, weight(sort: Desc)])
   @@map("user_interests")
 }
+
+// ─── moderation ──────────────────────────────────────────────────────────
+// The moderation module owns reports, strikes, blocks, mutes and posting restrictions. Content stays in its owner's tables (reels, reel comments,
+// course reviews and Q&A): owners register a target adapter that hides / removes / restores it, and the decision lives here.
+
+enum ReportTargetType {
+  REEL
+  REEL_COMMENT
+  COURSE_REVIEW
+  COURSE_QA
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  HATE
+  SEXUAL
+  VIOLENCE
+  MISINFORMATION
+  COPYRIGHT
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  UPHELD
+  DISMISSED
+}
+
+model Report {
+  id           String           @id @default(uuid(7))
+  targetType   ReportTargetType
+  targetId     String
+  reporterId   String
+  reason       ReportReason
+  note         String?
+  status       ReportStatus     @default(OPEN)
+  createdAt    DateTime         @default(now())
+  decidedBy    String?
+  decidedAt    DateTime?
+  /// The moderator's note on the decision (the same note for every report decided together).
+  decisionNote String?
+
+  @@unique([targetType, targetId, reporterId])
+  @@index([status, targetType, targetId])
+  @@index([reporterId, createdAt])
+  @@map("reports")
+}
+
+/// Content held back by the report threshold, awaiting a moderator. One row per target; deleted when a moderator decides.
+model ModerationHold {
+  targetType ReportTargetType
+  targetId   String
+  createdAt  DateTime         @default(now())
+
+  @@id([targetType, targetId])
+  @@map("moderation_holds")
+}
+
+/// One per upheld decision (not per report). `reportId` is one of the reports decided together.
+model Strike {
+  id        String   @id @default(uuid(7))
+  userId    String
+  reportId  String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId, expiresAt])
+  @@map("strikes")
+}
+
+/// A user barred from posting reels and comments until `until` (set when the third active strike lands).
+model UserRestriction {
+  userId    String   @id
+  until     DateTime
+  reason    String
+  updatedAt DateTime @updatedAt
+
+  @@map("user_restrictions")
+}
+
+model UserBlock {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+model UserMute {
+  userId    String
+  mutedId   String
+  createdAt DateTime @default(now())
+
+  @@id([userId, mutedId])
+  @@map("user_mutes")
+}

@@ -41,6 +41,11 @@ export const NOTIFICATION_TYPES = {
   "reel.like": { transactional: false },
   "reel.comment": { transactional: false },
   "reel.reply": { transactional: false },
+  "moderation.hidden": { transactional: false },
+  "moderation.removed": { transactional: false },
+  "moderation.restored": { transactional: false },
+  "moderation.strike": { transactional: false },
+  "moderation.restricted": { transactional: false },
 } as const;
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;

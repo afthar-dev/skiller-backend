@@ -6,6 +6,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { AccountService } from "../identity";
 import { MailService } from "../mail";
 import type { MailData, MailTemplate } from "../mail";
+import { NotificationFilters } from "./notification-filters";
 import { defaultPreference, NOTIFICATION_TYPE_KEYS, type EffectivePreference, type NotificationType } from "./notification-types";
 
 export interface NotifyInput {
@@ -51,6 +52,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly accounts: AccountService,
     private readonly mail: MailService,
+    private readonly filters: NotificationFilters,
   ) {}
 
   async preferenceFor(userId: string, type: NotificationType): Promise<EffectivePreference> {
@@ -98,7 +100,9 @@ export class NotificationsService {
       take: page.limit + 1,
     });
     const { items, nextCursor } = toPage(rows, page.limit);
-    return { items: items.map(toView), nextCursor };
+    // Notifications about content moderation took down, or people the user blocked, are left out (a page can come back shorter; nextCursor still continues).
+    const hidden = await this.filters.hidden(userId, items);
+    return { items: items.filter((n) => !hidden.has(n.id)).map(toView), nextCursor };
   }
 
   async unreadCount(userId: string): Promise<{ count: number }> {

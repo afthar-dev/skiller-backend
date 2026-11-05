@@ -8,10 +8,12 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService } from "../billing";
 import { CourseLookup, sanitizePlainText } from "../courses";
 import { MediaAttachments } from "../media";
+import { PostingRestrictions } from "../moderation";
 import { ProfilesService } from "../users";
 import { adjustHashtags } from "./hashtag-counts";
 import { extractHashtags } from "./hashtags";
 import { ReelPublisher } from "./reel-publisher";
+import { ReelVisibility } from "./reel-visibility";
 import { CAPTION_MAX, COUNTED_STATUS, courseNotLinkable, EDITABLE_STATUSES, mediaNotUsable, reelNotFound, stateInvalid } from "./reel-rules";
 import { ReelViews, type ReelView } from "./reel-views";
 
@@ -42,6 +44,8 @@ export class ReelsService {
     private readonly profiles: ProfilesService,
     private readonly entitlements: EntitlementsService,
     private readonly views: ReelViews,
+    private readonly visibility: ReelVisibility,
+    private readonly restrictions: PostingRestrictions,
     private readonly cursors: SignedCursor,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -52,6 +56,7 @@ export class ReelsService {
    * in the same transaction as the reel, so the hourly orphan cleanup never takes it while it processes; a failed video is released again.
    */
   async create(userId: string, input: CreateReelInput): Promise<ReelView> {
+    await this.restrictions.assertCanPost(userId);
     const info = await this.media.assetInfo(input.mediaAssetId);
     if (!info || info.ownerId !== userId || info.orgId !== null || info.purpose !== "REEL" || info.status === "FAILED" || info.status === "PENDING") throw mediaNotUsable();
     if (input.linkedCourseId && !(await this.courses.isLinkableBy(input.linkedCourseId, userId))) throw courseNotLinkable();
@@ -74,6 +79,7 @@ export class ReelsService {
 
   /** The creator asks again: a LIMIT_REACHED reel after midnight IST, or a PROCESSING one whose ready event was missed. Still over the limit is a 403. */
   async publish(userId: string, reelId: string): Promise<ReelView> {
+    await this.restrictions.assertCanPost(userId);
     const reel = await this.owned(userId, reelId);
     if (reel.status === "PUBLISHED") return this.ownView(reel, userId);
     if (reel.status !== "PROCESSING" && reel.status !== "LIMIT_REACHED") throw stateInvalid("This reel cannot be published");
@@ -126,16 +132,22 @@ export class ReelsService {
     }, TX_OPTIONS);
   }
 
-  /** A published reel for anyone; its creator also sees it in any state but deleted. Everyone else gets 404. */
+  /**
+   * A published reel for any viewer who has not blocked, or been blocked by, its creator; its creator also sees it in any state but deleted
+   * (a hidden or removed reel shows its status in the studio). Everyone else gets 404.
+   */
   async get(reelId: string, viewerId: string | null): Promise<ReelView> {
     const reel = await this.prisma.reel.findUnique({ where: { id: reelId } });
-    if (!reel || !(reel.status === "PUBLISHED" || (viewerId === reel.creatorId && reel.status !== "DELETED"))) throw reelNotFound();
+    const isOwner = !!reel && viewerId === reel.creatorId;
+    if (!reel || (isOwner ? reel.status === "DELETED" : reel.status !== "PUBLISHED" || (await this.visibility.filterVisible(viewerId, { reelIds: [reelId] }, { mutes: false })).length === 0)) throw reelNotFound();
     return (await this.views.build([reel], viewerId))[0];
   }
 
   /** A creator's published reels, newest first (by publish time). */
   async byHandle(handle: string, page: PageQuery, viewerId: string | null): Promise<{ items: ReelView[]; nextCursor: string | null }> {
     const profile = await this.profiles.getByHandle(handle);
+    // Blocked either way: the profile tab is empty for this viewer.
+    if ((await this.visibility.filterVisible(viewerId, { creatorIds: [profile.userId] }, { mutes: false })).length === 0) return { items: [], nextCursor: null };
     let after: { t: Date; id: string } | undefined;
     if (page.cursor) {
       const c = this.cursors.verify(PROFILE_REELS_CURSOR, page.cursor);

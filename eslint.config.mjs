@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 //  - src/modules/<x> may import src/common/**, its own files, and another module <y> only through "../<y>" (its index.ts).
 //  - src/common/** must not import from src/modules/**.
 // eslint-plugin-boundaries was evaluated and dropped: v7 needs a TS import resolver plus a policy DSL for what is a one-line pattern here.
-const MODULES = ["admin", "audit", "billing", "courses", "identity", "mail", "media", "notifications", "organizations", "rbac", "users", "wallet"];
+const MODULES = ["admin", "audit", "billing", "courses", "identity", "mail", "media", "moderation", "notifications", "organizations", "rbac", "users", "wallet"];
 
 const boundaryBlocks = MODULES.map((self) => ({
   files: [`src/modules/${self}/**/*.{ts,tsx}`],
