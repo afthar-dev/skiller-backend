@@ -12,6 +12,7 @@ export { CoursesModule } from "./courses.module";
 export { assertSafeMarkdown, createMarkdownRenderer, isSafeLinkDestination } from "./markdown";
 export { sanitizePlainText, sanitizeSingleLine } from "./plain-text";
 export { CourseCategories } from "./course-categories";
+export { firstFreeSlug, randomSlug, slugify } from "./course-rules";
 export { CourseLookup } from "./course-lookup";
 export type { CourseCard } from "./course-lookup";
 export { CoursesWorkerModule } from "./courses-worker.module";

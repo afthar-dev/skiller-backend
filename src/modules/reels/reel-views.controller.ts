@@ -9,7 +9,7 @@ import type { AppConfig } from "../../common/config/config.schema";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { ReelViewTracker } from "./reel-view-tracker";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 export const DEVICE_COOKIE = "skiller_did";
 const DEVICE_ID = /^[A-Za-z0-9_-]{22}$/; // 128 random bits, base64url

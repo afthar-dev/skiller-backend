@@ -9,7 +9,7 @@ import { HASHTAG_SORTS, HashtagReelsService } from "./hashtag-reels.service";
 import { HashtagTrending } from "./hashtag-trending";
 import { ReelSearchService } from "./reel-search.service";
 import { reelReadLimit } from "./reels.controller";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 const sortSchema = z.enum(HASHTAG_SORTS).default("top");
 

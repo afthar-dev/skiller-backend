@@ -7,6 +7,7 @@ export { UsageRegistry } from "./usage.registry";
 export { EntitlementsModule } from "./entitlements.module";
 export { LIMIT_KEYS } from "./plan-catalog";
 export type { LimitKey, PlanLimits } from "./plan-catalog";
+export { gigLimitFor } from "./plan-catalog";
 export { seedPlans } from "./plans-seed";
 export { BillingReports } from "./billing-reports";
 export type { SellerRevenue } from "./billing-reports";

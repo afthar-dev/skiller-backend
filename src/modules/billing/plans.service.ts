@@ -5,7 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
 import type { MutationMeta } from "../rbac";
 import { fromApi, toApi } from "./money";
-import { FREE_PLAN_KEY, type PlanLimits } from "./plan-catalog";
+import { FREE_PLAN_KEY, withLimitDefaults, type PlanLimits, type PlanLimitsInput } from "./plan-catalog";
 
 export interface PlanVersionView {
   id: string;
@@ -31,17 +31,17 @@ export interface NewVersionInput {
   pricePaise: string;
   interval: "MONTH" | "YEAR";
   commissionBps: number;
-  limits: PlanLimits;
+  limits: PlanLimitsInput;
 }
 
-export const toVersionView = (v: PlanVersion): PlanVersionView => ({
+export const toVersionView = (v: PlanVersion, planKey: string): PlanVersionView => ({
   id: v.id,
   planId: v.planId,
   pricePaise: toApi(v.pricePaise),
   currency: "INR",
   interval: v.interval,
   commissionBps: v.commissionBps,
-  limits: v.limits as unknown as PlanLimits,
+  limits: withLimitDefaults(planKey, v.limits),
   createdAt: v.createdAt.toISOString(),
 });
 
@@ -51,7 +51,7 @@ const toPlanView = (p: Plan & { versions: PlanVersion[] }): PlanView => ({
   name: p.name,
   audience: p.audience,
   isActive: p.isActive,
-  versions: p.versions.map(toVersionView),
+  versions: p.versions.map((v) => toVersionView(v, p.key)),
 });
 
 /** Newest first; ids are UUIDv7 so id order is creation order within one createdAt tick. */
@@ -91,7 +91,7 @@ export class PlansService {
     try {
       const created = await this.prisma.$transaction(async (tx) => {
         const plan = await tx.plan.create({ data: { key: input.key, name: input.name, audience: input.audience } });
-        const version = await tx.planVersion.create({ data: this.versionData(plan.id, price, input.version) });
+        const version = await tx.planVersion.create({ data: this.versionData(plan.id, plan.key, price, input.version) });
         const view = toPlanView({ ...plan, versions: [version] });
         await this.audit.record(tx, { actorId, action: "plan.create", targetType: "plan", targetId: plan.id, before: null, after: view as unknown as Prisma.InputJsonValue, ...meta });
         return view;
@@ -109,8 +109,8 @@ export class PlansService {
     if (!plan) throw new AppError("PLAN_NOT_FOUND", 404, "Plan not found");
     const price = this.priceFor(plan.key, input.pricePaise);
     return this.prisma.$transaction(async (tx) => {
-      const version = await tx.planVersion.create({ data: this.versionData(plan.id, price, input) });
-      const view = toVersionView(version);
+      const version = await tx.planVersion.create({ data: this.versionData(plan.id, plan.key, price, input) });
+      const view = toVersionView(version, plan.key);
       await this.audit.record(tx, {
         actorId,
         action: "plan.version_create",
@@ -137,7 +137,7 @@ export class PlansService {
     return price;
   }
 
-  private versionData(planId: string, price: bigint, v: NewVersionInput): Prisma.PlanVersionUncheckedCreateInput {
-    return { planId, pricePaise: price, interval: v.interval, commissionBps: v.commissionBps, limits: v.limits as unknown as Prisma.InputJsonObject };
+  private versionData(planId: string, planKey: string, price: bigint, v: NewVersionInput): Prisma.PlanVersionUncheckedCreateInput {
+    return { planId, pricePaise: price, interval: v.interval, commissionBps: v.commissionBps, limits: withLimitDefaults(planKey, v.limits) as unknown as Prisma.InputJsonObject };
   }
 }

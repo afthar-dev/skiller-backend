@@ -62,7 +62,7 @@ const unixToDate = (v: unknown): Date | null => (typeof v === "number" && Number
 /** Plan price normalised to a year, so monthly and yearly versions compare. */
 const yearlyValue = (v: { pricePaise: bigint; interval: "MONTH" | "YEAR" }): bigint => (v.interval === "MONTH" ? v.pricePaise * 12n : v.pricePaise);
 
-const USAGE_UNIT: Partial<Record<LimitKey, UsageView["unit"]>> = { storage_gb: "bytes", max_published_courses: "count", reels_per_day: "count", org_seats: "count" };
+const USAGE_UNIT: Partial<Record<LimitKey, UsageView["unit"]>> = { storage_gb: "bytes", max_published_courses: "count", reels_per_day: "count", org_seats: "count", max_active_gigs: "count" };
 
 @Injectable()
 export class SubscriptionsService {

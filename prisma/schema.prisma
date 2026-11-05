@@ -1066,6 +1066,7 @@ model Category {
   isActive Boolean @default(true)
 
   courses Course[]
+  gigs    Gig[]
 
   @@index([position])
   @@map("categories")
@@ -1679,4 +1680,111 @@ model UserMute {
 
   @@id([userId, mutedId])
   @@map("user_mutes")
+}
+
+// ─── gigs ────────────────────────────────────────────────────────────────
+
+enum GigStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  /// Held back by the report threshold or a moderator, awaiting a decision.
+  HIDDEN
+  REMOVED
+  DELETED
+}
+
+enum GigTier {
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
+/// A creator's service listing. Display only: Skiller does not process gig payments (see `gig_orders`).
+model Gig {
+  id           String    @id @default(uuid(7))
+  sellerId     String
+  slug         String    @unique
+  title        String
+  /// Markdown, validated by assertSafeMarkdown.
+  description  String    @default("")
+  categoryId   String
+  tags         String[]
+  status       GigStatus @default(DRAFT)
+  coverAssetId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  publishedAt  DateTime?
+
+  category Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  packages GigPackage[]
+  gallery  GigGalleryItem[]
+  faqs     GigFaq[]
+
+  @@index([sellerId, status, id])
+  @@index([categoryId])
+  @@map("gigs")
+}
+
+model GigPackage {
+  gigId        String
+  tier         GigTier
+  name         String
+  description  String   @default("")
+  /// Integer paise, display only.
+  pricePaise   BigInt
+  deliveryDays Int
+  revisions    Int
+  features     String[]
+
+  gig Gig @relation(fields: [gigId], references: [id], onDelete: Cascade)
+
+  @@id([gigId, tier])
+  @@map("gig_packages")
+}
+
+model GigGalleryItem {
+  gigId    String
+  assetId  String
+  position Int
+
+  gig Gig @relation(fields: [gigId], references: [id], onDelete: Cascade)
+
+  @@id([gigId, assetId])
+  @@index([gigId, position])
+  @@map("gig_gallery_items")
+}
+
+model GigFaq {
+  id       String @id @default(uuid(7))
+  gigId    String
+  question String
+  answer   String
+  position Int
+
+  gig Gig @relation(fields: [gigId], references: [id], onDelete: Cascade)
+
+  @@index([gigId, position])
+  @@map("gig_faqs")
+}
+
+enum GigOrderStatus {
+  PENDING
+}
+
+/// RESERVED, UNUSED: the shape of a future escrowed gig order. Nothing reads or writes it, there is no service or route, and the `gig_orders` feature flag stays off.
+model GigOrder {
+  id          String         @id @default(uuid(7))
+  gigId       String
+  packageTier GigTier
+  buyerId     String
+  sellerId    String
+  pricePaise  BigInt
+  status      GigOrderStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+
+  @@index([gigId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@map("gig_orders")
 }

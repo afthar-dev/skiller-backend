@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Request } from "express";
-import { SessionService, TokenService } from "../identity";
+import { SessionService } from "./session.service";
+import { TokenService } from "./token.service";
 
 /** Public routes that show more to a signed-in viewer (liked by me, my own unpublished reel): a valid bearer token names the viewer; anything else is anonymous. */
 @Injectable()

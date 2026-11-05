@@ -12,7 +12,7 @@ import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { RequirePermission } from "../rbac";
 import { CAPTION_MAX } from "./reel-rules";
 import { ReelsService } from "./reels.service";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 const createSchema = z
   .object({ mediaAssetId: z.string().min(1).max(64), caption: z.string().max(CAPTION_MAX), linkedCourseId: z.string().uuid().optional(), commentsEnabled: z.boolean().optional() })

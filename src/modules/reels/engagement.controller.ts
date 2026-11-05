@@ -11,7 +11,7 @@ import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { CommentsService, COMMENT_MAX } from "./comments.service";
 import { EngagementService, SHARE_CHANNELS } from "./engagement.service";
 import { reelReadLimit } from "./reels.controller";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 const shareSchema = z.object({ channel: z.enum(SHARE_CHANNELS) }).strict();
 const commentSchema = z.object({ body: z.string().max(COMMENT_MAX), parentId: z.string().uuid().optional() }).strict();

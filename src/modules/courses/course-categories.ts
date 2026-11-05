@@ -6,6 +6,11 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 export class CourseCategories {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** An existing, active category (courses own the list; gigs reuse it). */
+  async isActive(categoryId: string): Promise<boolean> {
+    return (await this.prisma.category.count({ where: { id: categoryId, isActive: true } })) > 0;
+  }
+
   /** The category of each of these courses; unknown ids are absent. Availability does not matter: the link was valid when it was made. */
   async ofCourses(courseIds: string[]): Promise<Map<string, string>> {
     if (courseIds.length === 0) return new Map();

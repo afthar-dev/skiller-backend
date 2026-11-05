@@ -8,7 +8,7 @@ import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { FeedsService } from "./feeds.service";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 @ApiTags("Reels")
 @Controller("feed")

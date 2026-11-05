@@ -104,6 +104,20 @@ describe("plans and entitlements", () => {
     expect(bad.body.error.code).toBe("VALIDATION_FAILED");
   });
 
+  it("a plan version written without max_active_gigs is stored and read back with its plan key's default (a throwaway plan: the real catalog is shared by every suite)", async () => {
+    const staff = await staffWith(["billing.plans.manage"]);
+    const created = await http().post("/v1/admin/plans").set(auth(staff)).send({ key: `p_${uid()}`, name: "X", audience: "CREATOR", version: { pricePaise: "5000", interval: "MONTH", commissionBps: 800, limits: LIMITS } });
+    expect(created.status).toBe(201);
+    expect(created.body.versions[0].limits.max_active_gigs).toBe(5); // an unknown plan key gets the Free value
+    expect((await prisma.planVersion.findUniqueOrThrow({ where: { id: created.body.versions[0].id } })).limits).toMatchObject({ max_active_gigs: 5 });
+    const next = await http().post(`/v1/admin/plans/${created.body.id}/versions`).set(auth(staff)).send({ pricePaise: "6000", interval: "MONTH", commissionBps: 700, limits: LIMITS });
+    expect(next.body.limits.max_active_gigs).toBe(5);
+    const explicit = await http().post(`/v1/admin/plans/${created.body.id}/versions`).set(auth(staff)).send({ pricePaise: "7000", interval: "MONTH", commissionBps: 700, limits: { ...LIMITS, max_active_gigs: null } });
+    expect(explicit.body.limits.max_active_gigs).toBeNull();
+    const negative = await http().post(`/v1/admin/plans/${created.body.id}/versions`).set(auth(staff)).send({ pricePaise: "8000", interval: "MONTH", commissionBps: 700, limits: { ...LIMITS, max_active_gigs: -1 } });
+    expect(negative.body.error.code).toBe("VALIDATION_FAILED");
+  });
+
   it("an upload past the plan storage_gb is refused with ENTITLEMENT_LIMIT_REACHED", async () => {
     const me = await creator();
     const plan = await prisma.plan.create({ data: { key: `tiny_${uid()}`, name: "Tiny", audience: "CREATOR" } });

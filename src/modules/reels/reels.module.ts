@@ -25,7 +25,7 @@ import { ReelViewsController } from "./reel-views.controller";
 import { ReelsController } from "./reels.controller";
 import { REELS_CORE_PROVIDERS } from "./reels-core";
 import { ReelsService } from "./reels.service";
-import { ViewerResolver } from "./viewer";
+import { ViewerResolver } from "../identity";
 
 @Module({
   // forwardRef: module classes arrive through other modules' index files, which may still be loading when this file is evaluated.

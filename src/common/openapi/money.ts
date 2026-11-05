@@ -13,7 +13,7 @@ const nullableStr = { type: "string", nullable: true } as const;
 const int = { type: "integer" } as const;
 const obj = (properties: Record<string, unknown>, required: string[] = Object.keys(properties)) => ({ type: "object", required, properties });
 
-const planLimits = { type: "object", additionalProperties: true, description: "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats (null = unlimited)." };
+const planLimits = { type: "object", additionalProperties: true, description: "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats, max_active_gigs (null = unlimited; max_active_gigs may be left out on write: the plan key's default applies)." };
 
 export const moneyComponents: Record<string, unknown> = {
   Money: { type: "string", pattern: MONEY_PATTERN, example: "123400", description: "Integer paise (1/100 rupee) as a decimal string. Never a JSON number: amounts can exceed 2^53." },

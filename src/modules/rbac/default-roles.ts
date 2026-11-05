@@ -21,8 +21,7 @@ const MEMBER = ["media.upload", "org.create"] as const;
 
 export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
   { key: MEMBER_ROLE_KEY, name: "Member", scope: "PLATFORM", permissions: MEMBER },
-  // Later phases add course/gig keys to creator.
-  { key: "creator", name: "Creator", scope: "PLATFORM", permissions: [...MEMBER, "course.create", "reel.create"] },
+  { key: "creator", name: "Creator", scope: "PLATFORM", permissions: [...MEMBER, "course.create", "reel.create", "gig.create"] },
   { key: "org_owner", name: "Organization owner", scope: "ORG", permissions: ["org.manage", "org.invite", "org.wallet.manage"] },
   // Invitable org roles; they carry no permissions yet (Phase 2 adds course/gig keys). Membership itself is the UserRole row.
   { key: "org_instructor", name: "Organization instructor", scope: "ORG", permissions: [] },

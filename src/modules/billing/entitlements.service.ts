@@ -4,7 +4,7 @@ import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis/redis.constants";
-import { FREE_FALLBACK, FREE_PLAN_KEY, type LimitKey, type PlanLimits } from "./plan-catalog";
+import { FREE_FALLBACK, FREE_PLAN_KEY, withLimitDefaults, type LimitKey, type PlanLimits } from "./plan-catalog";
 
 export type OwnerType = "USER" | "ORG";
 export interface Owner {
@@ -120,7 +120,7 @@ export class EntitlementsService {
     if (best) {
       const v = best.sub.planVersion;
       return {
-        plan: { planKey: v.plan.key, versionId: v.id, commissionBps: v.commissionBps, limits: v.limits as unknown as PlanLimits, subscriptionId: best.sub.id, status: best.sub.status },
+        plan: { planKey: v.plan.key, versionId: v.id, commissionBps: v.commissionBps, limits: withLimitDefaults(v.plan.key, v.limits), subscriptionId: best.sub.id, status: best.sub.status },
         validUntil: best.until,
       };
     }
@@ -149,6 +149,6 @@ export class EntitlementsService {
   private async freePlan(): Promise<ResolvedPlan> {
     const version = await this.prisma.planVersion.findFirst({ where: { plan: { key: FREE_PLAN_KEY } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], include: { plan: true } });
     if (!version) return { ...FREE_FALLBACK, subscriptionId: null, status: null };
-    return { planKey: version.plan.key, versionId: version.id, commissionBps: version.commissionBps, limits: version.limits as unknown as PlanLimits, subscriptionId: null, status: null };
+    return { planKey: version.plan.key, versionId: version.id, commissionBps: version.commissionBps, limits: withLimitDefaults(version.plan.key, version.limits), subscriptionId: null, status: null };
   }
 }
