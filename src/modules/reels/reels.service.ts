@@ -88,6 +88,7 @@ export class ReelsService {
       const limit = await this.entitlements.limit({ ownerType: "USER", ownerId: userId }, "reels_per_day");
       throw new AppError("ENTITLEMENT_LIMIT_REACHED", 403, "Your plan's daily reel limit has been reached; try again after midnight IST or upgrade", { key: "reels_per_day", limit });
     }
+    if (result.outcome === "restricted" || result.outcome === "restricted_again") await this.restrictions.assertCanPost(userId);
     return this.ownView(result.reel, userId);
   }
 

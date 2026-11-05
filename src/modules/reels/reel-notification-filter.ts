@@ -20,7 +20,7 @@ export class ReelNotificationFilter implements OnModuleInit {
   ) {}
 
   onModuleInit() {
-    this.filters.register({ hidden: (userId, rows) => this.hidden(userId, rows) });
+    this.filters.register({ types: [...ACTIVITY_TYPES], hidden: (userId, rows) => this.hidden(userId, rows) });
   }
 
   private async hidden(userId: string, rows: FilterableNotification[]): Promise<Set<string>> {

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
-import { toPage, type PageQuery } from "../../common/http/pagination";
+import { type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AccountService } from "../identity";
 import { MailService } from "../mail";
@@ -45,6 +45,10 @@ const toView = (n: { id: string; type: string; title: string; body: string; link
   readAt: n.readAt?.toISOString() ?? null,
   createdAt: n.createdAt.toISOString(),
 });
+
+/** Rows read per round when a page skips hidden notifications, and how many rounds a single request may spend. */
+const MAX_ROUNDS = 20;
+const COUNT_BATCH = 500;
 
 @Injectable()
 export class NotificationsService {
@@ -93,20 +97,54 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * Notifications about content moderation took down, or people the user blocked, are left out. Hidden rows are skipped while reading, so a page is
+   * full whenever enough shown rows exist; the cursor is the id of the last shown row of the page, so pages never repeat or skip a shown row.
+   */
   async list(userId: string, page: PageQuery, unreadOnly: boolean) {
-    const rows = await this.prisma.notification.findMany({
-      where: { userId, ...(unreadOnly ? { readAt: null } : {}), ...(page.cursor ? { id: { lt: page.cursor } } : {}) },
-      orderBy: { id: "desc" }, // UUIDv7: id order is time order
-      take: page.limit + 1,
-    });
-    const { items, nextCursor } = toPage(rows, page.limit);
-    // Notifications about content moderation took down, or people the user blocked, are left out (a page can come back shorter; nextCursor still continues).
-    const hidden = await this.filters.hidden(userId, items);
-    return { items: items.filter((n) => !hidden.has(n.id)).map(toView), nextCursor };
+    const batch = Math.max(50, page.limit * 2);
+    const shown: Awaited<ReturnType<typeof this.fetchBatch>> = [];
+    let cursor = page.cursor;
+    for (let round = 0; round < MAX_ROUNDS && shown.length <= page.limit; round++) {
+      const rows = await this.fetchBatch(userId, unreadOnly, cursor, batch + 1);
+      const scan = rows.slice(0, batch);
+      const hidden = await this.filters.hidden(userId, scan);
+      for (const n of scan) if (!hidden.has(n.id)) shown.push(n);
+      if (rows.length <= batch) return { items: shown.slice(0, page.limit).map(toView), nextCursor: shown.length > page.limit ? shown[page.limit - 1].id : null };
+      cursor = scan[scan.length - 1].id;
+    }
+    // Scan budget spent (a very long run of hidden rows): hand back what was found and continue from where the scan stopped.
+    const items = shown.slice(0, page.limit);
+    return { items: items.map(toView), nextCursor: shown.length > page.limit ? items[items.length - 1].id : cursor ?? null };
   }
 
+  private fetchBatch(userId: string, unreadOnly: boolean, cursor: string | undefined, take: number) {
+    return this.prisma.notification.findMany({
+      where: { userId, ...(unreadOnly ? { readAt: null } : {}), ...(cursor ? { id: { lt: cursor } } : {}) },
+      orderBy: { id: "desc" }, // UUIDv7: id order is time order
+      take,
+    });
+  }
+
+  /** What the list would show as unread: types no filter touches are one SQL count, the rest are checked row by row. */
   async unreadCount(userId: string): Promise<{ count: number }> {
-    return { count: await this.prisma.notification.count({ where: { userId, readAt: null } }) };
+    const filtered = this.filters.filteredTypes();
+    let count = await this.prisma.notification.count({ where: { userId, readAt: null, ...(filtered.length ? { type: { notIn: filtered } } : {}) } });
+    if (filtered.length === 0) return { count };
+    let after: string | undefined;
+    for (;;) {
+      const rows = await this.prisma.notification.findMany({
+        where: { userId, readAt: null, type: { in: filtered }, ...(after ? { id: { lt: after } } : {}) },
+        orderBy: { id: "desc" },
+        take: COUNT_BATCH,
+      });
+      if (rows.length === 0) break;
+      const hidden = await this.filters.hidden(userId, rows);
+      count += rows.length - hidden.size;
+      if (rows.length < COUNT_BATCH) break;
+      after = rows[rows.length - 1].id;
+    }
+    return { count };
   }
 
   /** Idempotent. Another user's (or an unknown) id is a 404, never a hint that the row exists. */

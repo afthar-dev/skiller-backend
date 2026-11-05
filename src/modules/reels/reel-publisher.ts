@@ -4,12 +4,13 @@ import { CLOCK, type Clock } from "../../common/clock/clock";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService, istDateOf, istDayRange } from "../billing";
 import { MediaAttachments } from "../media";
+import { PostingRestrictions } from "../moderation";
 import { adjustHashtags } from "./hashtag-counts";
 import { ReelNotifier } from "./reel-notifier";
 import { reelNotFound } from "./reel-rules";
 
 /** What a publish attempt did: the reel went live, hit the daily limit (newly, or it was already waiting), is still waiting for its video, failed, or was not in a state to change. */
-export type PublishOutcome = "published" | "limit" | "limit_again" | "waiting" | "failed" | "noop";
+export type PublishOutcome = "published" | "limit" | "limit_again" | "restricted" | "restricted_again" | "waiting" | "failed" | "noop";
 
 const TX_OPTIONS = { timeout: 15_000, maxWait: 15_000 } as const;
 
@@ -25,6 +26,7 @@ export class ReelPublisher {
     private readonly media: MediaAttachments,
     private readonly entitlements: EntitlementsService,
     private readonly notifier: ReelNotifier,
+    private readonly restrictions: PostingRestrictions,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -37,6 +39,10 @@ export class ReelPublisher {
     const info = await this.media.assetInfo(reel.mediaAssetId);
     if (!info || info.status === "FAILED") return this.fail(reel, "MEDIA_FAILED", opts.eventId);
     if (info.status !== "READY") return { reel, outcome: "waiting" };
+
+    // A creator under a posting ban (three strikes) cannot go live: the reel waits (LIMIT_REACHED, failureReason POSTING_RESTRICTED) and POST /v1/reels/:id/publish works once the ban ends.
+    const bannedUntil = await this.restrictions.bannedUntil(reel.creatorId);
+    if (bannedUntil) return this.park(reel, bannedUntil, opts.eventId);
 
     const limit = await this.entitlements.limit({ ownerType: "USER", ownerId: reel.creatorId }, "reels_per_day");
     const now = this.clock.now();
@@ -74,6 +80,22 @@ export class ReelPublisher {
       });
     }
     return { reel: fresh, outcome };
+  }
+
+  /** PROCESSING -> LIMIT_REACHED (reason POSTING_RESTRICTED), once; tells the creator. A reel already waiting stays as it is, silently. */
+  private async park(reel: Reel, until: Date, eventId?: string): Promise<{ reel: Reel; outcome: PublishOutcome }> {
+    const res = await this.prisma.reel.updateMany({ where: { id: reel.id, status: "PROCESSING" }, data: { status: "LIMIT_REACHED", failureReason: "POSTING_RESTRICTED" } });
+    if (res.count === 1) {
+      await this.notifier.notifyUser(reel.creatorId, {
+        type: "reel.restricted",
+        title: "Your reel is on hold",
+        body: `Your video is ready, but you cannot post until ${until.toISOString()}. Publish it again once your restriction ends.`,
+        link: `/reels/${reel.id}`,
+        data: { reelId: reel.id, until: until.toISOString() },
+        sourceEventId: eventId,
+      });
+    }
+    return { reel: await this.prisma.reel.findUniqueOrThrow({ where: { id: reel.id } }), outcome: res.count === 1 ? "restricted" : "restricted_again" };
   }
 
   /** PROCESSING -> FAILED, once; tells the creator. A reel in any other state is left alone. */
