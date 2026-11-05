@@ -23,5 +23,13 @@ describe("API boot (src/main.ts path)", () => {
     expect((await fetch(`${base}/v1/studio/courses/x/analytics`)).status).toBe(401);
     const { SellableRegistry } = await import("../../src/modules/billing");
     expect(app.get(SellableRegistry).find("COURSE")).toBeDefined();
+    // Phase 4: the reels module is wired into the real app (public reel pages and beacons, studio analytics behind auth, moderation reports behind auth).
+    expect((await fetch(`${base}/v1/hashtags/trending`)).status).toBe(200);
+    expect((await fetch(`${base}/v1/feed/for-you`)).status).toBe(200);
+    expect((await fetch(`${base}/v1/studio/reels/analytics`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/studio/reels/x/analytics`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/feed/following`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/reels/00000000-0000-0000-0000-000000000000/link-click`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
+    expect((await fetch(`${base}/v1/reports`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(401);
   });
 });

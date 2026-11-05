@@ -81,6 +81,31 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(MediaAttachments)).toBeDefined();
   });
 
+  it("Phase 4: the worker runs every reel handler and job (media.ready publish and media.failed, reel.engaged interest weights, view + link-click flush, trending hashtags) and holds the moderation targets", async () => {
+    const { EventBus } = await import("./common/outbox/event-bus");
+    const { ProcessorRegistry } = await import("./common/queue/processor-registry");
+    const { QueueNames } = await import("./common/queue/queue.constants");
+    const { queueToken } = await import("./common/queue/queue.constants");
+    const { ModerationTargetRegistry, PostingRestrictions } = await import("./modules/moderation");
+    const { NotificationFilters } = await import("./modules/notifications");
+    const { ReelViewFlusher } = await import("./modules/reels/reel-view-flusher");
+    const { InterestsService } = await import("./modules/reels/interests.service");
+    const { ReelNotifier } = await import("./modules/reels/reel-notifier");
+
+    // Events: publish on media.ready (with the posting-ban and daily-limit checks), fail on media.failed, interest weights on reel.engaged.
+    expect(app.get(EventBus).registeredTypes()).toEqual(expect.arrayContaining(["media.ready", "media.failed", "reel.engaged"]));
+    // Jobs: the minute-by-minute view / link-click flush and the hourly trending-hashtag refresh. Interest decay is lazy (applied on read), so it has no job.
+    const jobs = app.get(ProcessorRegistry).for(QueueNames.maintenance).flatMap((p) => p.jobNames);
+    expect(jobs).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending"]));
+    const keys = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).map((x) => x.key);
+    expect(keys).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending"]));
+    // Services those handlers need.
+    for (const token of [ReelViewFlusher, InterestsService, ReelNotifier, PostingRestrictions, NotificationFilters]) expect(app.get(token)).toBeDefined();
+    // Moderation holds: reels and reel comments are registered so a hide / remove / restore decided in the API stays consistent from the worker too.
+    expect(app.get(ModerationTargetRegistry).get("REEL")).toBeDefined();
+    expect(app.get(ModerationTargetRegistry).get("REEL_COMMENT")).toBeDefined();
+  });
+
   it("registers the COURSE sellable and its refund rule in the worker: webhook-first fulfilment runs here", async () => {
     const { SellableRegistry, RefundEligibilityRegistry } = await import("./modules/billing");
     const provider = app.get(SellableRegistry).find("COURSE");

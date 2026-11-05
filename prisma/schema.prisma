@@ -1538,6 +1538,8 @@ model ReelViewDaily {
   watchSec      Int      @default(0)
   /// Approximate (a HyperLogLog count of the viewers whose view was counted that day).
   uniqueViewers Int      @default(0)
+  /// Clicks on the "View course" card (one per viewer per reel per IST day), flushed with the views.
+  linkClicks    Int      @default(0)
   updatedAt     DateTime @default(now()) @updatedAt
 
   reel Reel @relation(fields: [reelId], references: [id], onDelete: Cascade)

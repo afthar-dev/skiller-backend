@@ -20,6 +20,13 @@ export class MediaAttachments {
     return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, orgId: true, purpose: true, status: true, durationSec: true } });
   }
 
+  /** Duration in seconds by asset id (null when unknown), for modules that report on their videos in bulk. */
+  async durations(assetIds: string[]): Promise<Map<string, number | null>> {
+    if (assetIds.length === 0) return new Map();
+    const rows = await this.prisma.mediaAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, durationSec: true } });
+    return new Map(rows.map((r) => [r.id, r.durationSec]));
+  }
+
   async attach(tx: Prisma.TransactionClient, assetId: string, ownerId: string, purpose: MediaAsset["purpose"]): Promise<void> {
     await this.claim(tx, assetId, ownerId, purpose, ["READY"]);
   }

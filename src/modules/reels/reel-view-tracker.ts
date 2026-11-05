@@ -79,21 +79,7 @@ export class ReelViewTracker {
       }
     }
 
-    const seen = async (viewer: string) => (await this.redis.set(`reelview:seen:${reel.id}:${day}:${viewer}`, "1", "EX", SEEN_TTL_SEC, "NX")) === "OK";
-    let viewerKey: string;
-    let first: boolean;
-    if (input.userId) {
-      viewerKey = `u:${input.userId}`;
-      first = await seen(viewerKey);
-    } else if (input.deviceId) {
-      viewerKey = `d:${input.deviceId}`;
-      first = await seen(viewerKey);
-    } else {
-      // No usable cookie: address + browser decides, and the device id handed out now is marked too, so the next beacon (which carries it) is not a second view.
-      viewerKey = `ip:${input.ip}|${sha256(input.userAgent)}`;
-      first = await seen(viewerKey);
-      if (input.issuedDeviceId) await seen(`d:${input.issuedDeviceId}`);
-    }
+    const { viewerKey, first } = await this.claim("reelview", reel.id, day, input);
     if (!first) return { counted: false };
 
     await this.redis
@@ -104,6 +90,46 @@ export class ReelViewTracker {
       .expire(viewersKey(reel.id, day), VIEWERS_TTL_SEC)
       .exec();
     return { counted: true };
+  }
+
+  /**
+   * The "View course" card was clicked. Same viewer rules as a view (one per viewer per reel per IST day, anonymous beacons capped per address),
+   * but needs no watch time. Only a reel that links a course counts; the creator's own clicks do not.
+   */
+  async recordLinkClick(input: Omit<ViewInput, "watchedSec">): Promise<{ counted: boolean }> {
+    const reel = await this.prisma.reel.findUnique({ where: { id: input.reelId }, select: { id: true, status: true, creatorId: true, linkedCourseId: true } });
+    if (!reel || reel.status !== "PUBLISHED") throw reelNotFound();
+    if (!reel.linkedCourseId || reel.creatorId === input.userId) return { counted: false };
+    if (!input.userId) {
+      try {
+        await consumeRateLimit(this.redis, `reellinks:anon:${input.ip}`, ANON_VIEWS_PER_IP_PER_HOUR, 3600);
+      } catch (err) {
+        if (err instanceof AppError && err.code === "RATE_LIMITED") return { counted: false };
+        throw err;
+      }
+    }
+    const day = istDateOf(this.clock.now());
+    if (!(await this.claim("reellink", reel.id, day, input)).first) return { counted: false };
+    await this.redis.hincrby(PENDING_VIEWS_KEY, `${reel.id}:${day}:c`, 1);
+    return { counted: true };
+  }
+
+  /** Marks the viewer as having acted on this reel today: true only for the first time. `prefix` keeps views and clicks apart. */
+  private async claim(prefix: string, reelId: string, day: string, input: Pick<ViewInput, "userId" | "deviceId" | "issuedDeviceId" | "ip" | "userAgent">): Promise<{ viewerKey: string; first: boolean }> {
+    const seen = async (viewer: string) => (await this.redis.set(`${prefix}:seen:${reelId}:${day}:${viewer}`, "1", "EX", SEEN_TTL_SEC, "NX")) === "OK";
+    if (input.userId) {
+      const viewerKey = `u:${input.userId}`;
+      return { viewerKey, first: await seen(viewerKey) };
+    }
+    if (input.deviceId) {
+      const viewerKey = `d:${input.deviceId}`;
+      return { viewerKey, first: await seen(viewerKey) };
+    }
+    // No usable cookie: address + browser decides, and the device id handed out now is marked too, so the next beacon (which carries it) is not a second one.
+    const viewerKey = `ip:${input.ip}|${sha256(input.userAgent)}`;
+    const first = await seen(viewerKey);
+    if (input.issuedDeviceId) await seen(`d:${input.issuedDeviceId}`);
+    return { viewerKey, first };
   }
 
   /** What a signed-in user has watched; updated on every beacon, counted or not. */

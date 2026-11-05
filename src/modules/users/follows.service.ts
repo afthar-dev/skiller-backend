@@ -57,6 +57,11 @@ export class FollowsService {
     return rows.map((r) => r.followeeId);
   }
 
+  /** How many members started following `userId` in [from, to). */
+  async newFollowers(userId: string, from: Date, to: Date): Promise<number> {
+    return this.prisma.follow.count({ where: { followeeId: userId, createdAt: { gte: from, lt: to } } });
+  }
+
   async isFollowing(followerId: string, followeeId: string): Promise<boolean> {
     return (await this.prisma.follow.count({ where: { followerId, followeeId } })) > 0;
   }
