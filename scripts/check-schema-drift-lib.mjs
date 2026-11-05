@@ -6,6 +6,8 @@
 export const KNOWN_NOISE_STATEMENTS = [
   'DROP INDEX "courses_search_vector_idx";',
   'DROP INDEX "courses_title_trgm_idx";',
+  'DROP INDEX "reels_search_vector_idx";',
+  'DROP INDEX "reels_caption_trgm_idx";',
   'DROP INDEX "profiles_handle_pattern_idx";',
   'DROP INDEX "users_email_pattern_idx";',
   'CREATE INDEX "profiles_handle_pattern_idx" ON "profiles"("handle" text_pattern_ops);',

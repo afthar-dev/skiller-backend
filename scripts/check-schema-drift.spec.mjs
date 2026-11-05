@@ -10,6 +10,12 @@ DROP INDEX "courses_search_vector_idx";
 DROP INDEX "courses_title_trgm_idx";
 
 -- DropIndex
+DROP INDEX "reels_search_vector_idx";
+
+-- DropIndex
+DROP INDEX "reels_caption_trgm_idx";
+
+-- DropIndex
 DROP INDEX "profiles_handle_pattern_idx";
 
 -- DropIndex

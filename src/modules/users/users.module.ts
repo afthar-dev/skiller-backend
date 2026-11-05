@@ -11,6 +11,6 @@ import { ProfilesService } from "./profiles.service";
   imports: [forwardRef(() => MediaModule)],
   controllers: [MeController, ProfilesController],
   providers: [ProfilesService, FollowsService, CreatorService, ProfileRegistrationHandler],
-  exports: [ProfilesService],
+  exports: [ProfilesService, FollowsService],
 })
 export class UsersModule {}

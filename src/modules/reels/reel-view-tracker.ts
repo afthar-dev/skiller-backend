@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { Redis } from "ioredis";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
@@ -19,6 +20,8 @@ const MAX_REEL_SEC = 90;
 const SEEN_TTL_SEC = 90_000;
 /** Anonymous viewers: beacons per address per hour (counted or not). */
 export const ANON_VIEWS_PER_IP_PER_HOUR = 300;
+/** Watching this share of a reel counts as interest in it. */
+export const INTEREST_VIEW_PCT = 50;
 const VIEWERS_TTL_SEC = 3 * 24 * 3600;
 
 export interface ViewInput {
@@ -48,6 +51,7 @@ const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 export class ReelViewTracker {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
     private readonly media: MediaAttachments,
     @Inject(REDIS) private readonly redis: Redis,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -105,10 +109,15 @@ export class ReelViewTracker {
   /** What a signed-in user has watched; updated on every beacon, counted or not. */
   private async markSeen(userId: string, reelId: string, watched: number, duration: number, now: Date) {
     const pct = duration > 0 ? Math.min(100, Math.round((watched / duration) * 100)) : 0;
-    await this.prisma.reelSeen.upsert({
-      where: { userId_reelId: { userId, reelId } },
-      create: { userId, reelId, lastSeenAt: now, watchedPct: pct },
-      update: { lastSeenAt: now, watchedPct: pct },
+    // Watching at least half is a signal of interest, sent once per reel (when the share first reaches the threshold).
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.reelSeen.findUnique({ where: { userId_reelId: { userId, reelId } }, select: { watchedPct: true } });
+      await tx.reelSeen.upsert({
+        where: { userId_reelId: { userId, reelId } },
+        create: { userId, reelId, lastSeenAt: now, watchedPct: pct },
+        update: { lastSeenAt: now, watchedPct: pct },
+      });
+      if (pct >= INTEREST_VIEW_PCT && (before?.watchedPct ?? 0) < INTEREST_VIEW_PCT) await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "view" });
     });
   }
 }

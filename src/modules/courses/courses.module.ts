@@ -12,6 +12,7 @@ import { CatalogController } from "./catalog.controller";
 import { CatalogCursor } from "./catalog-cursor";
 import { CatalogService } from "./catalog.service";
 import { CertificatesController } from "./certificates.controller";
+import { CourseCategories } from "./course-categories";
 import { CourseLookup } from "./course-lookup";
 import { CourseMedia } from "./course-media";
 import { CoursePlaybackPolicy } from "./course-playback.policy";
@@ -43,6 +44,6 @@ import { StudioCoursesController } from "./studio-courses.controller";
   imports: [forwardRef(() => UsersModule), forwardRef(() => MediaModule), forwardRef(() => BillingModule), EntitlementsModule, ObjectStorageModule, forwardRef(() => OrganizationsWorkerModule)],
   controllers: [CatalogController, StudioAnalyticsController, StudioCoursesController, StudioCurriculumController, PublicCurriculumController, CategoriesController, AdminCategoriesController, AdminCoursesController, LearningController, LearnController, StudioQuizzesController, LearnQuizzesController, CertificatesController, ReviewsController, StudioReviewsController, AdminContentController, QaController],
   providers: [AnalyticsService, CatalogCursor, CatalogService, CoursePolicy, CourseLookup, CourseMedia, CourseNotifier, CoursesService, CurriculumService, CategoriesService, PublishingService, ModerationService, SelfEnrolmentService, LearnService, QuizzesService, QuizAttemptsService, ReviewsService, QaService, ContentModerationService, CoursePlaybackPolicy, ...COURSES_CORE_PROVIDERS],
-  exports: [CoursePolicy, CourseLookup, CoursesService, CategoriesService, EnrolmentsService],
+  exports: [CoursePolicy, CourseLookup, CourseCategories, CoursesService, CategoriesService, EnrolmentsService],
 })
 export class CoursesModule {}

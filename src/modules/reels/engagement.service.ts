@@ -3,6 +3,7 @@ import type { Redis } from "ioredis";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import type { PageQuery } from "../../common/http/pagination";
 import { badCursor, SignedCursor } from "../../common/http/signed-cursor";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
 import { REDIS } from "../../common/redis/redis.constants";
@@ -31,6 +32,7 @@ const TX_OPTIONS = { timeout: 15_000, maxWait: 15_000 } as const;
 export class EngagementService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
     private readonly notifier: ReelNotifier,
     private readonly views: ReelViews,
     private readonly cursors: SignedCursor,
@@ -43,7 +45,9 @@ export class EngagementService {
     await consumeRateLimit(this.redis, `reel-like:${userId}`, LIKES_PER_MINUTE, 60);
     const { changed, count } = await this.prisma.$transaction(async (tx) => {
       const inserted = await tx.reelLike.createMany({ data: [{ reelId, userId, createdAt: this.clock.now() }], skipDuplicates: true });
-      return inserted.count === 1 ? { changed: true, count: await bumpCounter(tx, reelId, "likes", 1) } : { changed: false, count: await readCounter(tx, reelId, "likes") };
+      if (inserted.count !== 1) return { changed: false, count: await readCounter(tx, reelId, "likes") };
+      await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "like" });
+      return { changed: true, count: await bumpCounter(tx, reelId, "likes", 1) };
     }, TX_OPTIONS);
     if (changed) {
       await this.notifier.notifyCreatorOfActivity("like", reel, userId, { type: "reel.like", title: "Your reel is getting likes", body: "People are liking your reel.", link: `/reels/${reelId}` });
@@ -66,7 +70,9 @@ export class EngagementService {
     await consumeRateLimit(this.redis, `reel-save:${userId}`, SAVES_PER_MINUTE, 60);
     const count = await this.prisma.$transaction(async (tx) => {
       const inserted = await tx.reelSave.createMany({ data: [{ reelId, userId, createdAt: this.clock.now() }], skipDuplicates: true });
-      return inserted.count === 1 ? bumpCounter(tx, reelId, "saves", 1) : readCounter(tx, reelId, "saves");
+      if (inserted.count !== 1) return readCounter(tx, reelId, "saves");
+      await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "save" });
+      return bumpCounter(tx, reelId, "saves", 1);
     }, TX_OPTIONS);
     return { saved: true, saveCount: count };
   }
@@ -96,6 +102,7 @@ export class EngagementService {
     return this.prisma.$transaction(async (tx) => {
       const inserted = await tx.reelShare.createMany({ data: [{ reelId, userId, channel, day: istDateOf(now), createdAt: now }], skipDuplicates: true });
       const counted = inserted.count === 1;
+      if (counted) await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "share" });
       return { counted, shareCount: counted ? await bumpCounter(tx, reelId, "shares", 1) : await readCounter(tx, reelId, "shares") };
     }, TX_OPTIONS);
   }

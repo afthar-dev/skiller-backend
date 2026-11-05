@@ -27,6 +27,8 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "payout.settled": true,
   "payout.failed": true,
   "payout_account.changed": true,
+  // Interest weights are updated from it.
+  "reel.engaged": true,
   // Reserved: delivered, no consumer yet (the invite mail is sent directly).
   "org.member_invited": false,
   // Reserved: the search index and feeds consume it in a later task.

@@ -13,6 +13,8 @@ export type DomainEvent =
   | { type: "course.published"; courseId: string; ownerType: "USER" | "ORG"; ownerId: string; slug: string; title: string }
   /** A learner finished every required lesson of a course and passed every quiz in it (emitted once per enrolment). */
   | { type: "course.completed"; userId: string; courseId: string }
+  /** A signed-in user liked, saved, commented on, shared or watched at least half of a reel: feeds their interest profile (consumers read the reel, not the event). */
+  | { type: "reel.engaged"; userId: string; reelId: string; kind: "like" | "save" | "comment" | "share" | "view" }
   | { type: "org.member_invited"; orgId: string; email: string; inviteId: string }
   | { type: "role.granted"; userId: string; roleKey: string; grantedBy: string }
   | { type: "rbac.permissions_changed"; userIds: string[] }

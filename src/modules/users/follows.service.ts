@@ -36,6 +36,12 @@ export class FollowsService {
     });
   }
 
+  /** Everyone this user follows (newest follow first), capped: the following feed filters on this list. */
+  async followeeIds(followerId: string, max = 5000): Promise<string[]> {
+    const rows = await this.prisma.follow.findMany({ where: { followerId }, orderBy: { createdAt: "desc" }, take: max, select: { followeeId: true } });
+    return rows.map((r) => r.followeeId);
+  }
+
   async isFollowing(followerId: string, followeeId: string): Promise<boolean> {
     return (await this.prisma.follow.count({ where: { followerId, followeeId } })) > 0;
   }

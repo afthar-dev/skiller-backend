@@ -4,6 +4,7 @@ import type { Redis } from "ioredis";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
+import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { consumeRateLimit } from "../../common/redis/rate-limiter";
 import { REDIS } from "../../common/redis/redis.constants";
@@ -56,6 +57,7 @@ export interface CommentView {
 export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
     private readonly profiles: ProfilesService,
     private readonly media: MediaService,
     private readonly notifier: ReelNotifier,
@@ -79,6 +81,7 @@ export class CommentsService {
     const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.reelComment.create({ data: { reelId, userId, parentId: topLevelId, body, createdAt: this.clock.now() } });
       await bumpCounter(tx, reelId, "comments", 1);
+      await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "comment" });
       return row;
     }, TX_OPTIONS);
 

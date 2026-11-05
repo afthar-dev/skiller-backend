@@ -7,6 +7,7 @@ import { NotificationsWorkerModule } from "../notifications";
 import { OrganizationsWorkerModule } from "../organizations";
 import { RbacWorkerModule } from "../rbac";
 import { ProfilesService } from "../users";
+import { CourseCategories } from "./course-categories";
 import { CourseMaintenanceProcessor } from "./course-maintenance.processor";
 import { COURSES_CORE_PROVIDERS } from "./courses-core";
 
@@ -18,6 +19,6 @@ import { COURSES_CORE_PROVIDERS } from "./courses-core";
   imports: [ClockModule, BillingWorkerModule, RbacWorkerModule, ObjectStorageModule, NotificationsWorkerModule, OrganizationsWorkerModule],
   // Certificates print the learner's name: the worker has no users module, so it builds the small ProfilesService itself (as billing does for invoices).
   providers: [...COURSES_CORE_PROVIDERS, AccountService, ProfilesService],
-  exports: [CourseMaintenanceProcessor],
+  exports: [CourseMaintenanceProcessor, CourseCategories],
 })
 export class CoursesWorkerModule {}
