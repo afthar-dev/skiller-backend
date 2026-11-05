@@ -79,17 +79,33 @@ export class ReelViewTracker {
       }
     }
 
-    const { viewerKey, first } = await this.claim("reelview", reel.id, day, input);
-    if (!first) return { counted: false };
+    const { viewerKey, first, aliases } = await this.claim("reelview", reel.id, day, input);
+    // Every beacon adds what was watched beyond the viewer's best so far today (a seek back adds nothing); the view itself counts once.
+    const extra = await this.watchedBeyondBest(reel.id, day, [viewerKey, ...aliases], watched);
+    if (!first && extra === 0) return { counted: false };
 
-    await this.redis
-      .multi()
-      .hincrby(PENDING_VIEWS_KEY, `${reel.id}:${day}:v`, 1)
-      .hincrby(PENDING_VIEWS_KEY, `${reel.id}:${day}:w`, watched)
-      .pfadd(viewersKey(reel.id, day), viewerKey)
-      .expire(viewersKey(reel.id, day), VIEWERS_TTL_SEC)
-      .exec();
-    return { counted: true };
+    const m = this.redis.multi();
+    if (first) m.hincrby(PENDING_VIEWS_KEY, `${reel.id}:${day}:v`, 1);
+    if (extra > 0) m.hincrby(PENDING_VIEWS_KEY, `${reel.id}:${day}:w`, extra);
+    if (first) m.pfadd(viewersKey(reel.id, day), viewerKey).expire(viewersKey(reel.id, day), VIEWERS_TTL_SEC);
+    await m.exec();
+    return { counted: first };
+  }
+
+  /**
+   * The viewer's best watched seconds so far for this reel and IST day lives in Redis (one key per viewer identity; a cookie-less browser and the
+   * cookie it was given share the best). One Lua step reads the best, raises it to `watched` and returns the increase, so concurrent beacons never
+   * add the same seconds twice. The caller already capped `watched` at the duration.
+   */
+  private async watchedBeyondBest(reelId: string, day: string, viewers: string[], watched: number): Promise<number> {
+    const keys = viewers.map((v) => `reelwatch:${reelId}:${day}:${v}`);
+    const script = `local best = 0
+for i = 1, #KEYS do local v = tonumber(redis.call("GET", KEYS[i]) or "0"); if v > best then best = v end end
+local w = tonumber(ARGV[1])
+if w <= best then return 0 end
+for i = 1, #KEYS do redis.call("SET", KEYS[i], w, "EX", ARGV[2]) end
+return w - best`;
+    return Number(await this.redis.eval(script, keys.length, ...keys, String(watched), String(SEEN_TTL_SEC)));
   }
 
   /**
@@ -115,21 +131,21 @@ export class ReelViewTracker {
   }
 
   /** Marks the viewer as having acted on this reel today: true only for the first time. `prefix` keeps views and clicks apart. */
-  private async claim(prefix: string, reelId: string, day: string, input: Pick<ViewInput, "userId" | "deviceId" | "issuedDeviceId" | "ip" | "userAgent">): Promise<{ viewerKey: string; first: boolean }> {
+  private async claim(prefix: string, reelId: string, day: string, input: Pick<ViewInput, "userId" | "deviceId" | "issuedDeviceId" | "ip" | "userAgent">): Promise<{ viewerKey: string; first: boolean; aliases: string[] }> {
     const seen = async (viewer: string) => (await this.redis.set(`${prefix}:seen:${reelId}:${day}:${viewer}`, "1", "EX", SEEN_TTL_SEC, "NX")) === "OK";
     if (input.userId) {
       const viewerKey = `u:${input.userId}`;
-      return { viewerKey, first: await seen(viewerKey) };
+      return { viewerKey, first: await seen(viewerKey), aliases: [] };
     }
     if (input.deviceId) {
       const viewerKey = `d:${input.deviceId}`;
-      return { viewerKey, first: await seen(viewerKey) };
+      return { viewerKey, first: await seen(viewerKey), aliases: [] };
     }
     // No usable cookie: address + browser decides, and the device id handed out now is marked too, so the next beacon (which carries it) is not a second one.
     const viewerKey = `ip:${input.ip}|${sha256(input.userAgent)}`;
     const first = await seen(viewerKey);
     if (input.issuedDeviceId) await seen(`d:${input.issuedDeviceId}`);
-    return { viewerKey, first };
+    return { viewerKey, first, aliases: input.issuedDeviceId ? [`d:${input.issuedDeviceId}`] : [] };
   }
 
   /** What a signed-in user has watched; updated on every beacon, counted or not. */
@@ -141,7 +157,7 @@ export class ReelViewTracker {
       await tx.reelSeen.upsert({
         where: { userId_reelId: { userId, reelId } },
         create: { userId, reelId, lastSeenAt: now, watchedPct: pct },
-        update: { lastSeenAt: now, watchedPct: pct },
+        update: { lastSeenAt: now, watchedPct: Math.max(pct, before?.watchedPct ?? 0) },
       });
       if (pct >= INTEREST_VIEW_PCT && (before?.watchedPct ?? 0) < INTEREST_VIEW_PCT) await this.outbox.enqueue(tx, { type: "reel.engaged", userId, reelId, kind: "view" });
     });

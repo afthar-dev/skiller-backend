@@ -60,7 +60,29 @@ describe("reel views", () => {
       // Not even from another address: the device is the viewer.
       expect((await view(r.id, { watchedSec: 12 }, { cookie: did })).body).toEqual({ counted: false });
       await flusher.flush();
-      expect(await row(r.id)).toMatchObject({ viewCount: 1, watchSecTotal: 3 });
+      // Later beacons still add what was watched beyond the earlier ones (3 s, then 12 s: 12 in all), but never count a second view.
+      expect(await row(r.id)).toMatchObject({ viewCount: 1, watchSecTotal: 12 });
+    });
+
+    it("accumulates watch time over beacons: 3 s, 10 s, 8 s (a seek back adds nothing), 30 s, 45 s (capped at the duration) is 30 s and one view", async () => {
+      const owner = await t.login();
+      const r = await reel(owner.userId);
+      const viewer = await t.login();
+      const beacon = (watchedSec: number) => view(r.id, { watchedSec }, { token: viewer.accessToken });
+      const counted: boolean[] = [];
+      for (const w of [3, 10, 8, 30, 45]) counted.push((await beacon(w)).body.counted);
+      expect(counted).toEqual([true, false, false, false, false]);
+      await flusher.flush();
+      expect(await row(r.id)).toMatchObject({ viewCount: 1, watchSecTotal: 30 });
+      expect(await daily(r.id)).toMatchObject([{ views: 1, watchSec: 30 }]);
+
+      // A cookie-less browser and the cookie it was handed are one viewer too: 5 s, then 9 s with the cookie is 9 s, not 14.
+      const ip = uniqueIp();
+      const first = await view(r.id, { watchedSec: 5 }, { ip, ua: "wt/1" });
+      const issued = /^skiller_did=([^;]+);/.exec(setCookie(first)!)![1];
+      await view(r.id, { watchedSec: 9 }, { cookie: issued, ip: uniqueIp(), ua: "other" });
+      await flusher.flush();
+      expect(await row(r.id)).toMatchObject({ viewCount: 2, watchSecTotal: 30 + 9 });
     });
 
     it("caps the watched seconds at the reel's duration and rounds down", async () => {

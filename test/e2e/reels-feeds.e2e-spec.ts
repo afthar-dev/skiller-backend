@@ -6,6 +6,7 @@ import { EventBus } from "../../src/common/outbox/event-bus";
 import { REDIS } from "../../src/common/redis";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
 import { ProfilesService } from "../../src/modules/users";
+import { FeedsService } from "../../src/modules/reels/feeds.service";
 import { InterestsService } from "../../src/modules/reels/interests.service";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
 
@@ -89,7 +90,9 @@ describe("reel feeds and interests", () => {
   const walkForYou = (s: Session | null, limit: number, onPage?: (page: number, body: FeedBody) => Promise<void> | void) =>
     walk(() => forYou(s, `?limit=${limit}`), (c) => forYou(s, `?limit=${limit}&cursor=${cur(c)}`), onPage);
   const sessionOf = (cursor: string): string => JSON.parse(Buffer.from(cursor.split(".")[0], "base64url").toString()).s;
-  const snapshot = async (sessionId: string): Promise<{ u: string | null; ids: string[] }> => JSON.parse((await redis.get(`foryou:${sessionId}`))!);
+  /** The one stored For you list of a signed-in viewer. */
+  const snapshot = async (userId: string): Promise<{ g: string; ids: string[] }> => JSON.parse((await redis.get(`foryou:u:${userId}`))!);
+  const foryouKeys = () => redis.keys("foryou:*");
   const dup = (list: string[]) => list.length - new Set(list).size;
 
   beforeAll(async () => {
@@ -175,7 +178,7 @@ describe("reel feeds and interests", () => {
       const me = await t.login();
       for (const c of await creators(12)) await reel(c.userId);
       const p1 = await forYou(me, "?limit=5");
-      const planned = (await snapshot(sessionOf(p1.body.nextCursor))).ids;
+      const planned = (await snapshot(me.userId)).ids;
       expect(ids(p1.body)).toEqual(planned.slice(0, 5));
 
       // A reel arrives that a fresh ranking would put on top; the engagement of reels further down explodes.
@@ -200,7 +203,7 @@ describe("reel feeds and interests", () => {
       const me = await t.login();
       for (const c of await creators(14)) await reel(c.userId);
       const p1 = await forYou(me, "?limit=4");
-      const planned = (await snapshot(sessionOf(p1.body.nextCursor))).ids;
+      const planned = (await snapshot(me.userId)).ids;
       const hidden = planned[4];
       const deleted = planned[6];
       await prisma.reel.update({ where: { id: hidden }, data: { status: "HIDDEN" } });
@@ -221,7 +224,7 @@ describe("reel feeds and interests", () => {
       const cursor = p1.body.nextCursor as string;
       expect((await forYou(me, `?limit=3&cursor=${cur(cursor)}`)).body.refreshed).toBe(false);
 
-      await redis.del(`foryou:${sessionOf(cursor)}`);
+      await redis.del(`foryou:u:${me.userId}`);
       const res = await forYou(me, `?limit=3&cursor=${cur(cursor)}`);
       expect([res.status, res.body.refreshed, res.body.items.length]).toEqual([200, true, 3]);
       expect(sessionOf(res.body.nextCursor)).not.toBe(sessionOf(cursor));
@@ -283,6 +286,56 @@ describe("reel feeds and interests", () => {
       expect(ttl).toBeLessThanOrEqual(300);
       await redis.del("foryou-global");
       expect(await full()).toContain(late.id);
+    });
+
+    it("keeps memory bounded: 1000 signed-out first pages store no per-session list; a signed-in viewer has exactly one key, overwritten by a fresh first page, at most 300 ids, 30 minutes", async () => {
+      for (const c of await creators(3)) for (let i = 0; i < 2; i++) await reel(c.userId);
+      await forYou(null, "?limit=1"); // builds the shared list once
+      const before = (await foryouKeys()).length;
+      for (let i = 0; i < 1000; i++) expect((await forYou(null, "?limit=1")).status).toBe(200);
+      expect((await foryouKeys()).length).toBe(before);
+
+      const me = await t.login();
+      const mine = () => foryouKeys().then((k) => k.filter((x) => x === `foryou:u:${me.userId}`));
+      const p1 = await forYou(me, "?limit=2");
+      expect(await mine()).toHaveLength(1);
+      const stored = await snapshot(me.userId);
+      expect(stored.ids.length).toBeLessThanOrEqual(300);
+      expect(await redis.ttl(`foryou:u:${me.userId}`)).toBeLessThanOrEqual(1800);
+      expect((await foryouKeys()).length).toBe(before + 1);
+
+      // A fresh first page overwrites that key (still one), and the older cursor no longer matches it: a fresh ranking, flagged refreshed.
+      const p2 = await forYou(me, "?limit=2");
+      expect(await mine()).toHaveLength(1);
+      expect((await foryouKeys()).length).toBe(before + 1);
+      expect((await snapshot(me.userId)).g).not.toBe(stored.g);
+      // The newest cursor is good; the older one is stale (and its request starts a new list).
+      expect((await forYou(me, `?limit=2&cursor=${cur(p2.body.nextCursor)}`)).body.refreshed).toBe(false);
+      const stale = await forYou(me, `?limit=2&cursor=${cur(p1.body.nextCursor)}`);
+      expect([stale.status, stale.body.refreshed, stale.body.items.length]).toEqual([200, true, 2]);
+    });
+
+    it("signed-in lists are capped at 300 ids", async () => {
+      const me = await t.login();
+      const owner = await t.login();
+      const assets = Array.from({ length: 320 }, () => ({ id: randomUUID(), ownerId: owner.userId, purpose: "REEL" as const, bucket: "PUBLIC" as const, status: "READY" as const, objectKey: `incoming/${uniq()}/source`, mime: "video/mp4", declaredSize: 10n, durationSec: 30, attachedAt: new Date() }));
+      await prisma.mediaAsset.createMany({ data: assets });
+      await prisma.reel.createMany({ data: assets.map((a, i) => ({ creatorId: owner.userId, mediaAssetId: a.id, caption: "", hashtags: [], status: "PUBLISHED" as const, publishedAt: new Date(t.clock.now().getTime() - 60_000 - i * 1000) })) });
+      await forYou(me, "?limit=10");
+      expect((await snapshot(me.userId)).ids.length).toBeLessThanOrEqual(300);
+    });
+
+    it("candidates are the newest 300 plus the 300 most engaging of the last 7 days: an older hit survives 600 newer reels with no engagement", async () => {
+      const owner = await t.login();
+      const hit = await reel(owner.userId, { publishedAt: new Date(t.clock.now().getTime() - 5 * DAY), likeCount: 90_000, viewCount: 100 });
+      const assets = Array.from({ length: 600 }, () => ({ id: randomUUID(), ownerId: owner.userId, purpose: "REEL" as const, bucket: "PUBLIC" as const, status: "READY" as const, objectKey: `incoming/${uniq()}/source`, mime: "video/mp4", declaredSize: 10n, durationSec: 30, attachedAt: new Date() }));
+      await prisma.mediaAsset.createMany({ data: assets });
+      await prisma.reel.createMany({ data: assets.map((a, i) => ({ creatorId: owner.userId, mediaAssetId: a.id, caption: "", hashtags: [], status: "PUBLISHED" as const, publishedAt: new Date(t.clock.now().getTime() - 1000 - i * 10) })) });
+      const feeds = t.app.get(FeedsService) as unknown as { candidates(): Promise<Array<{ id: string }>> };
+      const got = (await feeds.candidates()).map((c) => c.id);
+      expect(got).toContain(hit.id);
+      expect(got.length).toBeLessThanOrEqual(600);
+      expect(new Set(got).size).toBe(got.length);
     });
 
     it("is rate limited to 120 requests a minute per user", async () => {
