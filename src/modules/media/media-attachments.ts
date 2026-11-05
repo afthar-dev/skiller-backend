@@ -55,4 +55,13 @@ export class MediaAttachments {
     await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
     await tx.mediaAsset.updateMany({ where: { id: assetId, attachedAt: { not: null } }, data: { attachedAt: null, detachedAt: this.clock.now() } });
   }
+
+  /**
+   * Releases the asset and makes it eligible for deletion right now (not 24 h from now): for content a moderator took down. The caller purges it
+   * after its transaction commits (MediaPurger.purge); if that is missed, the next hourly cleanup deletes it.
+   */
+  async takedown(tx: Prisma.TransactionClient, assetId: string): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "media_assets" WHERE "id" = ${assetId} FOR UPDATE`;
+    await tx.mediaAsset.updateMany({ where: { id: assetId }, data: { attachedAt: null, detachedAt: new Date(0) } });
+  }
 }

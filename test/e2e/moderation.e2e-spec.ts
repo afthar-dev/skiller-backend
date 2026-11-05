@@ -172,7 +172,7 @@ describe("moderation: reports, decisions, strikes", () => {
       expect(res.body).toMatchObject({ decision: "UPHELD", reports: 5, restrictedUntil: null });
       expect((await reel(id)).status).toBe("REMOVED");
       expect(await tagCount(hashtags[0])).toBe(before - 1);
-      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } })).attachedAt).toBeNull();
+      expect(await prisma.mediaAsset.findUnique({ where: { id: assetId } })).toBeNull(); // purged at once, not after the 24 h cleanup
       const strikes = await prisma.strike.findMany({ where: { userId: owner.userId } });
       expect(strikes).toHaveLength(1);
       expect(strikes[0].expiresAt.getTime() - strikes[0].createdAt.getTime()).toBe(90 * DAY);

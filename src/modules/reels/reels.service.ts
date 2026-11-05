@@ -8,7 +8,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { EntitlementsService } from "../billing";
 import { CourseLookup, sanitizePlainText } from "../courses";
 import { MediaAttachments } from "../media";
-import { PostingRestrictions } from "../moderation";
+import { OpenReports, PostingRestrictions } from "../moderation";
 import { ProfilesService } from "../users";
 import { adjustHashtags } from "./hashtag-counts";
 import { extractHashtags } from "./hashtags";
@@ -46,6 +46,7 @@ export class ReelsService {
     private readonly views: ReelViews,
     private readonly visibility: ReelVisibility,
     private readonly restrictions: PostingRestrictions,
+    private readonly reports: OpenReports,
     private readonly cursors: SignedCursor,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
@@ -93,6 +94,8 @@ export class ReelsService {
   }
 
   async update(userId: string, reelId: string, patch: UpdateReelInput): Promise<ReelView> {
+    // A ban covers what goes on live surfaces: new text and a new course link. Turning comments off is not posting.
+    if (patch.caption !== undefined || patch.linkedCourseId !== undefined) await this.restrictions.assertCanPost(userId);
     await this.owned(userId, reelId);
     if (patch.linkedCourseId && !(await this.courses.isLinkableBy(patch.linkedCourseId, userId))) throw courseNotLinkable();
     const caption = patch.caption === undefined ? undefined : sanitizePlainText(patch.caption, CAPTION_MAX);
@@ -121,7 +124,10 @@ export class ReelsService {
     return this.ownView(updated, userId);
   }
 
-  /** Soft delete: the row stays (the daily limit counts publish events), the video is released for cleanup and the hashtag counts drop. Deleting twice is harmless. */
+  /**
+   * Soft delete: the row stays (the daily limit counts publish events) and the hashtag counts drop. The video is released for cleanup, unless the reel has
+   * open reports: it stays attached as evidence until a moderator decides (an upheld report purges it, a dismissed one releases it). Deleting twice is harmless.
+   */
   async remove(userId: string, reelId: string): Promise<void> {
     await this.owned(userId, reelId, true);
     await this.prisma.$transaction(async (tx) => {
@@ -129,7 +135,7 @@ export class ReelsService {
       if (!rows[0] || rows[0].status === "DELETED") return;
       const reel = await tx.reel.update({ where: { id: reelId }, data: { status: "DELETED", deletedAt: this.clock.now() } });
       if (rows[0].status === COUNTED_STATUS) await adjustHashtags(tx, { remove: reel.hashtags }, this.clock.now());
-      await this.media.detach(tx, reel.mediaAssetId);
+      if (!(await this.reports.exist(tx, "REEL", reelId))) await this.media.detach(tx, reel.mediaAssetId);
     }, TX_OPTIONS);
   }
 

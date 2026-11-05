@@ -6,8 +6,7 @@ import type { JobProcessor } from "../../common/queue/job-processor";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
-import { SOURCE_BUCKET, assetPrefix, sourcePrefixOf } from "./media.rules";
-import { R2Client } from "./r2.client";
+import { MediaPurger } from "./media-purger";
 
 export const MEDIA_CLEANUP_JOB = "media.cleanup";
 export const ORPHAN_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -26,7 +25,7 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly r2: R2Client,
+    private readonly purger: MediaPurger,
     private readonly registry: ProcessorRegistry,
     @Inject(CLOCK) private readonly clock: Clock,
     @InjectQueue(QueueNames.maintenance) private readonly maintenanceQueue: Queue,
@@ -65,7 +64,7 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
       after = batch[batch.length - 1].id;
       for (const asset of batch) {
         try {
-          if (await this.deleteOne(asset.id)) deleted++;
+          if (await this.purger.purge(asset.id)) deleted++;
         } catch (err) {
           failed++;
           this.logger.error(`could not delete orphaned asset ${asset.id}: ${(err as Error).message}`);
@@ -74,26 +73,5 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
     }
     if (deleted || failed) this.logger.log(`orphan cleanup: ${deleted} deleted, ${failed} failed`);
     return { deleted, failed };
-  }
-
-  /**
-   * The row delete comes first and is conditional on `attachedAt IS NULL`; it holds the row lock while the objects are
-   * removed. A concurrent attach() therefore either wins (the delete matches nothing and the objects stay) or finds the
-   * row gone. If storage fails the transaction rolls back and the next run retries.
-   */
-  private async deleteOne(id: string): Promise<boolean> {
-    return this.prisma.$transaction(
-      async (tx) => {
-        const asset = await tx.mediaAsset.findUnique({ where: { id } });
-        if (!asset) return false;
-        const removed = await tx.mediaAsset.deleteMany({ where: { id, attachedAt: null } });
-        if (removed.count === 0) return false;
-        if (asset.status === "PENDING" && asset.uploadId) await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
-        await this.r2.deletePrefix(SOURCE_BUCKET, sourcePrefixOf(asset.id));
-        await this.r2.deletePrefix(asset.bucket, `${assetPrefix(asset)}/`);
-        return true;
-      },
-      { timeout: 60_000 },
-    );
   }
 }

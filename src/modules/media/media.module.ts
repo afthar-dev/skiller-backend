@@ -2,6 +2,7 @@ import { Module, OnModuleInit, forwardRef } from "@nestjs/common";
 import { EntitlementsModule, UsageRegistry } from "../billing";
 import { UsersModule } from "../users";
 import { MediaAttachments } from "./media-attachments";
+import { MediaPurger } from "./media-purger";
 import { MediaLifecycle } from "./media-lifecycle";
 import { MediaController } from "./media.controller";
 import { MediaService } from "./media.service";
@@ -18,6 +19,7 @@ import { R2Client } from "./r2.client";
     R2Client,
     MediaLifecycle,
     MediaAttachments,
+    MediaPurger,
     MediaService,
     PlaybackService,
     PlaybackPolicies,
@@ -25,7 +27,7 @@ import { R2Client } from "./r2.client";
     // The live array of registered policies (any true allows); Phase 3 adds its enrolment policy via PlaybackPolicies.register().
     { provide: PLAYBACK_ACCESS_POLICY, useFactory: (registry: PlaybackPolicies) => registry.policies, inject: [PlaybackPolicies] },
   ],
-  exports: [MediaService, MediaAttachments, PlaybackPolicies],
+  exports: [MediaService, MediaAttachments, MediaPurger, PlaybackPolicies],
 })
 export class MediaModule implements OnModuleInit {
   constructor(

@@ -94,7 +94,7 @@ export class ModerationService {
   async report(reporterId: string, input: ReportInput): Promise<{ id: string; created: boolean }> {
     const target = this.targetFor(input.targetType);
     const owner = await target.ownerOf(input.targetId);
-    if (!owner) throw targetNotFound();
+    if (!owner || (target.reportable && !(await target.reportable(input.targetId)))) throw targetNotFound();
     if (owner === reporterId) throw new AppError("REPORT_OWN_CONTENT", 400, "You cannot report your own content");
 
     const where = { targetType_targetId_reporterId: { targetType: input.targetType, targetId: input.targetId, reporterId } };
@@ -188,6 +188,11 @@ export class ModerationService {
       return { targetType: type, targetId: id, decision: "UPHELD", reports: open.length, strike: { id: strike.id, expiresAt: strike.expiresAt.toISOString() }, restrictedUntil: restrictedUntil?.toISOString() ?? null, restored: false };
     }, TX_OPTIONS);
 
+    try {
+      await target.afterUphold?.(id);
+    } catch (err) {
+      this.logger.error(`post-decision cleanup of ${type} ${id} failed (the hourly cleanup will catch up): ${err instanceof Error ? err.message : String(err)}`);
+    }
     await this.notify(owner, { type: "moderation.removed", title: "Your content was removed", body: "A moderator found that your content breaks the rules and removed it. You received a strike.", data: { targetType: type, targetId: id } });
     await this.notify(owner, { type: "moderation.strike", title: "You received a strike", body: "Strikes expire after 90 days. Three active strikes bar you from posting reels and comments for 7 days.", data: { strikeId: result.strike?.id } });
     if (result.restrictedUntil) {
@@ -210,6 +215,7 @@ export class ModerationService {
       await tx.report.updateMany({ where: { targetType: type, targetId: id, status: "OPEN" }, data: { status: "DISMISSED", decidedBy: meta.actorId, decidedAt: now, decisionNote: note } });
       const held = await tx.moderationHold.deleteMany({ where: { targetType: type, targetId: id } });
       const restored = held.count === 1 ? await target.restore(tx, id) : false;
+      await target.onDismiss?.(tx, id);
       await this.audit.record(tx, {
         actorId: meta.actorId,
         ip: meta.ip,

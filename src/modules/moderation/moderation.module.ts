@@ -3,6 +3,7 @@ import { ClockModule } from "../../common/clock/clock";
 import { AdminModerationController, ReportsController } from "./moderation.controller";
 import { ModerationService } from "./moderation.service";
 import { ModerationTargetRegistry } from "./moderation-target";
+import { OpenReports } from "./open-reports";
 import { PostingRestrictions } from "./posting-restrictions";
 import { UserBlocks } from "./user-blocks";
 
@@ -13,7 +14,7 @@ import { UserBlocks } from "./user-blocks";
 @Module({
   imports: [ClockModule],
   controllers: [ReportsController, AdminModerationController],
-  providers: [ModerationTargetRegistry, UserBlocks, PostingRestrictions, ModerationService],
-  exports: [ModerationTargetRegistry, UserBlocks, PostingRestrictions, ModerationService],
+  providers: [ModerationTargetRegistry, UserBlocks, PostingRestrictions, OpenReports, ModerationService],
+  exports: [ModerationTargetRegistry, UserBlocks, PostingRestrictions, OpenReports, ModerationService],
 })
 export class ModerationModule {}
