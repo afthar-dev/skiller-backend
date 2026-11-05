@@ -15,6 +15,11 @@ export interface ModerationTarget {
   ownerOf(id: string): Promise<string | null>;
   /** Whether new reports are accepted: live or held-back content. Defaults to "exists" (ownerOf answers). */
   reportable?(id: string): Promise<boolean>;
+  /**
+   * Whether `reporterId` may report this content at all. Content only its participants can see (a message in a conversation) is reportable by them alone; for
+   * anyone else it answers 404 like content that does not exist. Defaults to "anyone". Checked after the "not your own content" rule.
+   */
+  canReport?(id: string, reporterId: string): Promise<boolean>;
   /** Held back pending review (auto-hide). */
   hide(tx: Prisma.TransactionClient, id: string): Promise<boolean>;
   /** Taken down for good (an upheld report). Works on live and on held-back content. */

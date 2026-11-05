@@ -8,6 +8,7 @@ import { ViewerResolver } from "../identity";
 import { MediaModule } from "../media";
 import { ModerationModule } from "../moderation";
 import { UsersModule } from "../users";
+import { GigLookup } from "./gig-lookup";
 import { GigVisibility } from "./gig-visibility";
 import { GigsController } from "./gigs.controller";
 import { GigsPublicService } from "./gigs-public.service";
@@ -22,10 +23,11 @@ import { StudioGigsController } from "./studio-gigs.controller";
     GigsService,
     GigsPublicService,
     GigVisibility,
+    GigLookup,
     ViewerResolver,
     { provide: SignedCursor, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new SignedCursor(config.jwtSecret) },
   ],
-  exports: [GigVisibility],
+  exports: [GigVisibility, GigLookup],
 })
 export class GigsModule implements OnModuleInit {
   constructor(

@@ -214,21 +214,23 @@ model AuditLog {
 
 // handle is stored lower-case, so a plain unique index gives case-insensitive uniqueness. Always normalise before write/lookup.
 model Profile {
-  userId         String    @id
-  handle         String    @unique
-  displayName    String
-  headline       String?
-  about          String?
-  avatarAssetId  String?
-  bannerAssetId  String?
-  location       String?
-  links          Json      @default("[]")
-  followersCount Int       @default(0)
-  followingCount Int       @default(0)
-  isCreator      Boolean   @default(false)
-  verifiedAt     DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  userId            String        @id
+  handle            String        @unique
+  displayName       String
+  headline          String?
+  about             String?
+  avatarAssetId     String?
+  bannerAssetId     String?
+  location          String?
+  links             Json          @default("[]")
+  followersCount    Int           @default(0)
+  followingCount    Int           @default(0)
+  isCreator         Boolean       @default(false)
+  verifiedAt        DateTime?
+  /// Who may start a conversation with this person. FOLLOWING = people they follow. A gig inquiry reaches the seller of a live gig regardless.
+  allowMessagesFrom MessagePolicy @default(EVERYONE)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   experience Experience[]
@@ -1404,29 +1406,29 @@ enum ReelStatus {
 }
 
 model Reel {
-  id              String     @id @default(uuid(7))
+  id              String                   @id @default(uuid(7))
   creatorId       String
-  mediaAssetId    String     @unique
-  caption         String     @default("")
+  mediaAssetId    String                   @unique
+  caption         String                   @default("")
   /// Parsed from the caption on every write (lower-case NFC, at most 10); `hashtags` rows count the PUBLISHED reels that carry each tag.
   hashtags        String[]
   linkedCourseId  String?
-  status          ReelStatus @default(PROCESSING)
-  commentsEnabled Boolean    @default(true)
+  status          ReelStatus               @default(PROCESSING)
+  commentsEnabled Boolean                  @default(true)
   failureReason   String?
   publishedAt     DateTime?
   deletedAt       DateTime?
-  likeCount       Int        @default(0)
-  commentCount    Int        @default(0)
-  saveCount       Int        @default(0)
-  shareCount      Int        @default(0)
-  viewCount       Int        @default(0)
-  watchSecTotal   Int        @default(0)
+  likeCount       Int                      @default(0)
+  commentCount    Int                      @default(0)
+  saveCount       Int                      @default(0)
+  shareCount      Int                      @default(0)
+  viewCount       Int                      @default(0)
+  watchSecTotal   Int                      @default(0)
   /// Full-text document (simple config): caption + hashtags. Kept by the reels_search_vector trigger, never by Prisma; its GIN index and the
   /// pg_trgm index on caption are hand-written in the migration, so later `migrate dev` runs must keep them out of DROP/CREATE.
   searchVector    Unsupported("tsvector")?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   likes    ReelLike[]
   saves    ReelSave[]
@@ -1592,6 +1594,7 @@ enum ReportTargetType {
   REEL_COMMENT
   COURSE_REVIEW
   COURSE_QA
+  GIG_MESSAGE
 }
 
 enum ReportReason {
@@ -1787,4 +1790,71 @@ model GigOrder {
   @@index([buyerId])
   @@index([sellerId])
   @@map("gig_orders")
+}
+
+// ─── messaging ───────────────────────────────────────────────────────────
+
+enum MessagePolicy {
+  EVERYONE
+  FOLLOWING
+  NONE
+}
+
+enum ConversationKind {
+  DIRECT
+}
+
+enum MessageStatus {
+  VISIBLE
+  HIDDEN
+  REMOVED
+}
+
+/// A one-to-one conversation. `pairKey` is the two user ids in sorted order ("low:high"): unique, so a pair has one conversation whoever starts it.
+/// `gigId` is the gig the pair last talked about (no foreign key: gigs belong to another module).
+model Conversation {
+  id            String           @id @default(uuid(7))
+  kind          ConversationKind @default(DIRECT)
+  gigId         String?
+  pairKey       String           @unique
+  createdAt     DateTime         @default(now())
+  /// Strictly increases with every message (see MessagingService.append); the list order and the base of "unread".
+  lastMessageAt DateTime         @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt, id])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String
+  userId         String
+  /// Everything created up to this moment is read; null = nothing read yet.
+  lastReadAt     DateTime?
+  archivedAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId, archivedAt])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String        @id @default(uuid(7))
+  conversationId String
+  senderId       String
+  /// Plain text, at most 4000 characters. Shown only while status is VISIBLE.
+  body           String
+  status         MessageStatus @default(VISIBLE)
+  createdAt      DateTime      @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, id])
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+  @@map("messages")
 }

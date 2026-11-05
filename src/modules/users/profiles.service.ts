@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { escapeLike } from "../../common/db/like";
-import { Prisma, type Profile } from "@prisma/client";
+import { Prisma, type MessagePolicy, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AccountService } from "../identity";
@@ -21,6 +21,7 @@ export interface ProfileView {
   followingCount: number;
   isCreator: boolean;
   verifiedAt: string | null;
+  allowMessagesFrom: MessagePolicy;
   updatedAt: string;
 }
 
@@ -41,6 +42,7 @@ export interface ProfilePatch {
   links?: { label: string; url: string }[];
   avatarAssetId?: string | null;
   bannerAssetId?: string | null;
+  allowMessagesFrom?: MessagePolicy;
 }
 
 export interface ExperienceInput {
@@ -79,6 +81,7 @@ export const toProfileView = (p: Profile): ProfileView => ({
   followingCount: p.followingCount,
   isCreator: p.isCreator,
   verifiedAt: p.verifiedAt ? p.verifiedAt.toISOString() : null,
+  allowMessagesFrom: p.allowMessagesFrom,
   updatedAt: p.updatedAt.toISOString(),
 });
 
@@ -182,6 +185,7 @@ export class ProfilesService {
     if (patch.links !== undefined) data.links = patch.links as Prisma.InputJsonValue;
     if (patch.avatarAssetId !== undefined) data.avatarAssetId = patch.avatarAssetId;
     if (patch.bannerAssetId !== undefined) data.bannerAssetId = patch.bannerAssetId;
+    if (patch.allowMessagesFrom !== undefined) data.allowMessagesFrom = patch.allowMessagesFrom;
 
     try {
       return toProfileView(

@@ -35,6 +35,7 @@ const profilePatch = z
     links: z.array(z.object({ label: z.string().trim().min(1).max(40), url: httpUrl }).strict()).max(10).optional(),
     avatarAssetId: assetId,
     bannerAssetId: assetId,
+    allowMessagesFrom: z.enum(["EVERYONE", "FOLLOWING", "NONE"]).optional(),
   })
   .strict();
 
@@ -116,7 +117,7 @@ export class MeController {
   }
 
   @Patch("profile")
-  @ApiOperation({ summary: "Update profile fields (avatar/banner by media asset id)" })
+  @ApiOperation({ summary: "Update profile fields (avatar/banner by media asset id; allowMessagesFrom: EVERYONE | FOLLOWING (people you follow) | NONE decides who may start a conversation with you)" })
   @ApiZodBody(profilePatch)
   @ApiJsonResponse(200, "Updated profile.", profileViewSchema)
   updateProfile(@CurrentUser() auth: AuthUser, @Body() body: unknown) {

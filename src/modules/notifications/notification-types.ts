@@ -42,6 +42,7 @@ export const NOTIFICATION_TYPES = {
   "reel.like": { transactional: false },
   "reel.comment": { transactional: false },
   "reel.reply": { transactional: false },
+  "message.new": { transactional: false },
   "moderation.hidden": { transactional: false },
   "moderation.removed": { transactional: false },
   "moderation.restored": { transactional: false },

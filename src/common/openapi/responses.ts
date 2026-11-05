@@ -24,6 +24,7 @@ export const profileViewSchema: Schema = {
     followingCount: { type: "integer" },
     isCreator: { type: "boolean" },
     verifiedAt: { ...isoDate, nullable: true },
+    allowMessagesFrom: { type: "string", enum: ["EVERYONE", "FOLLOWING", "NONE"], description: "Who may start a conversation with this person." },
     updatedAt: isoDate,
   },
 };
