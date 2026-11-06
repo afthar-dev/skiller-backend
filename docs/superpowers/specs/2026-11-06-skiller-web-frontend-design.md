@@ -34,7 +34,7 @@ Skiller is a mix of Coursera, Fiverr and LinkedIn. The backend has been rebuilt;
 - Organization screens (`/v1/orgs/*`, `/v1/org-invites/*`). Backend stays ready. Institution billing from the old app waits with them.
 - Native mobile apps, PWA install, web push.
 - Languages other than English.
-- Importing old users or content. If real users exist on the old backend, that needs its own task before launch (see section 13).
+- Importing old users or content. The old backend has no real users, so nothing is migrated.
 - Gig payments and escrow (backend flag `gig_orders` stays off).
 
 ## 4. Stack
@@ -131,6 +131,8 @@ Rule: a feature imports `lib`, `components` and its own files. It reaches anothe
 
 The frontend must not work around a missing API. When a phase finds a gap, it is a small separate backend change with a test, an `openapi.json` update and a regenerated type file, committed in the backend repo. Backend rules and rulings stay binding.
 
+**Known gap: response schemas.** 202 of the 248 operations in `openapi.json` declare no response body, so generated types can't describe them. Each phase starts by adding response schemas to the backend routes it uses. A backend check keeps an allowlist of untyped operations that may only shrink; it reaches zero by the end of phase 6, except organization routes.
+
 ## 11. Testing
 
 - **Vitest:** money formatting, refresh single-flight, error map, upload engine, step-up retry, cursor handling.
@@ -155,6 +157,5 @@ Phase 1 uses a mobile and desktop design pass to fix tokens, navigation and shar
 ## 13. Open items for the owner
 
 - Production domain, needed for the shared-parent-domain cookie rule. Needed by phase 7, or earlier for staging.
-- Whether real users or content exist on the old backend. If yes, plan an import before cutover.
 - `RAZORPAY_KEY_SECRET` sits in `skiller-frontend/.env`. It isn't tracked or bundled, but should be removed from that file. If it was ever shared, rotate it.
 - Legal page copy (terms, privacy, refund policy) from the lawyer.
