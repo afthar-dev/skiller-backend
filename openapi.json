@@ -309,6 +309,9 @@
         "operationId": "Auth_logout",
         "parameters": [],
         "responses": {
+          "204": {
+            "description": "Session revoked; refresh cookie cleared."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -426,6 +429,19 @@
           }
         },
         "responses": {
+          "204": {
+            "description": "Code accepted; this session is stepped up for 5 minutes."
+          },
+          "400": {
+            "description": "Wrong, expired or exhausted code, or a challenge that is not this member's step-up challenge.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -463,6 +479,62 @@
         "operationId": "Auth_listSessions",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Active sessions; `current` marks the session making this request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "userAgent",
+                          "ip",
+                          "createdAt",
+                          "lastUsedAt",
+                          "expiresAt",
+                          "current"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "userAgent": {
+                            "type": "string"
+                          },
+                          "ip": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "lastUsedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "current": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -500,6 +572,9 @@
         "operationId": "Auth_revokeOthers",
         "parameters": [],
         "responses": {
+          "204": {
+            "description": "Other sessions revoked."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -546,6 +621,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Session revoked."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -1629,7 +1707,55 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "The experience list after the replace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "company",
+                          "startDate",
+                          "endDate",
+                          "description"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "company": {
+                            "type": "string"
+                          },
+                          "startDate": {
+                            "type": "string"
+                          },
+                          "endDate": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -1725,7 +1851,57 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "The education list after the replace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "school",
+                          "degree",
+                          "field",
+                          "startYear",
+                          "endYear"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "school": {
+                            "type": "string"
+                          },
+                          "degree": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "field": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "startYear": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "endYear": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -1790,7 +1966,25 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "The skills list after the replace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -1875,7 +2069,52 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "The portfolio list after the replace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "url",
+                          "mediaAssetId",
+                          "description"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "mediaAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2005,7 +2244,205 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "The profile with its experience, education, skills and portfolio.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "userId",
+                    "handle",
+                    "displayName",
+                    "isCreator",
+                    "updatedAt",
+                    "experience",
+                    "education",
+                    "skills",
+                    "portfolio"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "handle": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "headline": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "about": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "avatarAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "bannerAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "location": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "links": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "followersCount": {
+                      "type": "integer"
+                    },
+                    "followingCount": {
+                      "type": "integer"
+                    },
+                    "isCreator": {
+                      "type": "boolean"
+                    },
+                    "verifiedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "experience": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "company",
+                          "startDate",
+                          "endDate",
+                          "description"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "company": {
+                            "type": "string"
+                          },
+                          "startDate": {
+                            "type": "string"
+                          },
+                          "endDate": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "education": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "school",
+                          "degree",
+                          "field",
+                          "startYear",
+                          "endYear"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "school": {
+                            "type": "string"
+                          },
+                          "degree": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "field": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "startYear": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "endYear": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "portfolio": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "url",
+                          "mediaAssetId",
+                          "description"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "mediaAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "isFollowing": {
+                      "type": "boolean",
+                      "description": "Present only when the request carries a valid access token."
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -2038,6 +2475,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Following."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -2082,6 +2522,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Not following."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -2147,7 +2590,54 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of followers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "handle",
+                          "displayName"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "handle": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "headline": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -2199,7 +2689,54 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of followed profiles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "handle",
+                          "displayName"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "handle": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "headline": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -2233,7 +2770,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Blocked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "blocked"
+                  ],
+                  "properties": {
+                    "blocked": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2280,7 +2832,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Not blocked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "blocked"
+                  ],
+                  "properties": {
+                    "blocked": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2329,7 +2896,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Muted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "muted"
+                  ],
+                  "properties": {
+                    "muted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2376,7 +2958,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Not muted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "muted"
+                  ],
+                  "properties": {
+                    "muted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2435,7 +3032,51 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of blocked members.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "handle",
+                          "displayName",
+                          "since"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "handle": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "since": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -2494,7 +3135,51 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of muted creators.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "handle",
+                          "displayName",
+                          "since"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "handle": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "since": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -4070,7 +4755,92 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "One entry per notification type with its effective in-app and email settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "inApp",
+                          "email"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "welcome",
+                              "media.ready",
+                              "media.failed",
+                              "role.granted",
+                              "subscription.activated",
+                              "subscription.payment_failed",
+                              "subscription.expired",
+                              "order.receipt",
+                              "order.sale",
+                              "order.fulfilment_failed",
+                              "earnings.available",
+                              "refund.processed",
+                              "refund.rejected",
+                              "finance.alert",
+                              "payout.requested",
+                              "payout.approved",
+                              "payout.rejected",
+                              "payout.paid",
+                              "payout.failed",
+                              "payout.review",
+                              "payout_account.changed",
+                              "course.submitted",
+                              "course.approved",
+                              "course.rejected",
+                              "course.flagged",
+                              "course.unflagged",
+                              "certificate.issued",
+                              "certificate.name_needed",
+                              "course.review",
+                              "course.review_reply",
+                              "course.question",
+                              "course.answer",
+                              "reel.published",
+                              "reel.failed",
+                              "reel.limit_reached",
+                              "reel.restricted",
+                              "reel.like",
+                              "reel.comment",
+                              "reel.reply",
+                              "message.new",
+                              "moderation.hidden",
+                              "moderation.removed",
+                              "moderation.restored",
+                              "moderation.strike",
+                              "moderation.restricted",
+                              "promo",
+                              "marketing_opt_in",
+                              "campaign.approval_needed",
+                              "campaign.alert"
+                            ]
+                          },
+                          "inApp": {
+                            "type": "boolean"
+                          },
+                          "email": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -4198,7 +4968,92 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "The effective preferences after the update.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "type",
+                          "inApp",
+                          "email"
+                        ],
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "welcome",
+                              "media.ready",
+                              "media.failed",
+                              "role.granted",
+                              "subscription.activated",
+                              "subscription.payment_failed",
+                              "subscription.expired",
+                              "order.receipt",
+                              "order.sale",
+                              "order.fulfilment_failed",
+                              "earnings.available",
+                              "refund.processed",
+                              "refund.rejected",
+                              "finance.alert",
+                              "payout.requested",
+                              "payout.approved",
+                              "payout.rejected",
+                              "payout.paid",
+                              "payout.failed",
+                              "payout.review",
+                              "payout_account.changed",
+                              "course.submitted",
+                              "course.approved",
+                              "course.rejected",
+                              "course.flagged",
+                              "course.unflagged",
+                              "certificate.issued",
+                              "certificate.name_needed",
+                              "course.review",
+                              "course.review_reply",
+                              "course.question",
+                              "course.answer",
+                              "reel.published",
+                              "reel.failed",
+                              "reel.limit_reached",
+                              "reel.restricted",
+                              "reel.like",
+                              "reel.comment",
+                              "reel.reply",
+                              "message.new",
+                              "moderation.hidden",
+                              "moderation.removed",
+                              "moderation.restored",
+                              "moderation.strike",
+                              "moderation.restricted",
+                              "promo",
+                              "marketing_opt_in",
+                              "campaign.approval_needed",
+                              "campaign.alert"
+                            ]
+                          },
+                          "inApp": {
+                            "type": "boolean"
+                          },
+                          "email": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",

@@ -15,7 +15,7 @@ import { SESSION_TTL_MS, SessionMeta, SessionService } from "./session.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
-import { ApiJsonResponse, objectSchema, schemas } from "../../common/openapi/responses";
+import { ApiJsonResponse, ApiNoContent, objectSchema, schemas } from "../../common/openapi/responses";
 
 export const REFRESH_COOKIE = "skiller_rt";
 
@@ -97,6 +97,7 @@ export class AuthController {
   @Post("logout")
   @HttpCode(204)
   @ApiOperation({ summary: "Revoke the current session" })
+  @ApiNoContent("Session revoked; refresh cookie cleared.")
   async logout(@CurrentUser() user: AuthUser, @Res({ passthrough: true }) res: Response) {
     await this.sessions.revoke(user.sessionId, user.id);
     this.clearRefreshCookie(res);
@@ -116,6 +117,8 @@ export class AuthController {
   @HttpCode(204)
   @ApiOperation({ summary: "Verify a step-up code (valid for 5 minutes on this session)" })
   @ApiZodBody(verifySchema)
+  @ApiErrorResponse(400, "Wrong, expired or exhausted code, or a challenge that is not this member's step-up challenge.")
+  @ApiNoContent("Code accepted; this session is stepped up for 5 minutes.")
   async verifyStepUp(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     const { challengeId, code } = verifySchema.parse(body);
     await this.auth.verifyStepUp(user.id, user.sessionId, challengeId, code);
@@ -124,6 +127,16 @@ export class AuthController {
   @AuthenticatedOnly()
   @Get("sessions")
   @ApiOperation({ summary: "List the caller's active sessions" })
+  @ApiJsonResponse(
+    200,
+    "Active sessions; `current` marks the session making this request.",
+    objectSchema({
+      items: {
+        type: "array",
+        items: objectSchema({ id: schemas.str, userAgent: schemas.str, ip: schemas.str, createdAt: schemas.isoDate, lastUsedAt: schemas.isoDate, expiresAt: schemas.isoDate, current: { type: "boolean" } }),
+      },
+    }),
+  )
   async listSessions(@CurrentUser() user: AuthUser) {
     const rows = await this.sessions.list(user.id);
     return {
@@ -143,6 +156,7 @@ export class AuthController {
   @Post("sessions/revoke-others")
   @HttpCode(204)
   @ApiOperation({ summary: "Revoke every session except the current one" })
+  @ApiNoContent("Other sessions revoked.")
   async revokeOthers(@CurrentUser() user: AuthUser) {
     await this.sessions.revokeAllForUser(user.id, user.sessionId);
   }
@@ -151,6 +165,7 @@ export class AuthController {
   @Delete("sessions/:id")
   @HttpCode(204)
   @ApiOperation({ summary: "Revoke one of the caller's sessions" })
+  @ApiNoContent("Session revoked.")
   async revokeSession(@CurrentUser() user: AuthUser, @Param("id") id: string, @Res({ passthrough: true }) res: Response) {
     const ok = await this.sessions.revoke(id, user.id);
     if (!ok) throw new AppError("NOT_FOUND", 404, "Session not found");

@@ -11,7 +11,7 @@ import { CreatorService } from "./creator.service";
 import { ProfilesService, toOwnProfileView } from "./profiles.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
-import { ApiJsonResponse, objectSchema, ownProfileViewSchema, schemas } from "../../common/openapi/responses";
+import { ApiJsonResponse, educationItemSchema, experienceItemSchema, listOf, objectSchema, ownProfileViewSchema, portfolioItemSchema, schemas } from "../../common/openapi/responses";
 
 const httpUrl = z
   .string()
@@ -138,6 +138,7 @@ export class MeController {
   @Put("experience")
   @ApiOperation({ summary: "Replace the experience list" })
   @ApiZodBody(experienceList)
+  @ApiJsonResponse(200, "The experience list after the replace.", listOf(experienceItemSchema))
   async experience(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceExperience(auth.id, experienceList.parse(body).items) };
   }
@@ -145,6 +146,7 @@ export class MeController {
   @Put("education")
   @ApiOperation({ summary: "Replace the education list" })
   @ApiZodBody(educationList)
+  @ApiJsonResponse(200, "The education list after the replace.", listOf(educationItemSchema))
   async education(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceEducation(auth.id, educationList.parse(body).items) };
   }
@@ -152,6 +154,7 @@ export class MeController {
   @Put("skills")
   @ApiOperation({ summary: "Replace the skills list" })
   @ApiZodBody(skillList)
+  @ApiJsonResponse(200, "The skills list after the replace.", listOf(schemas.str))
   async skills(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replaceSkills(auth.id, skillList.parse(body).items) };
   }
@@ -159,6 +162,7 @@ export class MeController {
   @Put("portfolio")
   @ApiOperation({ summary: "Replace the portfolio list" })
   @ApiZodBody(portfolioList)
+  @ApiJsonResponse(200, "The portfolio list after the replace.", listOf(portfolioItemSchema))
   async portfolio(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     return { items: await this.profiles.replacePortfolio(auth.id, portfolioList.parse(body).items) };
   }

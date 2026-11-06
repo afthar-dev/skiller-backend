@@ -16,7 +16,7 @@ import { HttpResendClient, RESEND_CLIENT } from "./resend.client";
     {
       provide: RESEND_CLIENT,
       inject: [APP_CONFIG],
-      useFactory: (config: AppConfig) => new HttpResendClient(config.resend.apiKey, config.resend.fromAddress),
+      useFactory: (config: AppConfig) => new HttpResendClient(config.resend.apiKey, config.resend.fromAddress, config.resend.baseUrl),
     },
     MailService,
     MailDelivery,

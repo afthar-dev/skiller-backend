@@ -161,6 +161,7 @@ describe("auth", () => {
     const { accessToken, cookie } = await t.login();
     const out = await http().post("/v1/auth/logout").set("Authorization", `Bearer ${accessToken}`).set("Cookie", `skiller_rt=${cookie.value}`);
     expect(out.status).toBe(204);
+    expect(out.text).toBe("");
     const cleared = readRefreshCookie(out)!;
     expect(cleared.value).toBe("");
     expect(cleared.raw).toMatch(/Path=\/v1\/auth/i);
@@ -213,11 +214,22 @@ describe("auth", () => {
     expect(list.status).toBe(200);
     expect(list.body.items).toHaveLength(3);
     expect(list.body.items.filter((s: { current: boolean }) => s.current)).toHaveLength(1);
+    // The declared contract (openapi.json) lists exactly these fields; a schema that drifts from the handler fails here.
+    expect(list.body.items[0]).toMatchObject({
+      id: expect.any(String),
+      userAgent: expect.any(String),
+      ip: expect.any(String),
+      createdAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
+      lastUsedAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
+      expiresAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
+      current: expect.any(Boolean),
+    });
     expect(JSON.stringify(list.body)).not.toMatch(/refreshHash|previousHash/);
     const bSession = list.body.items.find((s: { current: boolean }) => !s.current)!;
 
     const del = await http().delete(`/v1/auth/sessions/${bSession.id}`).set(auth(a.accessToken));
     expect(del.status).toBe(204);
+    expect(del.text).toBe("");
     expect((await http().delete(`/v1/auth/sessions/${bSession.id}`).set(auth(a.accessToken))).status).toBe(204);
 
     const other = await t.login();
@@ -226,6 +238,7 @@ describe("auth", () => {
 
     const rest = await http().post("/v1/auth/sessions/revoke-others").set(auth(a.accessToken));
     expect(rest.status).toBe(204);
+    expect(rest.text).toBe("");
     expect((await http().get("/v1/me").set(auth(a.accessToken))).status).toBe(200);
     const left = await http().get("/v1/auth/sessions").set(auth(a.accessToken));
     expect(left.body.items).toHaveLength(1);

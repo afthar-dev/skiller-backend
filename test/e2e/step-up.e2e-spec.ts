@@ -46,6 +46,7 @@ describe("step-up verification", () => {
     const { challengeId, code } = await stepUp(me);
     const verified = await verifyStepUp(me.accessToken, { challengeId, code });
     expect(verified.status).toBe(204);
+    expect(verified.text).toBe("");
 
     const after = await protectedGet(me.accessToken);
     expect(after.status).toBe(200);

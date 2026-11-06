@@ -45,6 +45,15 @@ describe("loadConfig", () => {
     expect(loadConfig(validEnv).apiBaseUrl).toBe("https://app.skiller.in");
   });
 
+  it("RESEND_BASE_URL is rejected in production and reaches config.resend.baseUrl elsewhere", () => {
+    const base = { ...validEnv, RESEND_BASE_URL: "http://127.0.0.1:4010" };
+    const prod = { ...base, NODE_ENV: "production", API_BASE_URL: "https://api.skiller.in" };
+    expect(() => loadConfig(prod)).toThrow(ConfigError);
+    expect(() => loadConfig(prod)).toThrow(/RESEND_BASE_URL/);
+    expect(loadConfig({ ...base, NODE_ENV: "development" }).resend.baseUrl).toBe("http://127.0.0.1:4010");
+    expect(loadConfig(validEnv).resend.baseUrl).toBeUndefined();
+  });
+
   it("TRUST_PROXY defaults to 0 and parses a hop count", () => {
     expect(loadConfig(validEnv).trustProxy).toBe(0);
     expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);

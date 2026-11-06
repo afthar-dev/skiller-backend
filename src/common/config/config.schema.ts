@@ -28,6 +28,8 @@ const envSchema = z
   RESEND_API_KEY: z.string().min(1),
   RESEND_FROM_ADDRESS: z.string().min(1),
   RESEND_WEBHOOK_SECRET: z.string().min(1),
+  // Test and local development only: points the Resend client at a fake server. Rejected in production.
+  RESEND_BASE_URL: z.string().url().optional(),
   RAZORPAY_KEY_ID: z.string().min(1),
   RAZORPAY_KEY_SECRET: z.string().min(1),
   // Verifies X-Razorpay-Signature on POST /v1/webhooks/razorpay (set on the Razorpay dashboard webhook, not the API key secret).
@@ -46,6 +48,10 @@ const envSchema = z
     // Every promotional mail links to <API_BASE_URL>/v1/unsubscribe; guessing it from the web app's URL would ship dead links.
     if (e.NODE_ENV === "production" && !e.API_BASE_URL) {
       ctx.addIssue({ code: "custom", path: ["API_BASE_URL"], message: "is required in production (the public URL of this API, for the unsubscribe link)" });
+    }
+    // Mail redirected to another host in production would silently stop real delivery.
+    if (e.NODE_ENV === "production" && e.RESEND_BASE_URL) {
+      ctx.addIssue({ code: "custom", path: ["RESEND_BASE_URL"], message: "must not be set in production (it is for tests and local development)" });
     }
     // A shared secret would let a body signed for the Razorpay endpoint pass for a RazorpayX one.
     if (e.RAZORPAY_WEBHOOK_SECRET && e.RAZORPAY_WEBHOOK_SECRET === e.RAZORPAYX_WEBHOOK_SECRET) {
@@ -90,7 +96,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
       // Overridable so tests and local dev can point at MinIO.
       endpoint: e.R2_ENDPOINT ?? `https://${e.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     },
-    resend: { apiKey: e.RESEND_API_KEY, fromAddress: e.RESEND_FROM_ADDRESS, webhookSecret: e.RESEND_WEBHOOK_SECRET },
+    resend: { apiKey: e.RESEND_API_KEY, fromAddress: e.RESEND_FROM_ADDRESS, webhookSecret: e.RESEND_WEBHOOK_SECRET, baseUrl: e.RESEND_BASE_URL?.replace(/\/+$/, "") },
     razorpay: { keyId: e.RAZORPAY_KEY_ID, keySecret: e.RAZORPAY_KEY_SECRET, webhookSecret: e.RAZORPAY_WEBHOOK_SECRET },
     razorpayx: { accountNumber: e.RAZORPAYX_ACCOUNT_NUMBER, webhookSecret: e.RAZORPAYX_WEBHOOK_SECRET },
     trustProxy: e.TRUST_PROXY,

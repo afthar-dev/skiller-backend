@@ -113,20 +113,36 @@ describe("profiles, follows and creator onboarding", () => {
         });
       expect(exp.status).toBe(200);
       expect(exp.body.items.map((i: { title: string }) => i.title)).toEqual(["Eng", "Lead"]);
+      expect(exp.body.items[0]).toMatchObject({ id: expect.any(String), title: "Eng", company: "Acme", startDate: "2020-01-01", endDate: "2022-01-01", description: null });
       const exp2 = await http().put("/v1/me/experience").set(auth(s)).send({ items: [{ title: "Only", company: "Gamma", startDate: "2023-01-01" }] });
       expect(exp2.body.items).toHaveLength(1);
 
       const edu = await http().put("/v1/me/education").set(auth(s)).send({ items: [{ school: "MIT", degree: "BS", startYear: 2010, endYear: 2014 }] });
       expect(edu.status).toBe(200);
+      expect(edu.body.items[0]).toMatchObject({ id: expect.any(String), school: "MIT", degree: "BS", field: null, startYear: 2010, endYear: 2014 });
       const skills = await http().put("/v1/me/skills").set(auth(s)).send({ items: ["ts", "node", "ts"] });
       expect(skills.status).toBe(200);
       expect(skills.body.items).toEqual(["ts", "node"]);
       const pf = await http().put("/v1/me/portfolio").set(auth(s)).send({ items: [{ title: "Site", url: "https://example.com" }] });
       expect(pf.status).toBe(200);
+      expect(pf.body.items[0]).toMatchObject({ id: expect.any(String), title: "Site", url: "https://example.com", mediaAssetId: null, description: null });
 
       const pub = await http().get(`/v1/profiles/${s.handle.toUpperCase()}`);
       expect(pub.status).toBe(200);
       expect(pub.body.handle).toBe(s.handle);
+      expect(pub.body).toMatchObject({
+        userId: s.userId,
+        displayName: expect.any(String),
+        followersCount: 0,
+        followingCount: 0,
+        isCreator: false,
+        updatedAt: expect.any(String),
+        experience: expect.any(Array),
+        education: expect.any(Array),
+        skills: expect.any(Array),
+        portfolio: expect.any(Array),
+      });
+      expect(pub.body.experience[0]).toMatchObject({ id: expect.any(String), title: "Only", company: "Gamma", startDate: "2023-01-01", endDate: null });
       expect(pub.body.experience).toHaveLength(1);
       expect(pub.body.education).toHaveLength(1);
       expect(pub.body.skills).toEqual(["ts", "node"]);
@@ -158,7 +174,9 @@ describe("profiles, follows and creator onboarding", () => {
     it("follow twice keeps the count at 1; isFollowing reflects the viewer", async () => {
       const a = await newUser();
       const b = await newUser();
-      expect((await http().post(`/v1/profiles/${b.handle}/follow`).set(auth(a))).status).toBe(204);
+      const followed = await http().post(`/v1/profiles/${b.handle}/follow`).set(auth(a));
+      expect(followed.status).toBe(204);
+      expect(followed.text).toBe("");
       expect((await http().post(`/v1/profiles/${b.handle.toUpperCase()}/follow`).set(auth(a))).status).toBe(204);
 
       const pub = await http().get(`/v1/profiles/${b.handle}`).set(auth(a));
@@ -214,7 +232,7 @@ describe("profiles, follows and creator onboarding", () => {
       expect(p2.body.nextCursor).toBeNull();
       const ids = [...p1.body.items, ...p2.body.items].map((i: { id: string }) => i.id).sort();
       expect(ids).toEqual(fans.map((f) => f.userId).sort());
-      expect(p1.body.items[0]).toEqual(expect.objectContaining({ handle: expect.any(String), displayName: expect.any(String) }));
+      expect(p1.body.items[0]).toMatchObject({ id: expect.any(String), handle: expect.any(String), displayName: expect.any(String), headline: null, avatarAssetId: null });
 
       const following = await http().get(`/v1/profiles/${fans[0].handle}/following`);
       expect(following.body.items.map((i: { id: string }) => i.id)).toEqual([target.userId]);

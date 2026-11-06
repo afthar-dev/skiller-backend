@@ -320,16 +320,31 @@ describe("moderation: hidden, removed and blocked content never shows; blocks an
       const me = await t.login();
       const people = [await withReel("p1"), await withReel("p2"), await withReel("p3")];
       for (const p of people) {
-        expect((await block(me, p.handle)).status).toBe(200);
-        expect((await mute(me, p.handle)).status).toBe(200);
+        const blocked = await block(me, p.handle);
+        expect(blocked.status).toBe(200);
+        expect(blocked.body).toEqual({ blocked: true });
+        const muted = await mute(me, p.handle);
+        expect(muted.status).toBe(200);
+        expect(muted.body).toEqual({ muted: true });
       }
       const page1 = await http().get("/v1/me/blocks?limit=2").set(auth(me));
+      expect(page1.body).toMatchObject({ items: expect.any(Array), nextCursor: expect.any(String) });
+      expect(page1.body.items[0]).toMatchObject({ id: expect.any(String), handle: people[2].handle, displayName: expect.any(String), since: expect.stringMatching(/^d{4}-d{2}-d{2}T/) });
+      const mutesPage = await http().get("/v1/me/mutes").set(auth(me));
+      expect(mutesPage.body).toMatchObject({ items: expect.any(Array), nextCursor: null });
+      expect(mutesPage.body.items[0]).toMatchObject({ id: expect.any(String), handle: expect.any(String), displayName: expect.any(String), since: expect.any(String) });
       expect(page1.body.items.map((i: { handle: string }) => i.handle)).toEqual([people[2].handle, people[1].handle]);
       const page2 = await http().get(`/v1/me/blocks?limit=2&cursor=${encodeURIComponent(page1.body.nextCursor)}`).set(auth(me));
       expect(page2.body.items.map((i: { handle: string }) => i.handle)).toEqual([people[0].handle]);
       expect(page2.body.nextCursor).toBeNull();
       expect((await http().get("/v1/me/mutes").set(auth(me))).body.items.map((i: { handle: string }) => i.handle)).toEqual(people.map((p) => p.handle).reverse());
-      expect((await unmute(me, people[0].handle)).status).toBe(200);
+      const unmuted = await unmute(me, people[0].handle);
+      expect(unmuted.status).toBe(200);
+      expect(unmuted.body).toEqual({ muted: false });
+      const unblocked = await unblock(me, people[0].handle);
+      expect(unblocked.status).toBe(200);
+      expect(unblocked.body).toEqual({ blocked: false });
+      await block(me, people[0].handle);
       expect((await http().get("/v1/me/mutes").set(auth(me))).body.items).toHaveLength(2);
       expect((await http().get("/v1/me/blocks")).status).toBe(401);
       // The blocked members are not told, and do not see me in theirs.

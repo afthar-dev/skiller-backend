@@ -52,3 +52,51 @@ export const ApiJsonResponse = (status: number, description: string, schema: Sch
 
 export const objectSchema = (properties: Record<string, Schema>, required: string[] = Object.keys(properties)): Schema => ({ type: "object", required, properties });
 export const schemas = { str, isoDate, nullableStr };
+
+/** Documents a 204 response (no body). */
+export const ApiNoContent = (description: string) => applyDecorators(ApiResponse({ status: 204, description }));
+
+const integer = { type: "integer" } as const;
+const bool = { type: "boolean" } as const;
+
+/** Compact member card used in follower, following, block and mute lists. */
+export const profileSummarySchema: Schema = objectSchema(
+  { id: str, handle: str, displayName: str, headline: nullableStr, avatarAssetId: nullableStr },
+  ["id", "handle", "displayName"],
+);
+
+/** A cursor page: `nextCursor` is null on the last page. */
+export const pageSchema = (item: Schema): Schema => objectSchema({ items: { type: "array", items: item }, nextCursor: nullableStr }, ["items", "nextCursor"]);
+
+/** The member's own lists (experience, education, skills, portfolio) as returned by PUT /me/*. */
+export const listOf = (item: Schema): Schema => objectSchema({ items: { type: "array", items: item } });
+
+export const experienceItemSchema: Schema = objectSchema(
+  { id: str, title: str, company: str, startDate: str, endDate: nullableStr, description: nullableStr },
+  ["id", "title", "company", "startDate", "endDate", "description"],
+);
+export const educationItemSchema: Schema = objectSchema(
+  { id: str, school: str, degree: nullableStr, field: nullableStr, startYear: { ...integer, nullable: true }, endYear: { ...integer, nullable: true } },
+  ["id", "school", "degree", "field", "startYear", "endYear"],
+);
+export const portfolioItemSchema: Schema = objectSchema(
+  { id: str, title: str, url: nullableStr, mediaAssetId: nullableStr, description: nullableStr },
+  ["id", "title", "url", "mediaAssetId", "description"],
+);
+
+/** The public profile: the profile view plus its lists; `isFollowing` appears only for a signed-in viewer. */
+export const publicProfileSchema: Schema = {
+  ...profileViewSchema,
+  required: [...(profileViewSchema.required as string[]), "experience", "education", "skills", "portfolio"],
+  properties: {
+    ...(profileViewSchema.properties as Schema),
+    experience: { type: "array", items: experienceItemSchema },
+    education: { type: "array", items: educationItemSchema },
+    skills: { type: "array", items: str },
+    portfolio: { type: "array", items: portfolioItemSchema },
+    isFollowing: { ...bool, description: "Present only when the request carries a valid access token." },
+  },
+};
+
+/** One row of GET /me/blocks and /me/mutes. */
+export const relationItemSchema: Schema = objectSchema({ id: str, handle: str, displayName: str, since: isoDate });

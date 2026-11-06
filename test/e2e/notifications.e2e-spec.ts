@@ -120,6 +120,7 @@ describe("notifications", () => {
     const u = await t.login();
     const put = await http().put("/v1/me/notification-preferences").set(auth(u)).send({ items: [{ type: "media.failed", email: false }] });
     expect(put.status).toBe(200);
+    expect(put.body).toMatchObject({ items: expect.any(Array) });
     expect(put.body.items.find((i: { type: string }) => i.type === "media.failed")).toEqual({ type: "media.failed", inApp: true, email: false });
 
     await bus.dispatch(mediaFailed(u.userId), randomUUID());
@@ -136,6 +137,9 @@ describe("notifications", () => {
     const u = await t.login();
     const res = await http().get("/v1/me/notification-preferences").set(auth(u));
     expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ items: expect.any(Array) });
+    expect(res.body.items.length).toBeGreaterThan(0);
+    for (const item of res.body.items) expect(item).toEqual({ type: expect.any(String), inApp: expect.any(Boolean), email: expect.any(Boolean) });
     const byType = Object.fromEntries(res.body.items.map((i: { type: string; inApp: boolean; email: boolean }) => [i.type, i]));
     expect(byType["welcome"]).toMatchObject({ inApp: true, email: true });
     expect(byType["media.failed"]).toMatchObject({ inApp: true, email: true });

@@ -43,6 +43,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `R2_PLAYBACK_BASE_URL` | yes | Base URL of the edge playback gate. |
 | `R2_ENDPOINT` | no | S3 endpoint override (MinIO locally). |
 | `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `RESEND_WEBHOOK_SECRET` | yes | Transactional mail and its delivery webhook (`POST /v1/webhooks/resend`). |
+| `RESEND_BASE_URL` | no | Points the Resend client at a fake server for tests and local development (default `https://api.resend.com`). Startup fails if it is set with `NODE_ENV=production`. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | yes | Razorpay API credentials (orders, refunds, subscriptions). Use test-mode keys outside production. |
 | `RAZORPAY_WEBHOOK_SECRET` | yes | Secret of the Razorpay dashboard webhook; verifies `X-Razorpay-Signature` on `POST /v1/webhooks/razorpay`. |
 | `RAZORPAYX_ACCOUNT_NUMBER`, `RAZORPAYX_WEBHOOK_SECRET` | yes | RazorpayX payout account number, and the secret verifying `POST /v1/webhooks/razorpayx`. |

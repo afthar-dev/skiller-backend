@@ -12,7 +12,7 @@
     "test": "jest --selectProjects unit",
     "test:int": "jest --selectProjects integration --runInBand",
     "test:e2e": "jest --selectProjects e2e --runInBand",
-    "test:scripts": "node --test scripts/check-schema-drift.spec.mjs",
+    "test:scripts": "node --test scripts/check-schema-drift.spec.mjs scripts/check-openapi-responses.spec.mjs",
     "test:all": "jest --runInBand",
     "test:edge": "pnpm --dir edge/playback-gate test",
     "db:migrate:new": "prisma migrate dev --skip-seed --name",
@@ -21,7 +21,8 @@
     "db:sync-permissions": "ts-node scripts/sync-permissions.ts",
     "release": "prisma migrate deploy && node dist/release/scripts/sync-permissions.js",
     "release:seed": "prisma migrate deploy && node dist/release/prisma/seed.js",
-    "openapi:export": "ts-node scripts/export-openapi.ts"
+    "openapi:export": "ts-node scripts/export-openapi.ts",
+    "openapi:check-responses": "node scripts/check-openapi-responses.mjs"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
