@@ -106,18 +106,23 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(ModerationTargetRegistry).get("REEL_COMMENT")).toBeDefined();
   });
 
-  it("Phase 5-6: the worker runs the campaign sender (tick, mail outcome and Resend event hooks, notifications for a refused start) and the analytics rollup (03:00 IST cron, rebuild job, providers, activity counts)", async () => {
+  it("Phase 5-6: the worker runs the campaign sender (tick, the mail-promo worker with its rate limit, Resend event hooks, notifications for a refused start) and the analytics rollup (03:00 IST cron, rebuild job, providers, activity counts)", async () => {
     const { queueToken, QueueNames } = await import("./common/queue/queue.constants");
     const { MailHooks } = await import("./modules/mail");
-    const { CampaignSender } = await import("./modules/growth");
+    const { CampaignSender, PromoMailProcessor } = await import("./modules/growth");
+    const { ProcessorRegistry } = await import("./common/queue/processor-registry");
     const { RollupService } = await import("./modules/analytics");
     const { ActivityTracker } = await import("./common/activity/activity-tracker");
     const { METRICS_PROVIDERS } = await import("./modules/analytics/rollup.service");
     const { NotificationsService } = await import("./modules/notifications");
     for (const token of [CampaignSender, RollupService, ActivityTracker, NotificationsService]) expect(app.get(token)).toBeDefined();
-    // The campaign hooks are wired to the mail module in the worker (Resend ids and delivery events reach recipients).
-    const hooks = app.get(MailHooks) as unknown as { outcomes: Map<string, unknown>; events: unknown[] };
-    expect(hooks.outcomes.has("campaign")).toBe(true);
+    // Promo mail has its own queue and processor, rate limited by the promo_send_per_second setting; the transactional mail queue has none.
+    const promo = app.get(PromoMailProcessor);
+    expect(app.get(ProcessorRegistry).for(QueueNames.mailPromo)).toEqual([promo]);
+    expect(await promo.limiter()).toEqual({ max: 8, duration: 1000 });
+    expect(app.get(ProcessorRegistry).for(QueueNames.mail).every((p) => p.limiter === undefined)).toBe(true);
+    // The campaign hooks are wired to the mail module in the worker (Resend delivery events reach recipients).
+    const hooks = app.get(MailHooks) as unknown as { events: unknown[] };
     expect(hooks.events.length).toBeGreaterThan(0);
     // One provider per module, all built in the worker.
     expect((app.get(METRICS_PROVIDERS) as Array<{ module: string }>).map((x) => x.module).sort()).toEqual(["billing", "courses", "gigs", "growth", "identity", "messaging", "moderation", "rbac", "reels"]);

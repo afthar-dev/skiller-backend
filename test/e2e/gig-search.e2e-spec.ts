@@ -180,7 +180,7 @@ describe("gig search, moderation and reel links", () => {
       // every gig has a reel that links it, made while the gig was live: the reel's card must follow the same rules as search and the gig page
       const reelOf: Record<string, string> = {};
       for (const [name, g] of Object.entries({ shown, paused, deleted, reported, removed })) {
-        const reel = await postReel(c, { linkedGigId: g.id });
+        const reel = await postReel(c, { linkedGigId: g.id, caption: "a reel for a gig" }); // no hashtag: trending tags are a shared, capped list
         expect([name, reel.status, reel.body.gig?.id]).toEqual([name, 201, g.id]);
         reelOf[name] = reel.body.id;
       }
