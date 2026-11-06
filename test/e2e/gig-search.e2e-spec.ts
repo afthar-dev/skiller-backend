@@ -46,6 +46,8 @@ describe("gig search, moderation and reel links", () => {
     expect(on.status).toBe(200);
     return { id: res.body.id as string, slug: res.body.slug as string, title: res.body.title as string };
   }
+  const postReel = (s: Session, extra: Record<string, unknown> = {}) =>
+    asset(s.userId, "REEL").then((a) => http().post("/v1/reels").set(auth(s)).send({ mediaAssetId: a.id, caption: `reel #${uniq()}`, ...extra }));
   const search = (qs: string, s?: Session) => get(`/v1/gigs?${qs}`, s);
   const ids = (res: { body: { items: Array<{ id: string }> } }) => res.body.items.map((i) => i.id);
   async function setUserStatus(userId: string, status: "ACTIVE" | "SUSPENDED") {
@@ -175,6 +177,14 @@ describe("gig search, moderation and reel links", () => {
       const deleted = await liveGig(c, { tags: [tag] });
       const reported = await liveGig(c, { tags: [tag] });
       const removed = await liveGig(c, { tags: [tag] });
+      // every gig has a reel that links it, made while the gig was live: the reel's card must follow the same rules as search and the gig page
+      const reelOf: Record<string, string> = {};
+      for (const [name, g] of Object.entries({ shown, paused, deleted, reported, removed })) {
+        const reel = await postReel(c, { linkedGigId: g.id });
+        expect([name, reel.status, reel.body.gig?.id]).toEqual([name, 201, g.id]);
+        reelOf[name] = reel.body.id;
+      }
+      const cardOf = async (name: string, viewer?: Session) => (await get(`/v1/reels/${reelOf[name]}`, viewer)).body.gig as { id: string } | null;
       const draft = (await http().post("/v1/studio/gigs").set(auth(c)).send({ title: `Draft ${uniq()}`, description: "x", categoryId, tags: [tag], packages: [pkg("49900")] })).body.id as string;
       expect((await http().post(`/v1/studio/gigs/${paused.id}/pause`).set(auth(c))).status).toBe(200);
       expect((await http().delete(`/v1/studio/gigs/${deleted.id}`).set(auth(c))).status).toBe(204);
@@ -184,7 +194,8 @@ describe("gig search, moderation and reel links", () => {
       expect((await prisma.gig.findUniqueOrThrow({ where: { id: reported.id } })).status).toBe("HIDDEN");
       expect((await prisma.gig.findUniqueOrThrow({ where: { id: removed.id } })).status).toBe("REMOVED");
 
-      // each gig has a reel that links it (when it may): the card must follow the same rules
+      expect((await cardOf("shown"))?.id).toBe(shown.id);
+      for (const name of ["paused", "deleted", "reported", "removed"]) expect([name, await cardOf(name)]).toEqual([name, null]);
       const gone = [paused, deleted, reported, removed];
       const handle = await handleOf(c);
       const surfaces = async (viewer?: Session) => ({
@@ -215,8 +226,9 @@ describe("gig search, moderation and reel links", () => {
       expect((await http().delete(`/v1/blocks/${handle}`).set(auth(viewer))).status).toBe(200);
       expect(ids(await search(`q=${tag}`, viewer))).toEqual([shown.id]);
 
-      // a dismissed report brings the held-back gig back
+      // a dismissed report brings the held-back gig back, and its reel's card with it
       expect((await decide("dismiss", reported.id)).status).toBe(200);
+      expect((await cardOf("reported"))?.id).toBe(reported.id);
       expect((await prisma.gig.findUniqueOrThrow({ where: { id: reported.id } })).status).toBe("ACTIVE");
       expect(new Set(ids(await search(`q=${tag}`)))).toEqual(new Set([shown.id, reported.id]));
     });
@@ -282,9 +294,6 @@ describe("gig search, moderation and reel links", () => {
   });
 
   describe("reel links", () => {
-    const postReel = (s: Session, extra: Record<string, unknown> = {}) =>
-      asset(s.userId, "REEL").then((a) => http().post("/v1/reels").set(auth(s)).send({ mediaAssetId: a.id, caption: `reel #${uniq()}`, ...extra }));
-
     it("a reel links one live gig of its creator: a card shows on the reel, follows the gig's state, and clears with null", async () => {
       const c = await creator();
       const g = await liveGig(c);
@@ -334,11 +343,13 @@ describe("gig search, moderation and reel links", () => {
       expect((await prisma.reel.findUniqueOrThrow({ where: { id: ok.body.id } })).linkedGigId).toBe(mine.id);
     });
 
-    it("the card is absent for a suspended seller's reel and a blocked viewer, and link clicks on a gig card count", async () => {
+    it("the card is absent for a suspended seller's reel and for a viewer who blocked the seller, and link clicks on a gig card count", async () => {
       const c = await creator();
       const g = await liveGig(c);
       const reel = await postReel(c, { linkedGigId: g.id });
       const viewer = await t.login();
+      await t.app.get(ProfilesService).ensure(viewer.userId);
+      expect((await get(`/v1/reels/${reel.body.id}`, viewer)).body.gig).toMatchObject({ id: g.id });
       const click = await http().post(`/v1/reels/${reel.body.id}/link-click`).set(auth(viewer)).send({});
       expect([click.status, click.body.counted]).toEqual([202, true]);
       await setUserStatus(c.userId, "SUSPENDED");
@@ -347,6 +358,14 @@ describe("gig search, moderation and reel links", () => {
       } finally {
         await setUserStatus(c.userId, "ACTIVE");
       }
+      // the block: the viewer no longer gets the seller's reel, so no card either; unblocking brings both back
+      const handle = await handleOf(c);
+      expect((await http().put(`/v1/blocks/${handle}`).set(auth(viewer))).status).toBe(200);
+      const blocked = await get(`/v1/reels/${reel.body.id}`, viewer);
+      expect(blocked.status).toBe(404);
+      expect(JSON.stringify(blocked.body)).not.toContain(g.slug);
+      expect((await http().delete(`/v1/blocks/${handle}`).set(auth(viewer))).status).toBe(200);
+      expect((await get(`/v1/reels/${reel.body.id}`, viewer)).body.gig).toMatchObject({ id: g.id });
     });
   });
 });
