@@ -54,6 +54,12 @@ export class AccountService {
     return rows.map((r) => r.id);
   }
 
+  /** Ids of ACTIVE accounts in id order, strictly above `cursor`: a stable walk over a large audience, one bounded page at a time. */
+  async activeIdsAfter(cursor: string | undefined, take: number): Promise<string[]> {
+    const rows = await this.prisma.user.findMany({ where: { status: "ACTIVE", ...(cursor ? { id: { gt: cursor } } : {}) }, select: { id: true }, orderBy: { id: "asc" }, take });
+    return rows.map((r) => r.id);
+  }
+
   /** Index-backed prefix match (users_email_pattern_idx, text_pattern_ops). `prefix` must already be lower-case: emails are stored lower-case. */
   async idsByEmailPrefix(prefix: string, cursor: string | undefined, take: number): Promise<string[]> {
     const rows = await this.prisma.user.findMany({

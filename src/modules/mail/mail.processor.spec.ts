@@ -3,6 +3,7 @@ import { MailService } from "./mail.service";
 import { MailJobData, MailProcessor } from "./mail.processor";
 import { FakeResendClient } from "./resend.client";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
+import { MailHooks } from "./mail-hooks";
 
 function prismaWith(suppressions: Record<string, string>) {
   return {
@@ -19,7 +20,7 @@ function job(data: MailJobData): Job<MailJobData> {
 
 function setup(suppressions: Record<string, string> = {}) {
   const client = new FakeResendClient();
-  const processor = new MailProcessor(prismaWith(suppressions) as never, client, new ProcessorRegistry());
+  const processor = new MailProcessor(prismaWith(suppressions) as never, client, new ProcessorRegistry(), new MailHooks());
   return { client, processor };
 }
 

@@ -4,6 +4,7 @@ export { PermissionService } from "./permission.service";
 export type { EffectivePermissions } from "./permission.service";
 export { PlatformRoleDirectory } from "./platform-role-directory";
 export { RolesService } from "./roles.service";
+export { RoleSegmentProvider } from "./role-segment.provider";
 export type { MutationMeta, RoleView, UserRoleView } from "./roles.service";
 export { MEMBER_ROLE_KEY, SUPER_ADMIN_ROLE_KEY } from "./default-roles";
 export { OrgParamResolverRegistry } from "./org-param-resolver";

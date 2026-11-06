@@ -9,10 +9,11 @@ import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
+import { MailHooks } from "./mail-hooks";
 
 interface ResendEvent {
   type: string;
-  data?: { to?: string[] | string };
+  data?: { to?: string[] | string; email_id?: string };
 }
 
 const SUPPRESSING: Record<string, "bounced" | "complained"> = {
@@ -27,6 +28,7 @@ export class ResendWebhookController {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly hooks: MailHooks,
   ) {}
 
   @Post("resend")
@@ -60,6 +62,8 @@ export class ResendWebhookController {
         });
       }
     }
+    // Delivery events (delivered, opened, clicked) name the mail by Resend's id; whoever queued it may keep stats. Idempotent on their side.
+    if (event.data?.email_id) await this.hooks.emitEvent({ type: event.type, emailId: event.data.email_id });
     return { received: true };
   }
 }

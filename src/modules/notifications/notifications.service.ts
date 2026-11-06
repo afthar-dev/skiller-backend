@@ -7,6 +7,7 @@ import { AccountService } from "../identity";
 import { MailService } from "../mail";
 import type { MailData, MailTemplate } from "../mail";
 import { NotificationFilters } from "./notification-filters";
+import { PromoPreferences } from "./promo-preferences";
 import { defaultPreference, NOTIFICATION_TYPE_KEYS, type EffectivePreference, type NotificationType } from "./notification-types";
 
 export interface NotifyInput {
@@ -57,6 +58,7 @@ export class NotificationsService {
     private readonly accounts: AccountService,
     private readonly mail: MailService,
     private readonly filters: NotificationFilters,
+    private readonly promo: PromoPreferences,
   ) {}
 
   async preferenceFor(userId: string, type: NotificationType): Promise<EffectivePreference> {
@@ -186,6 +188,8 @@ export class NotificationsService {
         });
       }
     });
+    // Switching promotional email on or off also lifts or sets the address suppression, so the toggle and the unsubscribe link agree.
+    for (const item of items) if (item.type === "promo" && item.email !== undefined) await this.promo.setPromoEmail(userId, item.email);
     return this.listPreferences(userId);
   }
 }

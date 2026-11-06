@@ -96,9 +96,9 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(EventBus).registeredTypes()).toEqual(expect.arrayContaining(["media.ready", "media.failed", "reel.engaged"]));
     // Jobs: the minute-by-minute view / link-click flush and the hourly trending-hashtag refresh. Interest decay is lazy (applied on read), so it has no job.
     const jobs = app.get(ProcessorRegistry).for(QueueNames.maintenance).flatMap((p) => p.jobNames);
-    expect(jobs).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending"]));
+    expect(jobs).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending", "growth.campaigns.tick"]));
     const keys = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).map((x) => x.key);
-    expect(keys).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending"]));
+    expect(keys).toEqual(expect.arrayContaining(["reels.views.flush", "reels.hashtags.trending", "growth.campaigns.tick"]));
     // Services those handlers need.
     for (const token of [ReelViewFlusher, InterestsService, ReelNotifier, PostingRestrictions, NotificationFilters]) expect(app.get(token)).toBeDefined();
     // Moderation holds: reels and reel comments are registered so a hide / remove / restore decided in the API stays consistent from the worker too.
@@ -122,7 +122,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
       (await app.get<import("bullmq").Queue>(queueToken(name as never)).getJobSchedulers()).map((x) => x.key).sort();
     expect(await keys(QueueNames.outbox)).toEqual(["outbox-relay"]);
     expect(await keys(QueueNames.maintenance)).toEqual(
-      ["courses.popularity.refresh", "courses.seats.sweep", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["courses.popularity.refresh", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
     );
     const nightly = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).find((x) => x.key === "reconciliation.nightly");
     expect(nightly).toMatchObject({ pattern: "0 2 * * *", tz: "Asia/Kolkata" });
@@ -135,7 +135,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     const jobs = (queue: string) => registry.for(queue as never).flatMap((p) => p.jobNames).sort();
     expect(jobs(QueueNames.billing)).toEqual(["payout.send", "webhook.process"]);
     expect(jobs(QueueNames.maintenance)).toEqual(
-      ["courses.popularity.refresh", "courses.progress.recompute", "courses.seats.sweep", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["courses.popularity.refresh", "courses.progress.recompute", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
     );
   });
 

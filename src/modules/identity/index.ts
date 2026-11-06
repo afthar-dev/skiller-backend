@@ -1,5 +1,6 @@
 // Public surface of the identity module. Other modules import only from here.
 export { AccountService } from "./account.service";
+export { ActivitySegmentProvider } from "./activity-segment.provider";
 export { SessionService } from "./session.service";
 export { TokenService } from "./token.service";
 export { UserStatusCache } from "./user-status.cache";

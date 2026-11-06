@@ -48,7 +48,12 @@ export const NOTIFICATION_TYPES = {
   "moderation.restored": { transactional: false },
   "moderation.strike": { transactional: false },
   "moderation.restricted": { transactional: false },
+  // Promotional email consent (see PromoPreferences): `promo` is subscribed by default, `marketing_opt_in` is explicit.
+  promo: { transactional: false, emailDefault: true },
+  marketing_opt_in: { transactional: false, emailDefault: false },
 } as const;
+
+type NotificationTypeDef = { transactional: boolean; emailDefault?: boolean };
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES;
 export const NOTIFICATION_TYPE_KEYS = Object.keys(NOTIFICATION_TYPES) as [NotificationType, ...NotificationType[]];
@@ -62,5 +67,5 @@ export interface EffectivePreference {
 export const defaultPreference = (type: NotificationType): EffectivePreference => ({
   type,
   inApp: true,
-  email: NOTIFICATION_TYPES[type].transactional,
+  email: (NOTIFICATION_TYPES[type] as NotificationTypeDef).emailDefault ?? NOTIFICATION_TYPES[type].transactional,
 });

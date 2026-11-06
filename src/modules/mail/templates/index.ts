@@ -7,6 +7,7 @@ import { OrderReceipt, orderReceiptSubject } from "./order-receipt";
 import { OrgInvite, orgInviteSubject } from "./org-invite";
 import { Otp, otpSubject } from "./otp";
 import { PayoutAccountChanged, payoutAccountChangedSubject } from "./payout-account-changed";
+import { PromoCampaign, promoCampaignSubject } from "./promo-campaign";
 import { Welcome, welcomeSubject } from "./welcome";
 
 export interface RenderedMail {
@@ -59,6 +60,10 @@ function pick<T extends MailTemplate>(template: T, data: MailData[T]) {
     case "payout_account_changed": {
       const d = data as MailData["payout_account_changed"];
       return [payoutAccountChangedSubject(d), createElement(PayoutAccountChanged, d)] as const;
+    }
+    case "promo_campaign": {
+      const d = data as MailData["promo_campaign"];
+      return [promoCampaignSubject(d), createElement(PromoCampaign, d)] as const;
     }
     default:
       throw new Error(`Unknown mail template: ${String(template)}`);

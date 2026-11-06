@@ -1587,6 +1587,78 @@ model UserInterest {
   @@map("user_interests")
 }
 
+// ─── growth ──────────────────────────────────────────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  PAUSED
+  SENT
+  CANCELLED
+}
+
+enum CampaignRecipientStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
+/// A promotional email campaign. createdById / approvedById point at users (no FK: users is another module).
+model Campaign {
+  id           String         @id @default(uuid(7))
+  name         String
+  subject      String
+  /// Markdown, validated by assertSafeMarkdown; the unsubscribe footer is added by the mail template.
+  bodyMarkdown String
+  /// Validated by growth's segmentSchema: roles, plan, interests, lastActive, hasPurchased.
+  segment      Json
+  status       CampaignStatus @default(DRAFT)
+  scheduledAt  DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  /// Recipient rows written when sending started.
+  audienceSize Int?
+  createdById  String
+  /// Required (and not the creator) for audiences above 10,000; withdrawn by any edit.
+  approvedById String?
+  approvedAt   DateTime?
+  /// Distinct recipients per Resend event: delivered, opened, clicked, bounced, complained.
+  stats        Json           @default("{}")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  recipients CampaignRecipient[]
+
+  @@index([status, scheduledAt])
+  @@map("campaigns")
+}
+
+/// One member of one campaign. Written when sending starts (idempotent); claimed in batches with FOR UPDATE SKIP LOCKED.
+model CampaignRecipient {
+  campaignId   String
+  userId       String
+  status       CampaignRecipientStatus @default(PENDING)
+  /// Why a recipient was skipped: account_inactive, suppressed, unsubscribed, marketing_opt_in_required, cancelled.
+  skipReason   String?
+  /// Set when a worker takes the recipient; a claim older than five minutes is stale and the recipient is taken again.
+  claimedAt    DateTime?
+  sentAt       DateTime?
+  resendId     String?                 @unique
+  deliveredAt  DateTime?
+  openedAt     DateTime?
+  clickedAt    DateTime?
+  bouncedAt    DateTime?
+  complainedAt DateTime?
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, userId])
+  @@index([campaignId, status])
+  @@map("campaign_recipients")
+}
+
 // ─── moderation ──────────────────────────────────────────────────────────
 // The moderation module owns reports, strikes, blocks, mutes and posting restrictions. Content stays in its owner's tables (reels, reel comments,
 // course reviews and Q&A): owners register a target adapter that hides / removes / restores it, and the decision lives here.

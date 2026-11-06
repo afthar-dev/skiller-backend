@@ -35,6 +35,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `JWT_SECRET`, `OTP_PEPPER`, `PLAYBACK_SECRET` | yes | Each at least 32 random characters. Rotating `JWT_SECRET` signs everyone out; `PLAYBACK_SECRET` must match the edge gate. |
 | `CORS_ORIGINS` | yes | Comma-separated allowed web origins (credentials are allowed). |
 | `WEB_BASE_URL` | yes | Public web app URL, used for links in emails. |
+| `API_BASE_URL` | no | Public URL of this API, used for the one-click unsubscribe link in promotional email (`<API_BASE_URL>/v1/unsubscribe?t=`). Defaults to `WEB_BASE_URL`, which then has to proxy `/v1`. |
 | `COOKIE_DOMAIN` | yes | Domain of the `skiller_rt` refresh cookie. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | yes | Cloudflare R2 (or MinIO) credentials. |
 | `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` | yes | Public assets (avatars, logos, ...) and private sources / lesson HLS. |
@@ -91,6 +92,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `JWT_SECRET`, `OTP_PEPPER`, `PLAYBACK_SECRET` | yes | Each at least 32 random characters. Rotating `JWT_SECRET` signs everyone out; `PLAYBACK_SECRET` must match the edge gate. |
 | `CORS_ORIGINS` | yes | Comma-separated allowed web origins (credentials are allowed). |
 | `WEB_BASE_URL` | yes | Public web app URL, used for links in emails. |
+| `API_BASE_URL` | no | Public URL of this API, used for the one-click unsubscribe link in promotional email (`<API_BASE_URL>/v1/unsubscribe?t=`). Defaults to `WEB_BASE_URL`, which then has to proxy `/v1`. |
 | `COOKIE_DOMAIN` | yes | Domain of the `skiller_rt` refresh cookie. |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | yes | Cloudflare R2 (or MinIO) credentials. |
 | `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` | yes | Public assets (avatars, logos, ...) and private sources / lesson HLS. |
@@ -147,6 +149,7 @@ Stored in `platform_settings` (admin API), read through a typed registry; the de
 | `max_upload_mb_course_lesson` | `5120` | Largest lesson video upload, MB. |
 | `reel_max_seconds` | `90` | Longest reel. |
 | `report_autohide_threshold` | `5` | Distinct members who must report the same content before it is hidden until a moderator decides. |
+| `marketing_opt_in_required` | `false` | `true` sends promotional campaigns only to members who set the `marketing_opt_in` preference; `false` to everyone who has not unsubscribed. Ask your lawyer whether the DPDP Act requires opt-in. |
 
 ### Finance operations
 
@@ -267,6 +270,14 @@ The 0.05 engagement floor keeps a brand-new reel nobody has reacted to from scor
 Gig listings (creators sell, display-only prices, payments happen off-platform) live in `src/modules/gigs`. **Search.** `GET /v1/gigs?q=&category=&minPrice=&maxPrice=&sort=` (public, 300 reads a minute per IP) searches live gigs only: `q` is full-text over title (A), tags (B) and description (C) in the `simple` configuration, with fuzzy title matching when nothing matches as written; `category` is a course category slug; prices filter the starting price (lowest package, paise, kept in `gigs."startingPricePaise"` by the studio writes); `sort` is `relevance` (newest without `q`), `newest`, `price_asc`, `price_desc`. Pages use signed keyset cursors bound to the query (a cursor from another query or list, or a tampered one, is `400 BAD_CURSOR`). Seller visibility (suspended or deleted account, blocks either way) is applied through `GigVisibility` after the query and the page is refilled from the same keyset, so hidden sellers never leak and never shorten a page unless the matches run out.
 
 **Moderation.** Gigs are a report target (`GIG`): a live gig can be reported, `report_autohide_threshold` distinct reporters move it to `HIDDEN` (off every public surface, still the seller's, still counted against `max_active_gigs`); dismissed brings it back to `ACTIVE`, upheld makes it `REMOVED` plus a strike. **Reel links.** `POST/PATCH /v1/reels` accept `linkedGigId` (a live gig of the reel's creator; `422 GIG_NOT_LINKABLE`), mutually exclusive with `linkedCourseId` (`422 REEL_LINK_CONFLICT`). Reels show `gig` (id, slug, title, startingPricePaise, cover) only while the gig is ACTIVE; link clicks on a gig card are counted like course card clicks.
+
+## Promo campaigns
+
+Admins (permission `campaign.manage`, held by `super_admin`; every change needs a step-up) compose promotional email in `src/modules/growth`: `POST /v1/admin/campaigns { name, subject, bodyMarkdown, segment }`, then `preview`, `test-send`, `approve`, `send { scheduledAt? }`, `pause`, `resume`, `cancel` under `/v1/admin/campaigns/:id/`, `GET /v1/admin/campaigns[/:id]` for the list and stats. The subject is plain text on one line (150 characters); the body is Markdown checked by `assertSafeMarkdown` and rendered in the mail template, which always appends the unsubscribe footer, so no text can remove it. The segment combines (AND) any of `roles`, `plan` (`free` also matches members without a paid subscription), `interests` (`tag:<hashtag>`, `cat:<categoryId>`), `lastActive` (`{ withinDays }` or `{ inactiveDays }`) and `hasPurchased`; each module that owns the data exports a `SegmentProvider` (rbac, billing, reels, identity) and growth walks the active members by id in pages of 1,000, so it never reads another module's tables and never holds the audience in memory. **Preview** returns only `{ audience, requiresApproval }`; **test send** goes to the acting admin's own address only. An audience above 10,000 needs `approve` by a different admin (`CAMPAIGN_SELF_APPROVAL` otherwise) before `send` (`CAMPAIGN_APPROVAL_REQUIRED`); any edit withdraws the approval.
+
+**Sending.** The worker tick (every 30 s) starts due campaigns by writing one `campaign_recipients` row per member (idempotent, under an advisory lock), then sends in batches of 100 claimed with `FOR UPDATE SKIP LOCKED` (at most 30 batches per tick per campaign). Pause and cancel are read before every batch; a cancelled campaign marks the rest SKIPPED (`cancelled`). A claim older than 5 minutes (a worker died mid-batch) is taken again. Each mail is queued as `promotional` with the key `campaign-<id>-<userId>`, so a retry, resume or re-claimed batch cannot send the same member the same campaign twice. Per recipient, at send time: inactive account (`account_inactive`), suppressed address (`suppressed`), promo preference off (`unsubscribed`), or, with `marketing_opt_in_required`, no opt-in (`marketing_opt_in_required`) are SKIPPED with that reason. Resend webhook events (delivered, opened, clicked, bounced, complained) are matched by Resend id to the recipient and counted once per recipient in `campaigns.stats`.
+
+**Unsubscribe.** Every promotional mail carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` and a footer link to `/v1/unsubscribe?t=<token>` (public, 60 requests a minute per IP). The token is an HMAC (key derived from `JWT_SECRET`, context `unsubscribe`) over the member id and category, no expiry; a forged or damaged one is `400 UNSUBSCRIBE_TOKEN_INVALID`. `GET` only describes (`{ category, alreadyUnsubscribed }`, no address); `POST` turns the `promo` email preference off and records an `email_suppressions` row (reason `unsubscribed`; a bounce already there is kept), which every promotional send honours. Switching the `promo` preference back on (`PUT /v1/me/notification-preferences`) lifts only that suppression. `promo` is on by default; `marketing_opt_in` is off by default.
 
 ## Moderation
 

@@ -1,4 +1,4 @@
-export type MailTemplate = "otp" | "welcome" | "org_invite" | "media_failed" | "order_receipt" | "payout_account_changed";
+export type MailTemplate = "otp" | "welcome" | "org_invite" | "media_failed" | "order_receipt" | "payout_account_changed" | "promo_campaign";
 
 export type MailCategory = "transactional" | "promotional";
 
@@ -11,4 +11,6 @@ export interface MailData {
   order_receipt: { orderId: string; itemTitle: string; amount: string; paidOn: string };
   /** accountSummary is masked display text (e.g. "bank account ending 6789"); cooldownEnds is display text in IST. */
   payout_account_changed: { ownerLabel: string; accountSummary: string; cooldownEnds: string; replaced: boolean };
+  /** A promotional campaign mail: the validated Markdown body is rendered in the template, and the unsubscribe footer is always appended there. */
+  promo_campaign: { subject: string; bodyMarkdown: string; unsubscribeUrl: string };
 }

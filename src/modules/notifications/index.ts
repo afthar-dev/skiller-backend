@@ -2,6 +2,7 @@
 export { NotificationFilters } from "./notification-filters";
 export type { FilterableNotification, NotificationFilter } from "./notification-filters";
 export { NotificationsService } from "./notifications.service";
+export { PromoPreferences } from "./promo-preferences";
 export type { NotificationView, NotifyInput } from "./notifications.service";
 export { NotificationsModule } from "./notifications.module";
 export { NotificationsWorkerModule } from "./notifications-worker.module";

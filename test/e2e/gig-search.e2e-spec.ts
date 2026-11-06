@@ -261,7 +261,7 @@ describe("gig search, moderation and reel links", () => {
       const edit = await http().patch(`/v1/studio/gigs/${g.id}`).set(auth(c)).send({ tags: ["x"] });
       expect(edit.status).toBe(409);
 
-      const queue = await http().get("/v1/admin/moderation/reports?status=OPEN").set(auth(moderator));
+      const queue = await http().get("/v1/admin/moderation/reports?type=GIG").set(auth(moderator));
       expect(queue.status).toBe(200);
       expect(JSON.stringify(queue.body)).toContain(g.id);
 

@@ -10,6 +10,7 @@ export type { LimitKey, PlanLimits } from "./plan-catalog";
 export { gigLimitFor } from "./plan-catalog";
 export { seedPlans } from "./plans-seed";
 export { BillingReports } from "./billing-reports";
+export { PlanSegmentProvider, PurchaseSegmentProvider } from "./billing-segment.providers";
 export type { SellerRevenue } from "./billing-reports";
 export { addDays, DATE_PATTERN, istDateOf, istDayRange } from "./ist";
 export { commissionSplit, fromApi, fromGatewayAmount, gstSplit, splitBps, toApi } from "./money";

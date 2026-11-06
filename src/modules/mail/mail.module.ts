@@ -1,6 +1,8 @@
 import { Global, Module } from "@nestjs/common";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
+import { EmailSuppressions } from "./email-suppressions";
+import { MailHooks } from "./mail-hooks";
 import { MailProcessor } from "./mail.processor";
 import { MailService } from "./mail.service";
 import { ResendWebhookController } from "./resend-webhook.controller";
@@ -17,7 +19,9 @@ import { HttpResendClient, RESEND_CLIENT } from "./resend.client";
     },
     MailService,
     MailProcessor,
+    MailHooks,
+    EmailSuppressions,
   ],
-  exports: [MailService],
+  exports: [MailService, MailHooks, EmailSuppressions],
 })
 export class MailModule {}

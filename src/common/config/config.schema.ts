@@ -14,6 +14,8 @@ const envSchema = z
   CORS_ORIGINS: z.string().min(1),
   // Public URL of the web app, used for links in emails.
   WEB_BASE_URL: z.string().url(),
+  // Public URL of this API, used for the one-click unsubscribe link in promotional email. Defaults to WEB_BASE_URL (when the web app proxies /v1).
+  API_BASE_URL: z.string().url().optional(),
   COOKIE_DOMAIN: z.string().min(1),
   R2_ACCOUNT_ID: z.string().min(1),
   R2_ACCESS_KEY_ID: z.string().min(1),
@@ -71,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     playbackSecret: e.PLAYBACK_SECRET,
     corsOrigins: e.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
     webBaseUrl: e.WEB_BASE_URL.replace(/\/+$/, ""),
+    apiBaseUrl: (e.API_BASE_URL ?? e.WEB_BASE_URL).replace(/\/+$/, ""),
     cookieDomain: e.COOKIE_DOMAIN,
     r2: {
       accountId: e.R2_ACCOUNT_ID,

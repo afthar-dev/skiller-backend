@@ -28,13 +28,14 @@ import { ReelsModule } from "./modules/reels";
 import { ModerationModule } from "./modules/moderation";
 import { GigsModule } from "./modules/gigs";
 import { MessagingModule } from "./modules/messaging";
+import { GrowthModule } from "./modules/growth";
 import { HealthController } from "./health.controller";
 
 @Module({
   imports: [
     ConfigModule,
     LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }),
-    ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule, AdminModule, WalletModule, BillingModule, CoursesModule, ReelsModule, ModerationModule, GigsModule, MessagingModule],
+    ClockModule, PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, IdentityModule, AuditModule, RbacModule, UsersModule, MediaModule, OrganizationsModule, NotificationsModule, AdminModule, WalletModule, BillingModule, CoursesModule, ReelsModule, ModerationModule, GigsModule, MessagingModule, GrowthModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => new ErrorFilter(config.nodeEnv === "production") },
