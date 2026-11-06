@@ -89,7 +89,7 @@ Rule: a feature imports `lib`, `components` and its own files. It reaches anothe
 
 **Errors.** The backend returns `{ error: { code, message, details }, requestId }`. One map turns codes into friendly text; unknown codes fall back to a generic message showing `requestId`. `VALIDATION_FAILED` details map onto form fields.
 
-**Page states.** Shared `Loading`, `Empty`, `ErrorState` (with retry) and `NoAccess` components. Lint and review treat a query rendered without them as a defect.
+**Page states.** Shared `Loading`, `Empty`, `ErrorState` (with retry) and `NoAccess` components. Review treats a query rendered without them as a defect.
 
 **Money.** Amounts stay decimal strings of paise end to end and are formatted through `lib/money` using `BigInt`. `Number` is never used on money. The app displays amounts; it never calculates fees, GST or commission, which come from the API.
 
