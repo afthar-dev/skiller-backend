@@ -573,9 +573,12 @@ describe("promo email campaigns", () => {
         await prisma.campaignRecipient.update({ where: { campaignId_userId: { campaignId: c.id, userId: unfinished.id } }, data: { status: "SENDING", sentAt: null, resendId: null } });
         await processor.process(fakeJob(c.id, unfinished.id));
         expect(sentTo([unfinished.email])).toHaveLength(1);
-        // worker died after the row was marked: the job comes back and finds nothing to do
+        // worker died after the row was marked: the job comes back and finds nothing to do (Resend is not even asked)
         await processor.process(fakeJob(c.id, done.id));
+        expect(sentTo([done.email])).toHaveLength(1);
+        const asked = t.mail.calls;
         await processor.process(fakeJob(c.id, done.id));
+        expect(t.mail.calls).toBe(asked);
         expect(sentTo([done.email])).toHaveLength(1);
         await release();
         await finish(c.id);

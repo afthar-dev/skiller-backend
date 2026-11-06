@@ -56,6 +56,8 @@ export class FakeResendClient implements ResendClient {
   private readonly byKey = new Map<string, { id: string }>();
   /** Every call takes this long (a slow Resend). */
   delayMs = 0;
+  /** How often Resend was asked at all, repeated Idempotency-Keys and failures included. */
+  calls = 0;
 
   /** All sends fail with `status` (or only those to `onlyTo`); `null` stops failing. */
   failWith(status: number | null, onlyTo?: string[]) {
@@ -64,6 +66,7 @@ export class FakeResendClient implements ResendClient {
   }
 
   async send(msg: ResendMessage): Promise<{ id: string }> {
+    this.calls += 1;
     if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
     if (this.failStatus !== null && (!this.failOnly || this.failOnly.has(msg.to.toLowerCase()))) throw new ResendApiError(this.failStatus, "fake failure");
     const known = msg.idempotencyKey ? this.byKey.get(msg.idempotencyKey) : undefined;
