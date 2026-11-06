@@ -72,7 +72,7 @@ Add `ApiJsonResponse` declarations using the existing helpers in `src/common/ope
 - [ ] **Step 4: Verify**
 
 Run: `pnpm openapi:export`, `pnpm openapi:check-responses`, typecheck, lint, then the full suite.
-Expected: all green; allowlist has at most 180 entries.
+Expected: all green; allowlist has at most 182 entries.
 
 - [ ] **Step 5: Commit**
 
