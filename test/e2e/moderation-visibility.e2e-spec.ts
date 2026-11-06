@@ -329,7 +329,7 @@ describe("moderation: hidden, removed and blocked content never shows; blocks an
       }
       const page1 = await http().get("/v1/me/blocks?limit=2").set(auth(me));
       expect(page1.body).toMatchObject({ items: expect.any(Array), nextCursor: expect.any(String) });
-      expect(page1.body.items[0]).toMatchObject({ id: expect.any(String), handle: people[2].handle, displayName: expect.any(String), since: expect.stringMatching(/^d{4}-d{2}-d{2}T/) });
+      expect(page1.body.items[0]).toMatchObject({ id: expect.any(String), handle: people[2].handle, displayName: expect.any(String), since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) });
       const mutesPage = await http().get("/v1/me/mutes").set(auth(me));
       expect(mutesPage.body).toMatchObject({ items: expect.any(Array), nextCursor: null });
       expect(mutesPage.body.items[0]).toMatchObject({ id: expect.any(String), handle: expect.any(String), displayName: expect.any(String), since: expect.any(String) });

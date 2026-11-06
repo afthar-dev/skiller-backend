@@ -219,9 +219,9 @@ describe("auth", () => {
       id: expect.any(String),
       userAgent: expect.any(String),
       ip: expect.any(String),
-      createdAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
-      lastUsedAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
-      expiresAt: expect.stringMatching(/^d{4}-d{2}-d{2}T/),
+      createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      lastUsedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       current: expect.any(Boolean),
     });
     expect(JSON.stringify(list.body)).not.toMatch(/refreshHash|previousHash/);
