@@ -44,21 +44,22 @@ describe("outbox dead letters", () => {
       calls += 1;
       throw new Error("handler down");
     });
-    await prisma.$transaction((tx) => moduleRef.get(OutboxService).enqueue(tx, { type: "user.registered", userId, email: "dead@example.com" }));
-
-    // Same job options as production except for the attempt count / delay, so the test does not wait minutes.
+    // Same job options as production except for the attempt count / delay, so the test does not wait minutes. The override is in place BEFORE
+    // the event exists and matches on the payload, so whichever relay publishes it gets it: the scheduled relay's scheduler lives in Redis and
+    // survives other suites, so a worker (this suite's included) can relay the row at any moment, with the production options if we were not ready.
     const queue = moduleRef.get<Queue>(queueToken(QueueNames.outbox));
-    const find = () => prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
-    const id = (await find()).id;
     const original = queue.addBulk.bind(queue);
     const spy = jest
       .spyOn(queue, "addBulk")
       .mockImplementation((jobs) =>
-        original(jobs.map((j) => (j.opts?.jobId === id ? { ...j, opts: { ...j.opts, attempts: 3, backoff: { type: "capped-exponential", delay: 10 } } } : j))),
+        original(jobs.map((j) => ((j.data as { payload?: { userId?: string } })?.payload?.userId === userId ? { ...j, opts: { ...j.opts, attempts: 3, backoff: { type: "capped-exponential", delay: 10 } } } : j))),
       );
+    const find = () => prisma.outboxEvent.findFirstOrThrow({ where: { payload: { path: ["userId"], equals: userId } } });
     try {
-      // The shared DB may hold a backlog from other suites; keep relaying (100 oldest rows per batch) until our own event went out.
+      await prisma.$transaction((tx) => moduleRef.get(OutboxService).enqueue(tx, { type: "user.registered", userId, email: "dead@example.com" }));
       const relay = moduleRef.get(OutboxRelay);
+      await relay.relayOnce(); // a relay that is not ours getting there first must change nothing
+      // The shared DB may hold a backlog from other suites; keep relaying (100 oldest rows per batch) until our own event went out.
       const relayDeadline = Date.now() + 30_000;
       while (!(await find()).publishedAt) {
         if (Date.now() > relayDeadline) throw new Error("event never relayed");

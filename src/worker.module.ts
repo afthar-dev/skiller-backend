@@ -20,6 +20,8 @@ import { HashtagTrendingProcessor } from "./modules/reels/hashtag-trending.proce
 import { ReelViewsFlushProcessor } from "./modules/reels/reel-views-flush.processor";
 import { GrowthWorkerModule } from "./modules/growth/growth-worker.module";
 import { CampaignProcessor } from "./modules/growth/campaign.processor";
+import { AnalyticsWorkerModule } from "./modules/analytics/analytics-worker.module";
+import { RollupProcessor } from "./modules/analytics/rollup.processor";
 import { WalletWorkerModule } from "./modules/wallet/wallet-worker.module";
 import { RbacWorkerModule } from "./modules/rbac/rbac-worker.module";
 import { UsersWorkerModule } from "./modules/users/users-worker.module";
@@ -35,7 +37,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule],
+  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
   constructor(
@@ -53,6 +55,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     private readonly reelViewsFlush: ReelViewsFlushProcessor,
     private readonly hashtagTrending: HashtagTrendingProcessor,
     private readonly campaigns: CampaignProcessor,
+    private readonly analyticsRollup: RollupProcessor,
   ) {}
 
   async onApplicationBootstrap() {
@@ -70,6 +73,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.reelViewsFlush.schedule();
     await this.hashtagTrending.schedule();
     await this.campaigns.schedule();
+    await this.analyticsRollup.schedule();
   }
 
   async onApplicationShutdown() {

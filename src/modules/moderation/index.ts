@@ -9,3 +9,4 @@ export type { ModerationTarget } from "./moderation-target";
 export { ModerationService } from "./moderation.service";
 export { ModerationModule } from "./moderation.module";
 export { ModerationWorkerModule } from "./moderation-worker.module";
+export { ModerationMetricsProvider } from "./moderation-metrics.provider";

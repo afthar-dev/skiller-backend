@@ -32,7 +32,7 @@ export const SYSTEM_ROLES: readonly SystemRoleDef[] = [
     key: "finance_admin",
     name: "Finance admin",
     scope: "PLATFORM",
-    permissions: ["user.view", "audit.view", "finance.view", "billing.view_any", "billing.refund", "payout.approve", "wallet.view_any", "finance.reconcile", "billing.coupons.manage"],
+    permissions: ["user.view", "audit.view", "finance.view", "billing.view_any", "billing.refund", "payout.approve", "wallet.view_any", "finance.reconcile", "billing.coupons.manage", "analytics.view"],
   },
   { key: SUPER_ADMIN_ROLE_KEY, name: "Super admin", scope: "PLATFORM", permissions: [] },
 ];

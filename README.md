@@ -3,7 +3,7 @@
 NestJS 11 + Prisma (PostgreSQL 16) + Redis 7 + BullMQ backend for the Skiller platform. Two processes share one codebase:
 
 - **API** (`dist/main.js`): HTTP, everything under `/v1`.
-- **Worker** (`dist/worker.js`): BullMQ processors (mail, media transcoding to HLS, outbox relay, cleanup, Razorpay / RazorpayX webhook processing, hold release, invoices, payouts, reconciliation). Needs `ffmpeg`/`ffprobe`.
+- **Worker** (`dist/worker.js`): BullMQ processors (mail, media transcoding to HLS, outbox relay, cleanup, Razorpay / RazorpayX webhook processing, hold release, invoices, payouts, reconciliation, promo campaign sending, the 03:00 IST analytics rollup). Needs `ffmpeg`/`ffprobe`.
 
 A Cloudflare Worker in `edge/playback-gate` gates private HLS playback (see its own tests via `pnpm test:edge`).
 
@@ -55,61 +55,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 
 ## Payments: Razorpay and RazorpayX
 
-Money is integer **paise** everywhere (`BigInt` in the database, decimal **strings** in JSON: `{ "amountPaise": "123400" }`; the OpenAPI `Money` schema is `^-?[0-9]+# skiller-backend
-
-NestJS 11 + Prisma (PostgreSQL 16) + Redis 7 + BullMQ backend for the Skiller platform. Two processes share one codebase:
-
-- **API** (`dist/main.js`): HTTP, everything under `/v1`.
-- **Worker** (`dist/worker.js`): BullMQ processors (mail, media transcoding to HLS, outbox relay, cleanup, Razorpay / RazorpayX webhook processing, hold release, invoices, payouts, reconciliation). Needs `ffmpeg`/`ffprobe`.
-
-A Cloudflare Worker in `edge/playback-gate` gates private HLS playback (see its own tests via `pnpm test:edge`).
-
-## Setup
-
-Requirements: Node 24, pnpm 10.17.1 (`corepack enable`), Docker (tests start Postgres, Redis and MinIO with Testcontainers).
-
-```bash
-pnpm install
-cp .env.example .env            # fill in secrets; see the table below
-pnpm db:generate                # prisma client
-# local Postgres + Redis (Redis must be noeviction, see Operations notes)
-docker run -d --name skiller-pg -e POSTGRES_USER=skiller -e POSTGRES_PASSWORD=skiller -e POSTGRES_DB=skiller -p 5432:5432 postgres:16-alpine
-docker run -d --name skiller-redis -p 6379:6379 redis:7-alpine redis-server --maxmemory-policy noeviction
-pnpm prisma migrate deploy && pnpm db:seed   # schema + permissions, system roles, SUPER_ADMIN_EMAIL user
-pnpm dev                        # API with watch, http://localhost:4000/v1/docs (Swagger UI, non-production only)
-pnpm start:worker               # after `pnpm build`
-```
-
-## Environment variables
-
-Validated at boot (`src/common/config/config.schema.ts`); the process exits with a `ConfigError` listing every problem.
-
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `NODE_ENV` | no | `development` (default), `test`, `production`. Production: JSON logs, no Swagger UI, hidden 5xx messages. |
-| `PORT` | no | Default `4000`. |
-| `DATABASE_URL`, `REDIS_URL` | yes | Postgres / Redis connection URLs. |
-| `JWT_SECRET`, `OTP_PEPPER`, `PLAYBACK_SECRET` | yes | Each at least 32 random characters. Rotating `JWT_SECRET` signs everyone out; `PLAYBACK_SECRET` must match the edge gate. |
-| `CORS_ORIGINS` | yes | Comma-separated allowed web origins (credentials are allowed). |
-| `WEB_BASE_URL` | yes | Public web app URL, used for links in emails. |
-| `API_BASE_URL` | no | Public URL of this API, used for the one-click unsubscribe link in promotional email (`<API_BASE_URL>/v1/unsubscribe?t=`). Defaults to `WEB_BASE_URL`, which then has to proxy `/v1`. |
-| `COOKIE_DOMAIN` | yes | Domain of the `skiller_rt` refresh cookie. |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | yes | Cloudflare R2 (or MinIO) credentials. |
-| `R2_PUBLIC_BUCKET`, `R2_PRIVATE_BUCKET` | yes | Public assets (avatars, logos, ...) and private sources / lesson HLS. |
-| `R2_PUBLIC_BASE_URL` | yes | Public URL prefix of the public bucket. |
-| `R2_PLAYBACK_BASE_URL` | yes | Base URL of the edge playback gate. |
-| `R2_ENDPOINT` | no | S3 endpoint override (MinIO locally). |
-| `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `RESEND_WEBHOOK_SECRET` | yes | Transactional mail and its delivery webhook (`POST /v1/webhooks/resend`). |
-| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | yes | Razorpay API credentials (orders, refunds, subscriptions). Use test-mode keys outside production. |
-| `RAZORPAY_WEBHOOK_SECRET` | yes | Secret of the Razorpay dashboard webhook; verifies `X-Razorpay-Signature` on `POST /v1/webhooks/razorpay`. |
-| `RAZORPAYX_ACCOUNT_NUMBER`, `RAZORPAYX_WEBHOOK_SECRET` | yes | RazorpayX payout account number, and the secret verifying `POST /v1/webhooks/razorpayx`. |
-| `KYC_PEPPER` | no | 32+ character secret keying the HMAC of PAN numbers (duplicate-PAN detection); defaults to `OTP_PEPPER`. Changing it stops old accounts matching new ones. |
-| `SUPER_ADMIN_EMAIL` | yes | Gets the `super_admin` role at seed time. |
-| `TRUST_PROXY` | no | Reverse-proxy hops in front of the API (default `0`). |
-| `SENTRY_DSN` | no | Enables Sentry. Only server errors (status >= 500) are reported. |
-| `LOG_LEVEL` | no | Pino level, default `info`. |
-| `FFMPEG_PATH`, `FFPROBE_PATH` | no | Worker only; default `ffmpeg` / `ffprobe` on `PATH`. |
-). Every movement is a double-entry ledger entry posted by `LedgerService.post`; the API never edits a balance directly.
+Money is integer **paise** everywhere (`BigInt` in the database, decimal **strings** in JSON: `{ "amountPaise": "123400" }`; the OpenAPI `Money` schema is `^-?[0-9]+$`). Every movement is a double-entry ledger entry posted by `LedgerService.post`; the API never edits a balance directly.
 
 Two Razorpay products are used, with separate webhooks and **different secrets** (the app refuses to boot if they are equal):
 
@@ -163,6 +109,14 @@ Stored in `platform_settings` (admin API), read through a typed registry; the de
 - **Payout account changes** email and notify the owner (a creator) or every `org_owner` (an organization), with the end of the 24 hour pause.
 - **Sentry** never receives request bodies, cookies, headers or query strings (`dataCollection` off plus a `beforeSend` that drops them and filters account / pan / vpa / token / code keys in `extra` and `contexts`). Verify once with a test event in staging.
 - Phase 3 must register the COURSE `SellableProvider` in **both** the API and the worker module: fulfilment after a webhook runs in the worker.
+
+### Go-live checklist (growth)
+
+- **Promotional consent (DPDP).** Every account is subscribed to promo email by default with one-click unsubscribe. Confirm with your lawyer whether India's DPDP Act requires explicit opt-in; if so set the platform setting `marketing_opt_in_required` to `true` (sends then go only to members with the `marketing_opt_in` preference on).
+- **Resend sending domain.** Verify the sending domain in Resend (SPF and DKIM), publish a DMARC record (start with `p=none`, move to `quarantine`), and set `RESEND_FROM_ADDRESS` on that domain. Subscribe the Resend webhook (`delivered`, `opened`, `clicked`, `bounced`, `complained`) to `POST /v1/webhooks/resend`.
+- **`API_BASE_URL`** must be the public URL of the API (unsubscribe links point at `<API_BASE_URL>/v1/unsubscribe`); leave it unset only if the web app proxies `/v1`.
+- Campaigns above 10,000 recipients need a second admin; a scheduled campaign re-checks this when it starts.
+- Run the worker with Redis persistence if you want DAU history to survive a Redis restart (activity sets are only in Redis).
 
 ### Go-live checklist (money)
 
@@ -263,13 +217,19 @@ The 0.05 engagement floor keeps a brand-new reel nobody has reacted to from scor
 
 **Settings.** `reel_max_seconds` (default 90) and `report_autohide_threshold` (default 5), both in the platform settings table above. Phase 4 adds no other setting.
 
-**Hand-written database objects.** None were added after the feed task: see the list under Courses (the `reels_search_vector_trg` trigger with `reels_search_vector_idx` and `reels_caption_trgm_idx`). `reel_view_daily."linkClicks"` is a plain column.
+**Hand-written database objects.** None were added after the feed task by Phases 5-6 beyond the gig search objects listed under Courses (`daily_metrics` is a plain table with a primary key); for reels: see the list under Courses (the `reels_search_vector_trg` trigger with `reels_search_vector_idx` and `reels_caption_trgm_idx`). `reel_view_daily."linkClicks"` is a plain column.
 
 ## Gigs
 
 Gig listings (creators sell, display-only prices, payments happen off-platform) live in `src/modules/gigs`. **Search.** `GET /v1/gigs?q=&category=&minPrice=&maxPrice=&sort=` (public, 300 reads a minute per IP) searches live gigs only: `q` is full-text over title (A), tags (B) and description (C) in the `simple` configuration, with fuzzy title matching when nothing matches as written; `category` is a course category slug; prices filter the starting price (lowest package, paise, kept in `gigs."startingPricePaise"` by the studio writes); `sort` is `relevance` (newest without `q`), `newest`, `price_asc`, `price_desc`. Pages use signed keyset cursors bound to the query (a cursor from another query or list, or a tampered one, is `400 BAD_CURSOR`). Seller visibility (suspended or deleted account, blocks either way) is applied through `GigVisibility` after the query and the page is refilled from the same keyset, so hidden sellers never leak and never shorten a page unless the matches run out.
 
 **Moderation.** Gigs are a report target (`GIG`): a live gig can be reported, `report_autohide_threshold` distinct reporters move it to `HIDDEN` (off every public surface, still the seller's, still counted against `max_active_gigs`); dismissed brings it back to `ACTIVE`, upheld makes it `REMOVED` plus a strike. **Reel links.** `POST/PATCH /v1/reels` accept `linkedGigId` (a live gig of the reel's creator; `422 GIG_NOT_LINKABLE`), mutually exclusive with `linkedCourseId` (`422 REEL_LINK_CONFLICT`). Reels show `gig` (id, slug, title, startingPricePaise, cover) only while the gig is ACTIVE; link clicks on a gig card are counted like course card clicks.
+
+## Messaging
+
+One-to-one text conversations (`src/modules/messaging`): `POST /v1/conversations { recipientHandle, gigId?, message }` gets or creates the pair's conversation (201 new, 200 existing), `GET /v1/conversations`, `GET /v1/conversations/:id/messages` (keyset), `POST .../messages`, `POST .../read`, `GET /v1/conversations/unread-count`. Limits: 60 messages an hour and 20 new people a day per member. A member chooses who may start a conversation with `allowMessagesFrom` (`EVERYONE` default, `FOLLOWING`, `NONE`) on their profile settings; blocks stop messaging both ways and a refusal is always the same `MESSAGING_NOT_ALLOWED` (it never says why). A gig inquiry (`gigId`) bypasses `allowMessagesFrom` only; blocks, suspension and restrictions still apply. Messages can be reported (`GIG_MESSAGE`). Gig pages and the inquiry view carry `paymentNotice`: payments happen outside Skiller and are not protected.
+
+**Real time.** `GET /v1/conversations/stream` is Server-Sent Events backed by Redis pub/sub. It needs the access token in an `Authorization` header, so the browser's `EventSource` cannot be used: the client must use a `fetch`-based SSE reader (no token in the URL, by design). Clients should also poll `unread-count` / the list as a fallback.
 
 ## Promo campaigns
 
@@ -278,6 +238,14 @@ Admins (permission `campaign.manage`, held by `super_admin`; every change needs 
 **Sending.** The worker tick (every 30 s) starts due campaigns by writing one `campaign_recipients` row per member (idempotent, under an advisory lock), then sends in batches of 100 claimed with `FOR UPDATE SKIP LOCKED` (at most 30 batches per tick per campaign). Pause and cancel are read before every batch; a cancelled campaign marks the rest SKIPPED (`cancelled`). A claim older than 5 minutes (a worker died mid-batch) is taken again. Each mail is queued as `promotional` with the key `campaign-<id>-<userId>`, so a retry, resume or re-claimed batch cannot send the same member the same campaign twice. Per recipient, at send time: inactive account (`account_inactive`), suppressed address (`suppressed`), promo preference off (`unsubscribed`), or, with `marketing_opt_in_required`, no opt-in (`marketing_opt_in_required`) are SKIPPED with that reason. Resend webhook events (delivered, opened, clicked, bounced, complained) are matched by Resend id to the recipient and counted once per recipient in `campaigns.stats`.
 
 **Unsubscribe.** Every promotional mail carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` and a footer link to `/v1/unsubscribe?t=<token>` (public, 60 requests a minute per IP). The token is an HMAC (key derived from `JWT_SECRET`, context `unsubscribe`) over the member id and category, no expiry; a forged or damaged one is `400 UNSUBSCRIBE_TOKEN_INVALID`. `GET` only describes (`{ category, alreadyUnsubscribed }`, no address); `POST` turns the `promo` email preference off and records an `email_suppressions` row (reason `unsubscribed`; a bounce already there is kept), which every promotional send honours. Switching the `promo` preference back on (`PUT /v1/me/notification-preferences`) lifts only that suppression. `promo` is on by default; `marketing_opt_in` is off by default.
+
+## Analytics
+
+Admin dashboards (`src/modules/analytics`, permission `analytics.view`, held by `super_admin` and `finance_admin`) read only the `daily_metrics(day, key, value)` table, one row per IST day and key. Each module exports a `MetricsProvider` returning the numbers from its own tables (identity: signups; rbac: new creators; billing: orders, GMV, platform revenue from the ledger, refunds, payouts, active paid subscribers, first sales; courses: enrolments, completions, certificates, first course; reels: posted, views, comments; gigs: published, active, first gig; messaging: gig inquiries (new conversations from a gig), messages; growth: campaign sends/opens/clicks; moderation: reports opened/upheld). A worker job at **03:00 IST** (`analytics.rollup`, cron in `Asia/Kolkata`) rolls up yesterday; it is an upsert, so re-running a day overwrites it. `POST /v1/admin/analytics/rebuild { from, to }` (step-up, audited, past days only, at most 31) queues the same job for a range. Levels (`active_paid_subscribers`, `gigs_active`) are what they were when the rollup ran and are never written into an older day by a rebuild.
+
+**Active members** are counted by `AccessGuard`: every authenticated request does a fire-and-forget `PFADD` into a Redis HyperLogLog for the IST day (`activity:hll:YYYY-MM-DD`, TTL 35 days); it never fails or waits on a request and stores no per-user list. The nightly job stores `dau` (PFCOUNT) and `wau` / `mau` (PFMERGE of the last 7 / 30 days). These are **approximate** (about 0.8% standard error) and cannot be rebuilt once the sets expire (a rebuild leaves them as they were).
+
+Endpoints (`?from&to` are IST days, default the last 30, at most 731): `GET /v1/admin/analytics/overview`, `/series?keys=a,b`, `/funnel` (signup, creator, first course or gig, first sale: counts of events in the range, not a cohort, no member data), `/export?keys=` (CSV attachment; money columns are paise, text cells are formula-safe). Money is a decimal string of paise; counts are numbers; `dataThrough` is the newest rolled-up day (a day not yet rolled up reads 0).
 
 ## Moderation
 

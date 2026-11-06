@@ -11,3 +11,4 @@ export { OrgParamResolverRegistry } from "./org-param-resolver";
 export type { OrgParamResolver } from "./org-param-resolver";
 export { RbacModule } from "./rbac.module";
 export { RbacWorkerModule } from "./rbac-worker.module";
+export { RbacMetricsProvider } from "./rbac-metrics.provider";

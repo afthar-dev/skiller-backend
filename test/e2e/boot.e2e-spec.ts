@@ -30,6 +30,14 @@ describe("API boot (src/main.ts path)", () => {
     expect((await fetch(`${base}/v1/studio/reels/x/analytics`)).status).toBe(401);
     expect((await fetch(`${base}/v1/feed/following`)).status).toBe(401);
     expect((await fetch(`${base}/v1/reels/00000000-0000-0000-0000-000000000000/link-click`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
+    // Phases 5-6: gigs, messaging, campaigns and analytics are wired in (public catalog and unsubscribe, the rest behind auth).
+    expect((await fetch(`${base}/v1/gigs`)).status).toBe(200);
+    expect((await fetch(`${base}/v1/conversations`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/studio/gigs`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/admin/campaigns`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/unsubscribe?t=bad`)).status).toBe(400);
+    expect((await fetch(`${base}/v1/admin/analytics/overview`)).status).toBe(401);
+    expect((await fetch(`${base}/v1/admin/analytics/export?keys=signups`)).status).toBe(401);
     expect((await fetch(`${base}/v1/reports`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(401);
   });
 });

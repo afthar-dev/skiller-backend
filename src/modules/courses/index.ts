@@ -16,3 +16,4 @@ export { firstFreeSlug, randomSlug, slugify } from "./course-rules";
 export { CourseLookup } from "./course-lookup";
 export type { CourseCard } from "./course-lookup";
 export { CoursesWorkerModule } from "./courses-worker.module";
+export { CoursesMetricsProvider } from "./courses-metrics.provider";

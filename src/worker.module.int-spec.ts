@@ -106,6 +106,25 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(app.get(ModerationTargetRegistry).get("REEL_COMMENT")).toBeDefined();
   });
 
+  it("Phase 5-6: the worker runs the campaign sender (tick, mail outcome and Resend event hooks, notifications for a refused start) and the analytics rollup (03:00 IST cron, rebuild job, providers, activity counts)", async () => {
+    const { queueToken, QueueNames } = await import("./common/queue/queue.constants");
+    const { MailHooks } = await import("./modules/mail");
+    const { CampaignSender } = await import("./modules/growth");
+    const { RollupService } = await import("./modules/analytics");
+    const { ActivityTracker } = await import("./common/activity/activity-tracker");
+    const { METRICS_PROVIDERS } = await import("./modules/analytics/rollup.service");
+    const { NotificationsService } = await import("./modules/notifications");
+    for (const token of [CampaignSender, RollupService, ActivityTracker, NotificationsService]) expect(app.get(token)).toBeDefined();
+    // The campaign hooks are wired to the mail module in the worker (Resend ids and delivery events reach recipients).
+    const hooks = app.get(MailHooks) as unknown as { outcomes: Map<string, unknown>; events: unknown[] };
+    expect(hooks.outcomes.has("campaign")).toBe(true);
+    expect(hooks.events.length).toBeGreaterThan(0);
+    // One provider per module, all built in the worker.
+    expect((app.get(METRICS_PROVIDERS) as Array<{ module: string }>).map((x) => x.module).sort()).toEqual(["billing", "courses", "gigs", "growth", "identity", "messaging", "moderation", "rbac", "reels"]);
+    const schedulers = await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers();
+    expect(schedulers.find((x) => x.key === "analytics.rollup")).toMatchObject({ pattern: "0 3 * * *", tz: "Asia/Kolkata" });
+  });
+
   it("registers the COURSE sellable and its refund rule in the worker: webhook-first fulfilment runs here", async () => {
     const { SellableRegistry, RefundEligibilityRegistry } = await import("./modules/billing");
     const provider = app.get(SellableRegistry).find("COURSE");
@@ -122,7 +141,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
       (await app.get<import("bullmq").Queue>(queueToken(name as never)).getJobSchedulers()).map((x) => x.key).sort();
     expect(await keys(QueueNames.outbox)).toEqual(["outbox-relay"]);
     expect(await keys(QueueNames.maintenance)).toEqual(
-      ["courses.popularity.refresh", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["analytics.rollup", "courses.popularity.refresh", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
     );
     const nightly = (await app.get<import("bullmq").Queue>(queueToken(QueueNames.maintenance)).getJobSchedulers()).find((x) => x.key === "reconciliation.nightly");
     expect(nightly).toMatchObject({ pattern: "0 2 * * *", tz: "Asia/Kolkata" });
@@ -135,7 +154,7 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     const jobs = (queue: string) => registry.for(queue as never).flatMap((p) => p.jobNames).sort();
     expect(jobs(QueueNames.billing)).toEqual(["payout.send", "webhook.process"]);
     expect(jobs(QueueNames.maintenance)).toEqual(
-      ["courses.popularity.refresh", "courses.progress.recompute", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
+      ["analytics.rebuild", "analytics.rollup", "courses.popularity.refresh", "courses.progress.recompute", "courses.seats.sweep", "growth.campaigns.tick", "holds.release", "idempotency.cleanup", "invoices.complete", "media.cleanup", "orders.expire", "payouts.redrive", "reconciliation.nightly", "reels.hashtags.trending", "reels.views.flush", "refunds.resume", "subscriptions.maintain"].sort(),
     );
   });
 

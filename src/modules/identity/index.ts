@@ -10,3 +10,4 @@ export { RequireStepUp } from "./require-step-up.decorator";
 export { MEMBER_ROLE_GRANTER } from "./member-role-granter";
 export type { MemberRoleGranter } from "./member-role-granter";
 export { IdentityModule } from "./identity.module";
+export { IdentityMetricsProvider } from "./identity-metrics.provider";

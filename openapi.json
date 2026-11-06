@@ -4167,7 +4167,8 @@
                             "moderation.strike",
                             "moderation.restricted",
                             "promo",
-                            "marketing_opt_in"
+                            "marketing_opt_in",
+                            "campaign.approval_needed"
                           ]
                         },
                         "inApp": {
@@ -16924,6 +16925,374 @@
         "summary": "One-click unsubscribe (RFC 8058): turns promotional email off for the member and suppresses the address. Repeating it is harmless",
         "tags": [
           "Unsubscribe"
+        ]
+      }
+    },
+    "/v1/admin/analytics/overview": {
+      "get": {
+        "operationId": "Analytics_overview",
+        "parameters": [
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last IST day, inclusive, YYYY-MM-DD (default: today). At most 731 days from `from`.",
+            "schema": {}
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First IST day, YYYY-MM-DD (default: 29 days before `to`)",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "ANALYTICS_RANGE_INVALID: bad dates, from after to, or more than 2 years.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `analytics.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every dashboard number for a range of IST days: signups, new creators, DAU / WAU / MAU (approximate: HyperLogLog), orders, GMV, platform revenue, refunds, payouts, paid subscribers, enrolments, completions, certificates, reels, gigs, inquiries, campaign sends / opens / clicks and reports. Flow metrics are summed; levels and active-member counts show the last day's value (`asOf`). Money is a decimal string of paise. Numbers come from the nightly rollup (03:00 IST); `dataThrough` is the newest rolled-up day",
+        "tags": [
+          "Admin analytics"
+        ]
+      }
+    },
+    "/v1/admin/analytics/series": {
+      "get": {
+        "operationId": "Analytics_series",
+        "parameters": [
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last IST day, inclusive, YYYY-MM-DD (default: today). At most 731 days from `from`.",
+            "schema": {}
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First IST day, YYYY-MM-DD (default: 29 days before `to`)",
+            "schema": {}
+          },
+          {
+            "name": "keys",
+            "required": true,
+            "in": "query",
+            "description": "Comma-separated metric keys (see `metrics[].key` in the overview)",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "ANALYTICS_RANGE_INVALID, ANALYTICS_UNKNOWN_METRIC",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `analytics.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "A daily series (one point per IST day, 0 for a day not yet rolled up) for the chosen metric keys",
+        "tags": [
+          "Admin analytics"
+        ]
+      }
+    },
+    "/v1/admin/analytics/funnel": {
+      "get": {
+        "operationId": "Analytics_funnel",
+        "parameters": [
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last IST day, inclusive, YYYY-MM-DD (default: today). At most 731 days from `from`.",
+            "schema": {}
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First IST day, YYYY-MM-DD (default: 29 days before `to`)",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `analytics.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Signup, creator, first published course or gig, first sale: absolute counts for the range from the rollup. Not a cohort and no member data",
+        "tags": [
+          "Admin analytics"
+        ]
+      }
+    },
+    "/v1/admin/analytics/export": {
+      "get": {
+        "operationId": "Analytics_export",
+        "parameters": [
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Last IST day, inclusive, YYYY-MM-DD (default: today). At most 731 days from `from`.",
+            "schema": {}
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "First IST day, YYYY-MM-DD (default: 29 days before `to`)",
+            "schema": {}
+          },
+          {
+            "name": "keys",
+            "required": true,
+            "in": "query",
+            "description": "Comma-separated metric keys (see `metrics[].key` in the overview)",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `analytics.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "The same daily series as a CSV file (attachment). Money columns are paise. Text cells are protected against spreadsheet formulas",
+        "tags": [
+          "Admin analytics"
+        ]
+      }
+    },
+    "/v1/admin/analytics/rebuild": {
+      "post": {
+        "operationId": "Analytics_rebuild",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "ANALYTICS_RANGE_INVALID: bad dates, from after to, today or later, or more than 31 days.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `analytics.view`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rebuild the rollup for past IST days (at most 31, up to yesterday) as a background job; rerunning a day overwrites it, never doubles it. Step-up required, audited",
+        "tags": [
+          "Admin analytics"
         ]
       }
     }

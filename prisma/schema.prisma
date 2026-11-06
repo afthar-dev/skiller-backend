@@ -1937,3 +1937,19 @@ model Message {
   @@index([senderId, createdAt])
   @@map("messages")
 }
+
+// ─── analytics ───────────────────────────────────────────────────────────
+// One row per (IST day, metric key), rebuilt by the nightly rollup from each module's MetricsProvider (idempotent: a re-run overwrites the day).
+// Money keys end in `_paise` (integer paise); `dau` / `wau` / `mau` are approximate (Redis HyperLogLog); `*_active*` / `gigs_active` are levels
+// taken when the rollup ran. The dashboards read only this table.
+
+model DailyMetric {
+  /// IST calendar day ("YYYY-MM-DD").
+  day       String
+  key       String
+  value     BigInt
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@id([day, key])
+  @@map("daily_metrics")
+}

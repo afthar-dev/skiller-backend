@@ -7,6 +7,7 @@ import "../reels/permissions";
 import "../gigs/permissions";
 import "../moderation/permissions";
 import "../growth/permissions";
+import "../analytics/permissions";
 
 // Phase-1 permission keys. Later phases add their own definePermissions() calls next to their modules.
 export const ProfilePermissions = definePermissions("profile", { update_any: "Edit any user's profile" });

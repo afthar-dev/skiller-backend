@@ -34,7 +34,7 @@ describe("PermissionRegistry / definePermissions", () => {
         "course.create", "course.review", "course.manage_any", "course.categories.manage",
         "reel.create",
         "gig.create",
-        "campaign.manage",
+        "campaign.manage", "analytics.view",
       ].sort(),
     );
   });
