@@ -2,6 +2,7 @@ import { Global, Module } from "@nestjs/common";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { EmailSuppressions } from "./email-suppressions";
+import { MailDelivery } from "./mail-delivery";
 import { MailHooks } from "./mail-hooks";
 import { MailProcessor } from "./mail.processor";
 import { MailService } from "./mail.service";
@@ -18,10 +19,11 @@ import { HttpResendClient, RESEND_CLIENT } from "./resend.client";
       useFactory: (config: AppConfig) => new HttpResendClient(config.resend.apiKey, config.resend.fromAddress),
     },
     MailService,
+    MailDelivery,
     MailProcessor,
     MailHooks,
     EmailSuppressions,
   ],
-  exports: [MailService, MailHooks, EmailSuppressions],
+  exports: [MailService, MailDelivery, MailHooks, EmailSuppressions],
 })
 export class MailModule {}

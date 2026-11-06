@@ -52,6 +52,7 @@ export const NOTIFICATION_TYPES = {
   promo: { transactional: false, emailDefault: true },
   marketing_opt_in: { transactional: false, emailDefault: false },
   "campaign.approval_needed": { transactional: false },
+  "campaign.alert": { transactional: false },
 } as const;
 
 type NotificationTypeDef = { transactional: boolean; emailDefault?: boolean };

@@ -31,6 +31,20 @@ const validEnv: NodeJS.ProcessEnv = {
 };
 
 describe("loadConfig", () => {
+  it("API_BASE_URL is required in production (the unsubscribe link must reach the API) and optional elsewhere", () => {
+    const prod = { ...validEnv, NODE_ENV: "production" };
+    expect(() => loadConfig(prod)).toThrow(/API_BASE_URL/);
+    expect(loadConfig({ ...prod, API_BASE_URL: "https://api.skiller.in/" }).apiBaseUrl).toBe("https://api.skiller.in");
+    expect(loadConfig(validEnv).apiBaseUrl).toBe("https://app.skiller.in");
+  });
+
+  it("API_BASE_URL is required in production (the unsubscribe link must reach the API) and optional elsewhere", () => {
+    const prod = { ...validEnv, NODE_ENV: "production" };
+    expect(() => loadConfig(prod)).toThrow(/API_BASE_URL/);
+    expect(loadConfig({ ...prod, API_BASE_URL: "https://api.skiller.in/" }).apiBaseUrl).toBe("https://api.skiller.in");
+    expect(loadConfig(validEnv).apiBaseUrl).toBe("https://app.skiller.in");
+  });
+
   it("TRUST_PROXY defaults to 0 and parses a hop count", () => {
     expect(loadConfig(validEnv).trustProxy).toBe(0);
     expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);

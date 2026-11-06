@@ -1299,6 +1299,10 @@
                           "format": "date-time",
                           "nullable": true
                         },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "allowMessagesFrom": {
                           "type": "string",
                           "enum": [
@@ -1306,11 +1310,7 @@
                             "FOLLOWING",
                             "NONE"
                           ],
-                          "description": "Who may start a conversation with this person."
-                        },
-                        "updatedAt": {
-                          "type": "string",
-                          "format": "date-time"
+                          "description": "Who may start a conversation with you. Private: never shown on the public profile."
                         }
                       }
                     },
@@ -1518,6 +1518,10 @@
                       "format": "date-time",
                       "nullable": true
                     },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "allowMessagesFrom": {
                       "type": "string",
                       "enum": [
@@ -1525,11 +1529,7 @@
                         "FOLLOWING",
                         "NONE"
                       ],
-                      "description": "Who may start a conversation with this person."
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
+                      "description": "Who may start a conversation with you. Private: never shown on the public profile."
                     }
                   }
                 }
@@ -4168,7 +4168,8 @@
                             "moderation.restricted",
                             "promo",
                             "marketing_opt_in",
-                            "campaign.approval_needed"
+                            "campaign.approval_needed",
+                            "campaign.alert"
                           ]
                         },
                         "inApp": {
@@ -4639,6 +4640,7 @@
                       "reel_max_seconds",
                       "report_autohide_threshold",
                       "marketing_opt_in_required",
+                      "promo_send_per_second",
                       "gst_bps",
                       "tds_bps",
                       "min_payout_paise",
@@ -16892,7 +16894,7 @@
             }
           }
         },
-        "summary": "What an unsubscribe link is for (category, and whether it is already done); never shows the address. 400 UNSUBSCRIBE_TOKEN_INVALID for a forged or damaged link",
+        "summary": "The page behind the Unsubscribe link: a button that posts back here. Changes nothing itself and never shows the address. 400 (HTML) for a forged or damaged link",
         "tags": [
           "Unsubscribe"
         ]
@@ -16908,7 +16910,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": ""
           },
           "default": {
@@ -16922,7 +16924,7 @@
             }
           }
         },
-        "summary": "One-click unsubscribe (RFC 8058): turns promotional email off for the member and suppresses the address. Repeating it is harmless",
+        "summary": "Unsubscribes: turns promotional email off for the member and suppresses the address. The page's button gets an HTML confirmation; the RFC 8058 one-click request (body List-Unsubscribe=One-Click) gets 200 JSON. Repeating it is harmless",
         "tags": [
           "Unsubscribe"
         ]

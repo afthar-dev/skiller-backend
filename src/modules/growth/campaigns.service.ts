@@ -8,6 +8,7 @@ import { AuditService } from "../audit";
 import { assertSafeMarkdown } from "../courses";
 import { AccountService } from "../identity";
 import { MailService } from "../mail";
+import { contentHash, isApproved, mayApprove } from "./campaign-approval";
 import { toCampaignView } from "./campaign-view";
 import { APPROVAL_THRESHOLD, SegmentEvaluator, segmentSchema, type Segment } from "./segment";
 import { UnsubscribeTokens } from "./unsubscribe-token";
@@ -29,7 +30,7 @@ const notFound = () => new AppError("CAMPAIGN_NOT_FOUND", 404, "Campaign not fou
 const stateInvalid = (message: string) => new AppError("CAMPAIGN_STATE_INVALID", 409, message);
 const approvalRequired = (audience: number) =>
   new AppError("CAMPAIGN_APPROVAL_REQUIRED", 409, `This campaign reaches more than ${APPROVAL_THRESHOLD} members: a second admin has to approve it first`, { audience, threshold: APPROVAL_THRESHOLD });
-const selfApproval = () => new AppError("CAMPAIGN_SELF_APPROVAL", 403, "A campaign has to be approved by an admin other than its creator");
+const selfApproval = () => new AppError("CAMPAIGN_SELF_APPROVAL", 403, "A campaign has to be approved by an admin other than its creator and the admin who last edited it");
 
 /** The admin side of campaigns: compose, preview (counts only), test, approve, send, pause, resume, cancel. Sending itself is CampaignSender's. */
 @Injectable()
@@ -47,7 +48,7 @@ export class CampaignsService {
   async create(actorId: string, input: CampaignFields, meta: ActionMeta = {}) {
     const bodyMarkdown = assertSafeMarkdown(input.bodyMarkdown);
     const row = await this.prisma.$transaction(async (tx) => {
-      const c = await tx.campaign.create({ data: { name: input.name, subject: input.subject, bodyMarkdown, segment: input.segment as Prisma.InputJsonValue, createdById: actorId } });
+      const c = await tx.campaign.create({ data: { name: input.name, subject: input.subject, bodyMarkdown, segment: input.segment as Prisma.InputJsonValue, createdById: actorId, lastEditedById: actorId } });
       await this.audit.record(tx, { actorId, action: "campaign.create", targetType: "campaign", targetId: c.id, after: { name: c.name, subject: c.subject, segment: input.segment }, ...meta });
       return c;
     }, TX_OPTIONS);
@@ -73,13 +74,13 @@ export class CampaignsService {
     return { ...toCampaignView(c), recipients, skipped };
   }
 
-  /** Only a draft can be edited. An edit withdraws any approval: the approver agreed to what was there. */
+  /** Only a draft can be edited. An edit withdraws any approval (the approver agreed to what was there) and makes the editor the last editor, who cannot approve it. */
   async update(actorId: string, id: string, patch: Partial<CampaignFields>, meta: ActionMeta = {}) {
     const bodyMarkdown = patch.bodyMarkdown === undefined ? undefined : assertSafeMarkdown(patch.bodyMarkdown);
     const row = await this.prisma.$transaction(async (tx) => {
       const before = await this.lock(tx, id);
       if (before.status !== "DRAFT") throw stateInvalid("Only a draft campaign can be edited");
-      const data: Prisma.CampaignUncheckedUpdateInput = { approvedById: null, approvedAt: null };
+      const data: Prisma.CampaignUncheckedUpdateInput = { approvedById: null, approvedAt: null, approvalHash: null, lastEditedById: actorId };
       if (patch.name !== undefined) data.name = patch.name;
       if (patch.subject !== undefined) data.subject = patch.subject;
       if (bodyMarkdown !== undefined) data.bodyMarkdown = bodyMarkdown;
@@ -120,9 +121,9 @@ export class CampaignsService {
     const row = await this.prisma.$transaction(async (tx) => {
       const c = await this.lock(tx, id);
       if (c.status !== "DRAFT") throw stateInvalid("Only a draft campaign can be approved");
-      if (c.createdById === actorId) throw selfApproval();
-      if (c.approvedById === actorId) return c;
-      const updated = await tx.campaign.update({ where: { id }, data: { approvedById: actorId, approvedAt: this.clock.now() } });
+      if (!mayApprove(c, actorId)) throw selfApproval();
+      if (c.approvedById === actorId && isApproved(c)) return c;
+      const updated = await tx.campaign.update({ where: { id }, data: { approvedById: actorId, approvedAt: this.clock.now(), approvalHash: contentHash(c) } });
       await this.audit.record(tx, { actorId, action: "campaign.approve", targetType: "campaign", targetId: id, after: { approvedById: actorId }, ...meta });
       return updated;
     }, TX_OPTIONS);
@@ -136,7 +137,7 @@ export class CampaignsService {
     const row = await this.prisma.$transaction(async (tx) => {
       const c = await this.lock(tx, id);
       if (c.status !== "DRAFT") throw stateInvalid("Only a draft campaign can be sent");
-      if (audience > APPROVAL_THRESHOLD && (!c.approvedById || c.approvedById === c.createdById)) throw approvalRequired(audience);
+      if (audience > APPROVAL_THRESHOLD && !isApproved(c)) throw approvalRequired(audience);
       const at = scheduledAt ?? this.clock.now();
       const updated = await tx.campaign.update({ where: { id }, data: { status: "SCHEDULED", scheduledAt: at } });
       await this.audit.record(tx, { actorId, action: "campaign.send", targetType: "campaign", targetId: id, before: { status: "DRAFT" }, after: { status: "SCHEDULED", scheduledAt: at.toISOString(), audience }, ...meta });
@@ -153,7 +154,7 @@ export class CampaignsService {
     return this.move(actorId, id, "campaign.resume", ["PAUSED"], "SENDING", meta);
   }
 
-  /** Stops a campaign that has not finished; recipients it did not reach are marked skipped (reason `cancelled`). Mail already queued is not recalled. */
+  /** Stops a campaign that has not finished; recipients it did not reach are marked skipped (reason `cancelled`), and mail already queued is dropped by the mail worker when it gets to it. */
   async cancel(actorId: string, id: string, meta: ActionMeta = {}) {
     const row = await this.prisma.$transaction(async (tx) => {
       const c = await this.lock(tx, id);

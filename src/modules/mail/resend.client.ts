@@ -48,18 +48,29 @@ export class HttpResendClient implements ResendClient {
   }
 }
 
-/** In-memory client for tests. */
+/** In-memory client for tests. Like Resend, a repeated Idempotency-Key returns the first answer and sends nothing new. */
 export class FakeResendClient implements ResendClient {
   readonly sent: ResendMessage[] = [];
   private failStatus: number | null = null;
+  private failOnly: Set<string> | null = null;
+  private readonly byKey = new Map<string, { id: string }>();
+  /** Every call takes this long (a slow Resend). */
+  delayMs = 0;
 
-  failWith(status: number | null) {
+  /** All sends fail with `status` (or only those to `onlyTo`); `null` stops failing. */
+  failWith(status: number | null, onlyTo?: string[]) {
     this.failStatus = status;
+    this.failOnly = onlyTo ? new Set(onlyTo.map((a) => a.toLowerCase())) : null;
   }
 
   async send(msg: ResendMessage): Promise<{ id: string }> {
-    if (this.failStatus !== null) throw new ResendApiError(this.failStatus, "fake failure");
+    if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
+    if (this.failStatus !== null && (!this.failOnly || this.failOnly.has(msg.to.toLowerCase()))) throw new ResendApiError(this.failStatus, "fake failure");
+    const known = msg.idempotencyKey ? this.byKey.get(msg.idempotencyKey) : undefined;
+    if (known) return known;
     this.sent.push(msg);
-    return { id: `fake-${this.sent.length}` };
+    const answer = { id: `fake-${this.sent.length}` };
+    if (msg.idempotencyKey) this.byKey.set(msg.idempotencyKey, answer);
+    return answer;
   }
 }

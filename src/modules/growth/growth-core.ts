@@ -2,10 +2,12 @@ import type { Provider } from "@nestjs/common";
 import { ActivitySegmentProvider, AccountService } from "../identity";
 import { PlanSegmentProvider, PurchaseSegmentProvider } from "../billing";
 import { InterestSegmentProvider } from "../reels";
-import { RoleSegmentProvider } from "../rbac";
+import { PlatformRoleDirectory, RoleSegmentProvider } from "../rbac";
+import { CampaignAlerts } from "./campaign-alerts";
 import { CampaignMailHooks } from "./campaign-hooks";
 import { CampaignProcessor } from "./campaign.processor";
 import { CampaignSender } from "./campaign-sender";
+import { PromoMailProcessor } from "./promo-mail.processor";
 import { SEGMENT_PROVIDERS, SegmentEvaluator } from "./segment";
 import { UnsubscribeTokens } from "./unsubscribe-token";
 
@@ -19,9 +21,12 @@ export const GROWTH_CORE_PROVIDERS: Provider[] = [
   ...PROVIDER_CLASSES,
   { provide: SEGMENT_PROVIDERS, useFactory: (...providers: unknown[]) => providers, inject: PROVIDER_CLASSES },
   AccountService,
+  PlatformRoleDirectory,
   SegmentEvaluator,
   UnsubscribeTokens,
+  CampaignAlerts,
   CampaignSender,
+  PromoMailProcessor,
   CampaignMailHooks,
   CampaignProcessor,
 ];

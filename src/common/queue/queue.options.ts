@@ -31,4 +31,17 @@ export const OUTBOX_JOB_OPTIONS: JobsOptions = {
   removeOnFail: false,
 };
 
-export const jobOptionsFor = (name: QueueName): JobsOptions => (name === QueueNames.outbox || name === QueueNames.billing ? OUTBOX_JOB_OPTIONS : BASE);
+/**
+ * Promotional campaign mail. A Resend hiccup should not turn into thousands of failed recipients, so a mail is tried 8 times over about 10 minutes (5 s, 10 s, 20 s ...).
+ * Finished jobs are dropped at once (the recipient row is the record, and a recipient released by a pause must be queueable again); failed ones stay a day.
+ * The payload is only {campaignId, userId}, so none of this takes real memory in Redis.
+ */
+export const PROMO_JOB_OPTIONS: JobsOptions = {
+  attempts: 8,
+  backoff: { type: "exponential", delay: 5000 },
+  removeOnComplete: true,
+  removeOnFail: { age: 24 * 3600, count: 5000 },
+};
+
+export const jobOptionsFor = (name: QueueName): JobsOptions =>
+  name === QueueNames.outbox || name === QueueNames.billing ? OUTBOX_JOB_OPTIONS : name === QueueNames.mailPromo ? PROMO_JOB_OPTIONS : BASE;

@@ -8,6 +8,11 @@ export interface JobProcessor {
   readonly jobNames?: readonly string[];
   /** Concurrency of the queue's Worker. Queues are dedicated per workload because BullMQ cannot filter by job name. */
   readonly concurrency?: number;
+  /**
+   * Rate limit of the queue's Worker (at most `max` jobs per `duration` ms, across all concurrent jobs of this process). Read when the worker starts and again
+   * every minute, so a setting can change it without a restart. Omit for no limit.
+   */
+  limiter?(): Promise<{ max: number; duration: number }>;
   process(job: Job): Promise<unknown>;
   /** Called once when a job of this processor has used all its attempts (the final failure). */
   onExhausted?(job: Job, err: Error): Promise<void>;

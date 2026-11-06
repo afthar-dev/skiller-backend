@@ -4,9 +4,10 @@ import type { Redis } from "ioredis";
 import { reportException } from "../observability/sentry";
 import type { JobProcessor } from "./job-processor";
 import { ProcessorRegistry } from "./processor-registry";
-import { QUEUE_CONNECTION } from "./queue.constants";
+import { QUEUE_CONNECTION, type QueueName } from "./queue.constants";
 import { backoffStrategy } from "./queue.options";
 
+const LIMITER_REFRESH_MS = 60_000;
 const matches = (p: JobProcessor, job: Job) => !p.jobNames || p.jobNames.includes(job.name);
 
 // Starts one BullMQ Worker per queue that has registered processors, at that queue's concurrency (queues are dedicated
@@ -16,6 +17,7 @@ const matches = (p: JobProcessor, job: Job) => !p.jobNames || p.jobNames.include
 export class QueueWorkerRunner {
   private readonly logger = new Logger(QueueWorkerRunner.name);
   private workers: Worker[] = [];
+  private limiterTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly registry: ProcessorRegistry,
@@ -31,6 +33,7 @@ export class QueueWorkerRunner {
     for (const queue of this.registry.queues()) {
       const processors = this.registry.for(queue);
       const concurrency = Math.max(...processors.map((p) => p.concurrency ?? 1));
+      const limiter = await this.limiterFor(queue);
       const worker = new Worker(
         queue,
         async (job: Job) => {
@@ -38,7 +41,7 @@ export class QueueWorkerRunner {
           if (targets.length === 0) this.logger.warn(`job ${job.id} (${job.name}) on ${queue} matched no processor and was dropped`);
           for (const p of targets) await p.process(job);
         },
-        { connection: this.connection, concurrency, settings: { backoffStrategy } },
+        { connection: this.connection, concurrency, settings: { backoffStrategy }, ...(limiter ? { limiter } : {}) },
       );
       worker.on("failed", (job, err) => {
         this.logger.warn(`job ${job?.id} on ${queue} failed (attempt ${job?.attemptsMade}): ${err.message}`);
@@ -48,7 +51,28 @@ export class QueueWorkerRunner {
       this.workers.push(worker);
     }
     await Promise.all(this.workers.map((w) => w.waitUntilReady()));
+    if (this.registry.queues().some((q) => this.registry.for(q).some((p) => p.limiter))) {
+      this.limiterTimer = setInterval(() => void this.refreshLimiters(), LIMITER_REFRESH_MS);
+      this.limiterTimer.unref();
+    }
     this.logger.log(`workers started: ${this.registry.queues().join(", ") || "(none)"}`);
+  }
+
+  /** Reads every processor's limiter again and applies it to the running Workers (a setting changed). A failing read keeps the old limit. */
+  async refreshLimiters(): Promise<void> {
+    for (const worker of this.workers) {
+      try {
+        const limiter = await this.limiterFor(worker.name);
+        if (limiter) worker.opts.limiter = limiter;
+      } catch (err) {
+        this.logger.warn(`could not refresh the rate limit of ${worker.name}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  private async limiterFor(queue: string): Promise<{ max: number; duration: number } | undefined> {
+    for (const p of this.registry.for(queue as QueueName)) if (p.limiter) return p.limiter();
+    return undefined;
   }
 
   private async exhausted(queue: string, processors: JobProcessor[], job: Job, err: Error) {
@@ -66,6 +90,8 @@ export class QueueWorkerRunner {
   }
 
   async stop() {
+    if (this.limiterTimer) clearInterval(this.limiterTimer);
+    this.limiterTimer = undefined;
     await Promise.all(this.workers.map((w) => w.close()));
     this.workers = [];
   }

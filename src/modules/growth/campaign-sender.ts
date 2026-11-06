@@ -1,31 +1,36 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { Prisma, type Campaign } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { Queue } from "bullmq";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { SettingsService } from "../admin";
-import { AccountService } from "../identity";
-import { EmailSuppressions, MailService } from "../mail";
-import { NotificationsService, PromoPreferences } from "../notifications";
+import { QueueNames } from "../../common/queue/queue.constants";
+import { InjectQueue } from "../../common/queue/queue.decorators";
+import { PROMO_JOB_OPTIONS } from "../../common/queue/queue.options";
+import { NotificationsService } from "../notifications";
+import { CampaignAlerts } from "./campaign-alerts";
+import { isApproved } from "./campaign-approval";
+import { PROMO_SEND_JOB, type PromoJobData } from "./promo-mail.processor";
+import { bumpStat } from "./campaign-stats";
 import { APPROVAL_THRESHOLD, SegmentEvaluator, segmentSchema } from "./segment";
-import { UnsubscribeTokens } from "./unsubscribe-token";
 
-/** Recipients taken, mailed and recorded in one go. */
+/** Recipients claimed and queued in one go. */
 export const BATCH_SIZE = 100;
-/** A claim older than this was left behind by a worker that died mid-batch; the recipient is taken again. */
-export const STALE_CLAIM_MS = 5 * 60 * 1000;
+/** The sender queues no more promo mail while this many jobs wait: the queue (and Redis) stay small however big the campaign is. */
+export const MAX_QUEUE_DEPTH = 500;
+/** A recipient SENDING this long has had no word from the mail worker (the sender or the worker died): the mail may or may not have gone, so it is never sent again. */
+export const SENDING_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 /** Batches one run does before it hands back (the next tick continues): a campaign cannot hog the worker. */
 export const MAX_BATCHES_PER_RUN = 30;
 const START_TX = { timeout: 30 * 60 * 1000, maxWait: 15_000 } as const;
 const INSERT_CHUNK = 1000;
-
-export type SkipReason = "account_inactive" | "suppressed" | "unsubscribed" | "marketing_opt_in_required" | "cancelled";
+const DEPTH_STATES = ["waiting", "delayed", "active", "prioritized"] as const;
 
 /**
- * Sends campaigns, in the background. Starting a campaign writes its recipient rows (idempotent), then batches of 100 are claimed with
- * FOR UPDATE SKIP LOCKED (so parallel workers never take the same recipient), checked one by one against suppressions, preferences and
- * the opt-in rule, and queued as promotional mail with the key `campaign-<id>-<user>`, so the same member can never get the same campaign
- * twice (not from a retry, a resume, or a re-claimed batch). Pause and cancel are read before every batch. A claim left by a dead worker
- * goes stale after five minutes and the recipient is taken again.
+ * Sends campaigns, in the background. Starting a campaign writes its recipient rows (idempotent). Then, while the `mail-promo` queue holds fewer than 500 jobs,
+ * batches of up to 100 recipients are claimed PENDING -> SENDING (one statement, FOR UPDATE SKIP LOCKED, so parallel workers never take the same recipient) and
+ * queued as `{campaignId, userId}`. From the claim on a recipient is never claimed again: if the sender dies before the job is queued, the row stays SENDING and
+ * after 24 hours becomes UNKNOWN (counted, never sent), so a member gets at most one mail. PromoMailProcessor does the checks and the sending; the campaign is
+ * SENT only when no recipient is PENDING or SENDING any more.
  */
 @Injectable()
 export class CampaignSender {
@@ -34,13 +39,9 @@ export class CampaignSender {
   constructor(
     private readonly prisma: PrismaService,
     private readonly segments: SegmentEvaluator,
-    private readonly accounts: AccountService,
-    private readonly suppressions: EmailSuppressions,
-    private readonly preferences: PromoPreferences,
-    private readonly settings: SettingsService,
-    private readonly mail: MailService,
-    private readonly tokens: UnsubscribeTokens,
     private readonly notifications: NotificationsService,
+    private readonly alerts: CampaignAlerts,
+    @InjectQueue(QueueNames.mailPromo) private readonly queue: Queue,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -56,7 +57,7 @@ export class CampaignSender {
    * SCHEDULED -> SENDING: writes one PENDING row per matching member. Safe to run twice (rows are inserted with skipDuplicates) and to run in two
    * workers at once (one holds the advisory lock, the other leaves). The campaign stays SCHEDULED until every row is written, so a crash here is retried.
    * The audience is evaluated again first: a campaign scheduled when it was small may have grown past the approval threshold since, and then it
-   * only starts with a second admin's approval. Otherwise it goes back to DRAFT (no recipients written) and its creator is told.
+   * only starts with a second admin's approval of exactly this content. Otherwise it goes back to DRAFT (no recipients written) and its creator is told.
    */
   async start(campaignId: string): Promise<void> {
     let refused: { id: string; name: string; createdById: string; audience: number } | undefined;
@@ -67,8 +68,7 @@ export class CampaignSender {
       if (!campaign || campaign.status !== "SCHEDULED") return;
       const segment = segmentSchema.parse(campaign.segment);
       const audience = await this.segments.count(segment);
-      const approved = campaign.approvedById !== null && campaign.approvedById !== campaign.createdById;
-      if (audience > APPROVAL_THRESHOLD && !approved) {
+      if (audience > APPROVAL_THRESHOLD && !isApproved(campaign)) {
         const back = await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SCHEDULED" }, data: { status: "DRAFT", scheduledAt: null } });
         if (back.count > 0) refused = { id: campaign.id, name: campaign.name, createdById: campaign.createdById, audience };
         return;
@@ -82,97 +82,94 @@ export class CampaignSender {
       await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SCHEDULED" }, data: { status: "SENDING", startedAt: this.clock.now(), audienceSize } });
     }, START_TX);
     if (refused) {
-      this.logger.warn(`campaign ${refused.id} not started: audience ${refused.audience} is above ${APPROVAL_THRESHOLD} and it has no second admin's approval`);
+      this.logger.warn(`campaign ${refused.id} not started: audience ${refused.audience} is above ${APPROVAL_THRESHOLD} and it has no valid second-admin approval`);
       await this.notifications.notify(refused.createdById, {
         type: "campaign.approval_needed",
         title: "Campaign needs approval before it can send",
-        body: `"${refused.name}" now reaches more than ${APPROVAL_THRESHOLD} members. It is back in draft: ask another admin to approve it, then send it again.`,
+        body: `"${refused.name}" now reaches more than ${APPROVAL_THRESHOLD} members, or was changed after it was approved. It is back in draft: ask another admin (not its creator or last editor) to approve it, then send it again.`,
         data: { campaignId: refused.id, audience: refused.audience },
       });
     }
   }
 
-  /** Works through a SENDING campaign in batches until it is done, paused, cancelled, or `maxBatches` have been done. */
+  /** Works through a SENDING campaign in batches until it is done, paused, cancelled, the queue is full, or `maxBatches` have been done. */
   async run(campaignId: string, opts: { maxBatches?: number } = {}): Promise<void> {
     const maxBatches = opts.maxBatches ?? MAX_BATCHES_PER_RUN;
+    await this.writeOffStale(campaignId);
     for (let i = 0; i < maxBatches; i++) {
-      const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+      const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId }, select: { status: true } });
       // Paused, cancelled or finished: stop at once (checked before every batch).
       if (!campaign || campaign.status !== "SENDING") return;
-      const claimed = await this.claim(campaignId);
+      const room = MAX_QUEUE_DEPTH - (await this.queueDepth());
+      if (room <= 0) return; // backpressure: the mail worker is behind; the next tick looks again
+      const limit = Math.min(BATCH_SIZE, room);
+      const claimed = await this.claimBatch(campaignId, limit);
       if (claimed.length === 0) {
         await this.finishIfDone(campaignId);
         return;
       }
-      await this.process(campaign, claimed);
-      if (claimed.length < BATCH_SIZE) await this.finishIfDone(campaignId);
+      await this.enqueue(campaignId, claimed);
+      if (claimed.length < limit) {
+        await this.finishIfDone(campaignId);
+        return;
+      }
     }
   }
 
-  /** Takes up to a batch of PENDING recipients nobody else holds (SKIP LOCKED), stamping them as held now. One statement. */
-  private async claim(campaignId: string): Promise<string[]> {
+  /** Takes up to `limit` PENDING recipients nobody else holds (SKIP LOCKED) and makes them SENDING, stamped now. One statement; a recipient is claimed once. */
+  async claimBatch(campaignId: string, limit: number): Promise<string[]> {
     const now = this.clock.now();
-    const stale = new Date(now.getTime() - STALE_CLAIM_MS);
     const rows = await this.prisma.$queryRaw<Array<{ userId: string }>>`
-      UPDATE "campaign_recipients" SET "claimedAt" = ${now}
+      UPDATE "campaign_recipients" SET "status" = 'SENDING', "sendingAt" = ${now}
       WHERE ("campaignId", "userId") IN (
         SELECT "campaignId", "userId" FROM "campaign_recipients"
-        WHERE "campaignId" = ${campaignId} AND "status" = 'PENDING' AND ("claimedAt" IS NULL OR "claimedAt" < ${stale})
-        ORDER BY "userId" LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED)
+        WHERE "campaignId" = ${campaignId} AND "status" = 'PENDING'
+        ORDER BY "userId" LIMIT ${limit} FOR UPDATE SKIP LOCKED)
       RETURNING "userId"`;
     return rows.map((r) => r.userId);
   }
 
-  /** SENT when no recipient is waiting any more. A recipient someone else holds right now is still waiting. */
+  private async queueDepth(): Promise<number> {
+    const counts = await this.queue.getJobCounts(...DEPTH_STATES);
+    return DEPTH_STATES.reduce((sum, state) => sum + (counts[state] ?? 0), 0);
+  }
+
+  /**
+   * Queues the claimed recipients. If the queue refuses (Redis trouble) the jobs that did not get in are known never to run, so those recipients go
+   * back to PENDING; any that cannot be told stay SENDING (and become UNKNOWN), never risking a second mail.
+   */
+  private async enqueue(campaignId: string, userIds: string[]): Promise<void> {
+    const jobId = (userId: string) => `campaign-${campaignId}-${userId}`;
+    try {
+      await this.queue.addBulk(userIds.map((userId) => ({ name: PROMO_SEND_JOB, data: { campaignId, userId } satisfies PromoJobData, opts: { ...PROMO_JOB_OPTIONS, jobId: jobId(userId) } })));
+    } catch (err) {
+      this.logger.error(`campaign ${campaignId}: could not queue ${userIds.length} mails: ${(err as Error).message}`);
+      try {
+        const queued = await Promise.all(userIds.map((userId) => this.queue.getJob(jobId(userId))));
+        const absent = userIds.filter((_, i) => !queued[i]);
+        if (absent.length > 0) await this.prisma.campaignRecipient.updateMany({ where: { campaignId, userId: { in: absent }, status: "SENDING" }, data: { status: "PENDING", sendingAt: null } });
+      } catch {
+        // Redis is down for the check too: they stay SENDING.
+      }
+      throw err;
+    }
+  }
+
+  /** SENDING for more than 24 hours: no word ever came, so the mail may or may not have gone. Written off as UNKNOWN, counted, never sent. */
+  private async writeOffStale(campaignId: string): Promise<void> {
+    const cutoff = new Date(this.clock.now().getTime() - SENDING_TIMEOUT_MS);
+    const lost = await this.prisma.campaignRecipient.updateMany({ where: { campaignId, status: "SENDING", sendingAt: { lt: cutoff } }, data: { status: "UNKNOWN" } });
+    if (lost.count === 0) return;
+    this.logger.warn(`campaign ${campaignId}: ${lost.count} recipients written off as UNKNOWN (no word from the mail worker for 24 hours)`);
+    await bumpStat(this.prisma, campaignId, "unknown", lost.count);
+  }
+
+  /** SENT when no recipient is waiting or in flight any more. */
   private async finishIfDone(campaignId: string): Promise<void> {
-    const waiting = await this.prisma.campaignRecipient.count({ where: { campaignId, status: "PENDING" } });
-    if (waiting === 0) await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SENDING" }, data: { status: "SENT", finishedAt: this.clock.now() } });
-  }
-
-  private async process(campaign: Campaign, userIds: string[]): Promise<void> {
-    const accounts = new Map((await this.accounts.getMany(userIds)).map((a) => [a.id, a]));
-    const emails = [...accounts.values()].map((a) => a.email);
-    const [suppressed, prefs, optInRequired] = await Promise.all([this.suppressions.find(emails), this.preferences.promoStates(userIds), this.settings.get("marketing_opt_in_required")]);
-
-    const skips = new Map<SkipReason, string[]>();
-    const skip = (reason: SkipReason, userId: string) => skips.set(reason, [...(skips.get(reason) ?? []), userId]);
-    const toSend: Array<{ userId: string; email: string }> = [];
-    for (const userId of userIds) {
-      const account = accounts.get(userId);
-      if (!account || account.status !== "ACTIVE") skip("account_inactive", userId);
-      else if (suppressed.has(account.email.toLowerCase())) skip("suppressed", userId);
-      else if (prefs.unsubscribed.has(userId)) skip("unsubscribed", userId);
-      else if (optInRequired && !prefs.optedIn.has(userId)) skip("marketing_opt_in_required", userId);
-      else toSend.push({ userId, email: account.email });
-    }
-
-    for (const { userId, email } of toSend) {
-      await this.mail.send(
-        "promo_campaign",
-        email,
-        { subject: campaign.subject, bodyMarkdown: campaign.bodyMarkdown, unsubscribeUrl: this.tokens.urlFor(userId) },
-        { category: "promotional", idempotencyKey: `campaign-${campaign.id}-${userId}`, ref: { kind: "campaign", key: `${campaign.id}:${userId}` } },
-      );
-    }
-    const now = this.clock.now();
-    if (toSend.length > 0) {
-      await this.prisma.campaignRecipient.updateMany({ where: { campaignId: campaign.id, userId: { in: toSend.map((s) => s.userId) }, status: "PENDING" }, data: { status: "SENT", sentAt: now } });
-    }
-    for (const [reason, ids] of skips) {
-      await this.prisma.campaignRecipient.updateMany({ where: { campaignId: campaign.id, userId: { in: ids }, status: "PENDING" }, data: { status: "SKIPPED", skipReason: reason } });
-    }
-    this.logger.log(`campaign ${campaign.id}: batch of ${userIds.length}, ${toSend.length} queued, ${userIds.length - toSend.length} skipped`);
-  }
-
-  /** The mail worker's word on a queued mail: Resend's id on success, or why it did not go out. */
-  async onMailOutcome(campaignId: string, userId: string, outcome: { outcome: "sent"; resendId: string } | { outcome: "skipped" | "failed"; reason: string }): Promise<void> {
-    if (outcome.outcome === "sent") {
-      await this.prisma.campaignRecipient.updateMany({ where: { campaignId, userId, resendId: null }, data: { resendId: outcome.resendId } });
-    } else if (outcome.outcome === "skipped") {
-      await this.prisma.campaignRecipient.updateMany({ where: { campaignId, userId, status: "SENT" }, data: { status: "SKIPPED", skipReason: outcome.reason } });
-    } else {
-      await this.prisma.campaignRecipient.updateMany({ where: { campaignId, userId, status: "SENT" }, data: { status: "FAILED", skipReason: outcome.reason } });
-    }
+    const open = await this.prisma.campaignRecipient.count({ where: { campaignId, status: { in: ["PENDING", "SENDING"] } } });
+    if (open > 0) return;
+    const done = await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SENDING" }, data: { status: "SENT", finishedAt: this.clock.now() } });
+    if (done.count > 0) await this.alerts.checkFailureRate(campaignId, true);
   }
 
   /** A Resend webhook event for a mail we sent: stamps the recipient (first time only) and counts it once in the campaign's stats. */
@@ -187,9 +184,7 @@ export class CampaignSender {
         WHERE "campaignId" = ${recipient.campaignId} AND "userId" = ${recipient.userId} AND ${Prisma.raw(`"${column.field}"`)} IS NULL
         RETURNING "userId"`);
       if (rows.length === 0) return;
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE "campaigns" SET "stats" = jsonb_set(COALESCE("stats", '{}'::jsonb), ARRAY[${column.stat}]::text[], to_jsonb(COALESCE(("stats"->>${column.stat})::int, 0) + 1))
-        WHERE "id" = ${recipient.campaignId}`);
+      await bumpStat(tx, recipient.campaignId, column.stat);
     });
   }
 }

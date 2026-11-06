@@ -1,6 +1,7 @@
 import type { Campaign } from "@prisma/client";
 
-export const STAT_KEYS = ["delivered", "opened", "clicked", "bounced", "complained"] as const;
+/** Webhook counts (delivered ... complained) plus mails that failed for good and mails written off as UNKNOWN. */
+export const STAT_KEYS = ["delivered", "opened", "clicked", "bounced", "complained", "failed", "unknown"] as const;
 export type StatKey = (typeof STAT_KEYS)[number];
 
 const statsOf = (stats: unknown): Record<StatKey, number> => {
@@ -21,6 +22,7 @@ export const toCampaignView = (c: Campaign) => ({
   finishedAt: c.finishedAt?.toISOString() ?? null,
   audienceSize: c.audienceSize,
   createdById: c.createdById,
+  lastEditedById: c.lastEditedById ?? c.createdById,
   approvedById: c.approvedById,
   approvedAt: c.approvedAt?.toISOString() ?? null,
   stats: statsOf(c.stats),

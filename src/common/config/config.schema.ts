@@ -14,7 +14,7 @@ const envSchema = z
   CORS_ORIGINS: z.string().min(1),
   // Public URL of the web app, used for links in emails.
   WEB_BASE_URL: z.string().url(),
-  // Public URL of this API, used for the one-click unsubscribe link in promotional email. Defaults to WEB_BASE_URL (when the web app proxies /v1).
+  // Public URL of this API, used for the unsubscribe link in promotional email. Required in production; elsewhere defaults to WEB_BASE_URL.
   API_BASE_URL: z.string().url().optional(),
   COOKIE_DOMAIN: z.string().min(1),
   R2_ACCOUNT_ID: z.string().min(1),
@@ -43,6 +43,10 @@ const envSchema = z
   SUPER_ADMIN_EMAIL: z.string().email(),
   })
   .superRefine((e, ctx) => {
+    // Every promotional mail links to <API_BASE_URL>/v1/unsubscribe; guessing it from the web app's URL would ship dead links.
+    if (e.NODE_ENV === "production" && !e.API_BASE_URL) {
+      ctx.addIssue({ code: "custom", path: ["API_BASE_URL"], message: "is required in production (the public URL of this API, for the unsubscribe link)" });
+    }
     // A shared secret would let a body signed for the Razorpay endpoint pass for a RazorpayX one.
     if (e.RAZORPAY_WEBHOOK_SECRET && e.RAZORPAY_WEBHOOK_SECRET === e.RAZORPAYX_WEBHOOK_SECRET) {
       ctx.addIssue({ code: "custom", path: ["RAZORPAYX_WEBHOOK_SECRET"], message: "must differ from RAZORPAY_WEBHOOK_SECRET" });

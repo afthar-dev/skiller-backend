@@ -1,6 +1,8 @@
 export const QueueNames = {
   outbox: "outbox",
   mail: "mail",
+  // Promotional campaign mail only: its own queue and rate limit, so a campaign can never delay an OTP or a receipt (which stay on `mail`).
+  mailPromo: "mail-promo",
   mediaTranscode: "media-transcode",
   mediaLight: "media-light",
   maintenance: "maintenance",

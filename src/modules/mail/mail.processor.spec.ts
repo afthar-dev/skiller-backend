@@ -1,7 +1,8 @@
-import type { Job } from "bullmq";
+import { UnrecoverableError, type Job } from "bullmq";
 import { MailService } from "./mail.service";
 import { MailJobData, MailProcessor } from "./mail.processor";
 import { FakeResendClient } from "./resend.client";
+import { MailDelivery } from "./mail-delivery";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { MailHooks } from "./mail-hooks";
 
@@ -20,7 +21,7 @@ function job(data: MailJobData): Job<MailJobData> {
 
 function setup(suppressions: Record<string, string> = {}) {
   const client = new FakeResendClient();
-  const processor = new MailProcessor(prismaWith(suppressions) as never, client, new ProcessorRegistry(), new MailHooks());
+  const processor = new MailProcessor(prismaWith(suppressions) as never, new MailDelivery(client), new ProcessorRegistry(), new MailHooks());
   return { client, processor };
 }
 
@@ -81,6 +82,20 @@ describe("MailProcessor", () => {
     await expect(
       processor.process(job({ template: "otp", to: "a@example.com", data: otpData, category: "transactional" })),
     ).rejects.toMatchObject({ name: "UnrecoverableError" });
+  });
+});
+
+describe("MailProcessor.onExhausted", () => {
+  it("reports a send that ran out of retries as failed; a permanent 4xx was already reported by process()", async () => {
+    const hooks = new MailHooks();
+    const heard: unknown[] = [];
+    hooks.onOutcome("thing", async (_ref, outcome) => void heard.push(outcome));
+    const processor = new MailProcessor(prismaWith({}) as never, new MailDelivery(new FakeResendClient()), new ProcessorRegistry(), hooks);
+    const withRef = job({ template: "otp", to: "a@example.com", data: otpData, category: "transactional", ref: { kind: "thing", key: "k" } });
+    await processor.onExhausted(withRef, new Error("Resend API error 503"));
+    expect(heard).toEqual([{ outcome: "failed", reason: "send_failed" }]);
+    await processor.onExhausted(withRef, new UnrecoverableError("Resend API error 422"));
+    expect(heard).toHaveLength(1);
   });
 });
 

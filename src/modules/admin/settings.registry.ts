@@ -12,6 +12,8 @@ export const SETTINGS = {
   report_autohide_threshold: { schema: z.number().int().min(1).max(1000), default: 5 },
   /** When true, promotional campaigns go only to members who explicitly opted in (the `marketing_opt_in` preference); when false, to everyone who has not unsubscribed. Confirm with counsel whether the DPDP Act requires opt-in. */
   marketing_opt_in_required: { schema: z.boolean(), default: false },
+  /** Promotional emails sent per second across the platform (the Resend plan's limit); transactional mail is never limited. Takes effect within a minute. */
+  promo_send_per_second: { schema: z.number().int().min(1).max(500), default: 8 },
   /** GST rate in basis points (1800 = 18%). Platform fees and subscription prices are GST-inclusive (plan decision 1). */
   gst_bps: { schema: z.number().int().min(0).max(10_000), default: 1800 },
   /** TDS rate in basis points withheld on payouts; 0 until the CA confirms (plan decision 2). */

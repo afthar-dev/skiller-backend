@@ -1600,9 +1600,13 @@ enum CampaignStatus {
 
 enum CampaignRecipientStatus {
   PENDING
+  /// Claimed by the sender and queued (or about to be); the mail worker turns it into SENT, SKIPPED or FAILED. Never claimed twice.
+  SENDING
   SENT
   SKIPPED
   FAILED
+  /// SENDING for more than 24 hours with no word from the mail worker: it may or may not have gone out, so it is never sent again.
+  UNKNOWN
 }
 
 /// A promotional email campaign. createdById / approvedById point at users (no FK: users is another module).
@@ -1621,9 +1625,13 @@ model Campaign {
   /// Recipient rows written when sending started.
   audienceSize Int?
   createdById  String
-  /// Required (and not the creator) for audiences above 10,000; withdrawn by any edit.
+  /// Whoever last changed the draft (the creator until someone else edits it); the approver can be neither the creator nor this admin.
+  lastEditedById String?
+  /// Required (and not the creator or the last editor) for audiences above 10,000; withdrawn by any edit.
   approvedById String?
   approvedAt   DateTime?
+  /// SHA-256 of the subject, body and segment the approver saw; the approval counts only while the campaign still hashes to this.
+  approvalHash String?
   /// Distinct recipients per Resend event: delivered, opened, clicked, bounced, complained.
   stats        Json           @default("{}")
   createdAt    DateTime       @default(now())
@@ -1642,8 +1650,8 @@ model CampaignRecipient {
   status       CampaignRecipientStatus @default(PENDING)
   /// Why a recipient was skipped: account_inactive, suppressed, unsubscribed, marketing_opt_in_required, cancelled.
   skipReason   String?
-  /// Set when a worker takes the recipient; a claim older than five minutes is stale and the recipient is taken again.
-  claimedAt    DateTime?
+  /// Set when the recipient goes PENDING -> SENDING; a row still SENDING 24 hours later becomes UNKNOWN.
+  sendingAt    DateTime?
   sentAt       DateTime?
   resendId     String?                 @unique
   deliveredAt  DateTime?
