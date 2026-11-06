@@ -345,6 +345,38 @@ describe("promo email campaigns", () => {
     });
   });
 
+  describe("approval is re-checked when a scheduled campaign starts", () => {
+    it("an audience that grew past 10,000 since `send` is refused without a second admin's approval: back to DRAFT, creator told, nothing queued", async () => {
+      const stamp = uniq();
+      const tag = `t${uniq()}`;
+      await prisma.user.createMany({ data: Array.from({ length: 10_001 }, (_, i) => ({ email: `${bulkEmailPrefix}-g${stamp}-${i}@example.com`, status: "ACTIVE" as const })) });
+      const users = await prisma.user.findMany({ where: { email: { startsWith: `${bulkEmailPrefix}-g${stamp}-` } }, select: { id: true } });
+      const c = await made({ segment: { interests: [`tag:${tag}`] } });
+      expect((await act(c.id, "preview")).body).toEqual({ audience: 0, requiresApproval: false });
+      expect((await act(c.id, "send")).status).toBe(200); // small at the time: no approval needed
+      // the audience grows before the scheduler gets to it
+      await prisma.userInterest.createMany({ data: users.map((u) => ({ userId: u.id, key: `tag:${tag}`, weight: 5, updatedAt: new Date() })) });
+
+      await sender.tick();
+      const after = await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } });
+      expect(after.status).toBe("DRAFT");
+      expect(after.startedAt).toBeNull();
+      expect(await prisma.campaignRecipient.count({ where: { campaignId: c.id } })).toBe(0);
+      const told = await prisma.notification.findMany({ where: { userId: admin.userId, type: "campaign.approval_needed" } });
+      expect(told.some((n) => JSON.stringify(n.data).includes(c.id))).toBe(true);
+      // a second tick does not start it either (it is no longer scheduled), and it can be approved and sent again
+      await sender.tick();
+      expect((await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } })).status).toBe("DRAFT");
+      expect((await act(c.id, "send")).body.error.code).toBe("CAMPAIGN_APPROVAL_REQUIRED");
+      expect((await act(c.id, "approve", {}, second)).status).toBe(200);
+      expect((await act(c.id, "send")).status).toBe(200);
+      await sender.start(c.id); // with the approval, the same audience starts
+      const started = await prisma.campaign.findUniqueOrThrow({ where: { id: c.id } });
+      expect([started.status, started.audienceSize]).toEqual(["SENDING", 10_001]);
+      await act(c.id, "cancel");
+    }, 180_000);
+  });
+
   describe("unsubscribe (Review Focus 2)", () => {
     async function mailFor(user: { id: string; email: string }) {
       const tag = `u${uniq()}`;

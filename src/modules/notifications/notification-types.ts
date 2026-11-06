@@ -51,6 +51,7 @@ export const NOTIFICATION_TYPES = {
   // Promotional email consent (see PromoPreferences): `promo` is subscribed by default, `marketing_opt_in` is explicit.
   promo: { transactional: false, emailDefault: true },
   marketing_opt_in: { transactional: false, emailDefault: false },
+  "campaign.approval_needed": { transactional: false },
 } as const;
 
 type NotificationTypeDef = { transactional: boolean; emailDefault?: boolean };

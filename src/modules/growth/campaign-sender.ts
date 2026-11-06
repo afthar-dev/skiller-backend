@@ -5,8 +5,8 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { SettingsService } from "../admin";
 import { AccountService } from "../identity";
 import { EmailSuppressions, MailService } from "../mail";
-import { PromoPreferences } from "../notifications";
-import { SegmentEvaluator, segmentSchema } from "./segment";
+import { NotificationsService, PromoPreferences } from "../notifications";
+import { APPROVAL_THRESHOLD, SegmentEvaluator, segmentSchema } from "./segment";
 import { UnsubscribeTokens } from "./unsubscribe-token";
 
 /** Recipients taken, mailed and recorded in one go. */
@@ -40,6 +40,7 @@ export class CampaignSender {
     private readonly settings: SettingsService,
     private readonly mail: MailService,
     private readonly tokens: UnsubscribeTokens,
+    private readonly notifications: NotificationsService,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -54,14 +55,24 @@ export class CampaignSender {
   /**
    * SCHEDULED -> SENDING: writes one PENDING row per matching member. Safe to run twice (rows are inserted with skipDuplicates) and to run in two
    * workers at once (one holds the advisory lock, the other leaves). The campaign stays SCHEDULED until every row is written, so a crash here is retried.
+   * The audience is evaluated again first: a campaign scheduled when it was small may have grown past the approval threshold since, and then it
+   * only starts with a second admin's approval. Otherwise it goes back to DRAFT (no recipients written) and its creator is told.
    */
   async start(campaignId: string): Promise<void> {
+    let refused: { id: string; name: string; createdById: string; audience: number } | undefined;
     await this.prisma.$transaction(async (lock) => {
       const [{ locked }] = await lock.$queryRaw<[{ locked: boolean }]>`SELECT pg_try_advisory_xact_lock(hashtext(${`campaign-start:${campaignId}`})) AS "locked"`;
       if (!locked) return;
       const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
       if (!campaign || campaign.status !== "SCHEDULED") return;
       const segment = segmentSchema.parse(campaign.segment);
+      const audience = await this.segments.count(segment);
+      const approved = campaign.approvedById !== null && campaign.approvedById !== campaign.createdById;
+      if (audience > APPROVAL_THRESHOLD && !approved) {
+        const back = await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SCHEDULED" }, data: { status: "DRAFT", scheduledAt: null } });
+        if (back.count > 0) refused = { id: campaign.id, name: campaign.name, createdById: campaign.createdById, audience };
+        return;
+      }
       await this.segments.stream(segment, async (userIds) => {
         for (let i = 0; i < userIds.length; i += INSERT_CHUNK) {
           await this.prisma.campaignRecipient.createMany({ data: userIds.slice(i, i + INSERT_CHUNK).map((userId) => ({ campaignId, userId })), skipDuplicates: true });
@@ -70,6 +81,15 @@ export class CampaignSender {
       const audienceSize = await this.prisma.campaignRecipient.count({ where: { campaignId } });
       await this.prisma.campaign.updateMany({ where: { id: campaignId, status: "SCHEDULED" }, data: { status: "SENDING", startedAt: this.clock.now(), audienceSize } });
     }, START_TX);
+    if (refused) {
+      this.logger.warn(`campaign ${refused.id} not started: audience ${refused.audience} is above ${APPROVAL_THRESHOLD} and it has no second admin's approval`);
+      await this.notifications.notify(refused.createdById, {
+        type: "campaign.approval_needed",
+        title: "Campaign needs approval before it can send",
+        body: `"${refused.name}" now reaches more than ${APPROVAL_THRESHOLD} members. It is back in draft: ask another admin to approve it, then send it again.`,
+        data: { campaignId: refused.id, audience: refused.audience },
+      });
+    }
   }
 
   /** Works through a SENDING campaign in batches until it is done, paused, cancelled, or `maxBatches` have been done. */
