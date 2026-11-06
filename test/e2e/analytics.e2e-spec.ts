@@ -45,7 +45,7 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
   const day = `${randomInt(2001, 2020)}-${String(randomInt(1, 13)).padStart(2, "0")}-${String(randomInt(10, 29))}`;
   const start = istDayRange(day).from.getTime();
   const at = (offsetMs: number) => new Date(start + offsetMs);
-  const created: { users: string[]; orders: string[]; gigs: string[]; conversations: string[]; campaigns: string[]; reports: string[]; payouts: string[] } = {
+  const created: { users: string[]; orders: string[]; gigs: string[]; conversations: string[]; campaigns: string[]; reports: string[]; payouts: string[]; courses: string[]; reels: string[] } = {
     users: [],
     orders: [],
     gigs: [],
@@ -53,6 +53,8 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
     campaigns: [],
     reports: [],
     payouts: [],
+    courses: [],
+    reels: [],
   };
 
   async function user(createdAt: Date) {
@@ -147,6 +149,47 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
     await rec({ sentAt: at(11), openedAt: at(MS_DAY + 5) });
     await rec({ sentAt: at(MS_DAY - 1), openedAt: at(40) });
 
+    // Courses: owner X publishes two on the day (X's first), owner Y one on the day but an earlier one three days before, owner Z one the next day.
+    const cat = await prisma.category.findFirstOrThrow();
+    const course = async (ownerId: string, publishedAt: Date) => {
+      const c = await prisma.course.create({
+        data: { ownerType: "USER", ownerId, slug: `an-${uniq()}`, title: "Seeded course", categoryId: cat.id, language: "en", tags: [], status: "PUBLISHED", publishedAt, createdById: ownerId, ownerName: "Seeded" },
+      });
+      created.courses.push(c.id);
+      return c;
+    };
+    const [ownerX, ownerY, ownerZ] = [randomUUID(), randomUUID(), randomUUID()];
+    const courseX = await course(ownerX, at(500));
+    await course(ownerX, at(600));
+    await course(ownerY, at(-3 * MS_DAY));
+    await course(ownerY, at(700));
+    await course(ownerZ, at(MS_DAY));
+    // Enrolments created on the day (3: first ms, midday, last ms), 1 ms before and the next day's first ms; two completed on the day, one a millisecond before.
+    const enrol = (createdAt: Date, completedAt: Date | null = null) => prisma.enrolment.create({ data: { courseId: courseX.id, userId: randomUUID(), source: "FREE", createdAt, completedAt } });
+    await enrol(at(0), at(100));
+    await enrol(at(12 * 3600_000));
+    await enrol(at(MS_DAY - 1), at(MS_DAY - 2));
+    await enrol(at(-1), at(-2));
+    await enrol(at(MS_DAY));
+    // Certificates issued on the day (2), one a millisecond before and one the next day.
+    for (const issuedAt of [at(50), at(MS_DAY - 5), at(-1), at(MS_DAY)]) {
+      await prisma.certificate.create({ data: { code: `AN-${uniq()}`, courseId: courseX.id, userId: randomUUID(), courseTitle: "Seeded course", issuerName: "Skiller", issuedAt } });
+    }
+
+    // Reels: 3 published on the day, 1 ms before and the next day's first ms; views counted on the day (5 + 7) and on the day before (100); 2 comments on the day and 1 a ms before.
+    const reel = async (publishedAt: Date) => {
+      const r = await prisma.reel.create({ data: { creatorId: randomUUID(), mediaAssetId: randomUUID(), status: "PUBLISHED", publishedAt } });
+      created.reels.push(r.id);
+      return r;
+    };
+    const reelA = await reel(at(60));
+    const reelB = await reel(at(70));
+    await reel(at(MS_DAY - 1));
+    await reel(at(-1));
+    await reel(at(MS_DAY));
+    await prisma.reelViewDaily.createMany({ data: [{ reelId: reelA.id, day, views: 5 }, { reelId: reelB.id, day, views: 7 }, { reelId: reelA.id, day: addDays(day, -1), views: 100 }] });
+    for (const createdAt of [at(80), at(90), at(-1)]) await prisma.reelComment.create({ data: { reelId: reelA.id, userId: randomUUID(), body: "nice", createdAt } });
+
     return { before, first, midday, last, after };
   }
 
@@ -172,6 +215,10 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
       await prisma.message.deleteMany({ where: { conversationId: { in: created.conversations } } });
       await prisma.conversation.deleteMany({ where: { id: { in: created.conversations } } });
       await prisma.gig.deleteMany({ where: { id: { in: created.gigs } } });
+      await prisma.reel.deleteMany({ where: { id: { in: created.reels } } });
+      await prisma.certificate.deleteMany({ where: { courseId: { in: created.courses } } });
+      await prisma.enrolment.deleteMany({ where: { courseId: { in: created.courses } } });
+      await prisma.course.deleteMany({ where: { id: { in: created.courses } } });
       await prisma.report.deleteMany({ where: { id: { in: created.reports } } });
       await prisma.payout.deleteMany({ where: { id: { in: created.payouts } } });
       await prisma.order.deleteMany({ where: { id: { in: created.orders } } });
@@ -213,7 +260,7 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
     it("every number for a seeded IST day equals the rows that were seeded, in the series, the overview and the funnel", async () => {
       await seedDay();
       await rollup.rollupDay(day);
-      const keys = ["signups", "creators_new", "orders_paid", "gmv_paise", "sellers_first_sale", "payouts_paid_paise", "reports_opened", "reports_upheld", "gigs_published", "first_gig_published", "gig_inquiries", "messages_sent", "campaign_sends", "campaign_opens", "campaign_clicks", "refunds_paise", "platform_revenue_paise", "enrolments", "reel_views", "first_course_published"];
+      const keys = ["signups", "creators_new", "orders_paid", "gmv_paise", "sellers_first_sale", "payouts_paid_paise", "reports_opened", "reports_upheld", "gigs_published", "first_gig_published", "gig_inquiries", "messages_sent", "campaign_sends", "campaign_opens", "campaign_clicks", "refunds_paise", "platform_revenue_paise", "enrolments", "course_completions", "certificates_issued", "first_course_published", "reels_posted", "reel_views", "reel_comments"];
       const [d] = (await series(keys, day, day)).points;
       expect(d.values).toEqual({
         signups: 3, // first ms, midday, last ms; not 1 ms before nor the next day's first ms
@@ -233,9 +280,13 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
         campaign_clicks: 1,
         refunds_paise: "0",
         platform_revenue_paise: "0",
-        enrolments: 0,
-        reel_views: 0,
-        first_course_published: 0,
+        enrolments: 3, // first ms, midday, last ms; not 1 ms before nor the next day's first ms
+        course_completions: 2,
+        certificates_issued: 2,
+        first_course_published: 1, // owner X only: Y published three days earlier, Z the next day
+        reels_posted: 3,
+        reel_views: 12, // 5 + 7 counted on the day; the 100 are the day before's
+        reel_comments: 2,
       });
 
       // The neighbouring days got the boundary rows.
@@ -261,7 +312,7 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
       expect(funnel.body.stages).toEqual([
         { key: "signups", label: expect.any(String), count: 3 },
         { key: "creators", label: expect.any(String), count: 2 },
-        { key: "first_listing", label: expect.any(String), count: 1 },
+        { key: "first_listing", label: expect.any(String), count: 2 }, // first gig (1) + first course (1)
         { key: "first_sale", label: expect.any(String), count: 1 },
       ]);
       expect(JSON.stringify(funnel.body)).not.toMatch(/@|userId|"id"/);
@@ -473,14 +524,62 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
 
     it("the tracked member shows up in the day's DAU / WAU / MAU after a rollup of that day (approximate counts)", async () => {
       const today = istDateOf(t.clock.now());
+      const tracker = t.app.get(ActivityTracker);
       const member = await t.login();
+      const before = (await tracker.daily(today)) ?? 0; // logging in is not activity; the first authenticated request below is
       await http().get("/v1/conversations/unread-count").set(auth(member)).expect(200);
-      await new Promise((r) => setTimeout(r, 100));
+      await until(async () => (await tracker.daily(today)) === before + 1); // exactly this member, counted once
       await rollup.rollupDay(today);
       const [p] = (await series(["dau", "wau", "mau"], today, today)).points;
-      expect(Number(p.values.dau)).toBeGreaterThanOrEqual(1);
+      expect(Number(p.values.dau)).toBe(before + 1);
       expect(Number(p.values.wau)).toBeGreaterThanOrEqual(Number(p.values.dau));
       expect(Number(p.values.mau)).toBeGreaterThanOrEqual(Number(p.values.wau));
+    });
+
+    it("a rebuild never replaces WAU / MAU with a partial window: a day of the window whose set was lost, or has expired, leaves the stored values alone (I7)", async () => {
+      const redis = t.app.get(REDIS);
+      const today = istDateOf(t.clock.now());
+      const keys: string[] = [];
+      const setOf = async (d: string, members: string[]) => {
+        const key = `activity:hll:${d}`;
+        keys.push(key);
+        await redis.pfadd(key, ...members);
+      };
+      const stored = async (d: string, key: string) => (await prisma.dailyMetric.findUnique({ where: { day_key: { day: d, key } } }))?.value;
+      const touchedDays: string[] = [];
+      try {
+        // (1) a recent day whose set was lost after it had been rolled up: 30 days of one regular plus one visitor a day
+        const end = addDays(today, -3);
+        const regular = randomUUID();
+        for (let i = 0; i < 30; i++) {
+          const d = addDays(end, -i);
+          touchedDays.push(d);
+          await setOf(d, [regular, randomUUID()]);
+        }
+        const lostDay = addDays(end, -10);
+        await rollup.rollupDay(lostDay); // so the lost day is known to have been tracked (it has a dau row)
+        await rollup.rollupDay(end);
+        expect([await stored(end, "dau"), await stored(end, "wau"), await stored(end, "mau")]).toEqual([2n, 8n, 31n]);
+        await redis.del(`activity:hll:${lostDay}`); // the set is gone
+        await rollup.rollupDay(end); // a rebuild
+        expect(await stored(end, "dau")).toBe(2n);
+        expect(await stored(end, "wau")).toBe(8n); // its window is complete: recomputed
+        expect(await stored(end, "mau")).toBe(31n); // one day missing: not replaced by the partial 30
+
+        // (2) an old day: its window reaches past the lifetime of the sets, so MAU keeps what the nightly run stored when the sets still existed
+        const old = addDays(today, -40);
+        for (let i = 0; i < 7; i++) {
+          touchedDays.push(addDays(old, -i));
+          await setOf(addDays(old, -i), [randomUUID()]);
+        }
+        await prisma.dailyMetric.createMany({ data: [{ day: old, key: "mau", value: 777n }, { day: old, key: "wau", value: 55n }], skipDuplicates: true });
+        await rollup.rollupDay(old);
+        expect(await stored(old, "wau")).toBe(7n); // the week is complete: recomputed
+        expect(await stored(old, "mau")).toBe(777n); // days 62+ back are gone: kept
+      } finally {
+        if (keys.length > 0) await redis.del(...keys);
+        await prisma.dailyMetric.deleteMany({ where: { day: { in: [...touchedDays, addDays(today, -40)] } } });
+      }
     });
   });
 });

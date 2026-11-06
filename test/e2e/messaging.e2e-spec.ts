@@ -170,7 +170,14 @@ describe("messaging", () => {
       expect((await start(a, target)).status).toBe(403); // the target does not follow a
       expect((await api().post(`/v1/profiles/${a.handle}/follow`).set(auth(target))).status).toBe(204);
       expect((await start(a, target)).status).toBe(201);
-      expect((await api().get(`/v1/profiles/${target.handle}`)).body.allowMessagesFrom).toBe("FOLLOWING");
+      // the setting is the owner's: nobody else can read it off a profile, which would tell a blocked sender apart from a closed inbox (I9)
+      for (const viewer of [undefined, a, target]) {
+        const res = await (viewer ? api().get(`/v1/profiles/${target.handle}`).set(auth(viewer)) : api().get(`/v1/profiles/${target.handle}`));
+        expect(res.status).toBe(200);
+        expect(res.body).not.toHaveProperty("allowMessagesFrom");
+        expect(JSON.stringify(res.body)).not.toContain("allowMessagesFrom");
+      }
+      expect((await api().get("/v1/me").set(auth(target))).body.profile.allowMessagesFrom).toBe("FOLLOWING"); // the owner still sees it
 
       // blocked looks exactly like "not allowed": same status, code, message and details
       const blocker = await person();
@@ -235,6 +242,47 @@ describe("messaging", () => {
       await api().post(`/v1/studio/gigs/${gig.id}/pause`).set(auth(seller));
       expect((await start(buyer, seller, "hi", { gigId: gig.id })).status).toBe(404);
       expect((await start(buyer, seller, "hi", { gigId: "not-a-uuid" })).status).toBe(400);
+    });
+
+    it("the gig card follows the gig: a paused or held-back gig, a suspended seller and a block in either direction drop the card while the conversation keeps working (I8)", async () => {
+      const seller = await creator();
+      const gig = await liveGig(seller);
+      const buyer = await person();
+      const inquiry = await start(buyer, seller, "about it", { gigId: gig.id });
+      const id = inquiry.body.conversation.id as string;
+      const cardFor = async (as: Session) => (await list(as)).body.items.find((c: { id: string }) => c.id === id)?.gig;
+      const setGig = (status: "ACTIVE" | "PAUSED" | "HIDDEN" | "REMOVED") => prisma.gig.update({ where: { id: gig.id }, data: { status } });
+      expect(await cardFor(buyer)).toMatchObject({ id: gig.id, slug: gig.slug });
+      expect(await cardFor(seller)).toMatchObject({ id: gig.id });
+
+      for (const status of ["PAUSED", "HIDDEN", "REMOVED"] as const) {
+        await setGig(status);
+        expect([status, await cardFor(buyer)]).toEqual([status, null]);
+        expect([status, await cardFor(seller)]).toEqual([status, null]);
+        expect((await messages(buyer, id)).status).toBe(200); // the conversation itself is untouched
+        expect((await send(buyer, id, `still talking while ${status}`)).status).toBe(201);
+      }
+      await setGig("ACTIVE");
+      expect(await cardFor(buyer)).toMatchObject({ id: gig.id });
+
+      await setStatus(seller.userId, "SUSPENDED");
+      try {
+        expect(await cardFor(buyer)).toBeNull();
+        expect((await messages(buyer, id)).status).toBe(200);
+      } finally {
+        await setStatus(seller.userId, "ACTIVE");
+      }
+      expect(await cardFor(buyer)).toMatchObject({ id: gig.id });
+
+      await block(buyer, seller.handle);
+      expect(await cardFor(buyer)).toBeNull();
+      await unblock(buyer, seller.handle);
+      await block(seller, buyer.handle);
+      expect(await cardFor(buyer)).toBeNull();
+      await unblock(seller, buyer.handle);
+      expect(await cardFor(buyer)).toMatchObject({ id: gig.id });
+      // the reply from the start call carries the same view
+      expect((await start(buyer, seller, "again", { gigId: gig.id })).body.conversation.gig).toMatchObject({ id: gig.id });
     });
 
     it("a second inquiry about another gig reuses the pair's conversation and points it at the newest gig", async () => {

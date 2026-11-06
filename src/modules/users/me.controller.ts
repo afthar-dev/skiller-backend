@@ -8,10 +8,10 @@ import { PermissionService } from "../rbac";
 import { RolesService } from "../rbac";
 import { MediaService } from "../media";
 import { CreatorService } from "./creator.service";
-import { ProfilesService, toProfileView } from "./profiles.service";
+import { ProfilesService, toOwnProfileView } from "./profiles.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
-import { ApiJsonResponse, objectSchema, profileViewSchema, schemas } from "../../common/openapi/responses";
+import { ApiJsonResponse, objectSchema, ownProfileViewSchema, schemas } from "../../common/openapi/responses";
 
 const httpUrl = z
   .string()
@@ -104,7 +104,7 @@ export class MeController {
 
   @Get()
   @ApiOperation({ summary: "Current user, profile, roles and effective platform permissions" })
-  @ApiJsonResponse(200, "Current user.", objectSchema({ user: { type: "object", additionalProperties: true }, profile: profileViewSchema, roles: { type: "array", items: schemas.str }, permissions: { type: "array", items: schemas.str } }))
+  @ApiJsonResponse(200, "Current user.", objectSchema({ user: { type: "object", additionalProperties: true }, profile: ownProfileViewSchema, roles: { type: "array", items: schemas.str }, permissions: { type: "array", items: schemas.str } }))
   async me(@CurrentUser() auth: AuthUser) {
     const [user, profile, roles, effective] = await Promise.all([
       this.accounts.get(auth.id),
@@ -113,13 +113,13 @@ export class MeController {
       this.roles.platformRoleKeys(auth.id),
       this.permissions.effective(auth.id),
     ]);
-    return { user, profile: toProfileView(profile), roles, permissions: [...effective.platform].sort() };
+    return { user, profile: toOwnProfileView(profile), roles, permissions: [...effective.platform].sort() };
   }
 
   @Patch("profile")
   @ApiOperation({ summary: "Update profile fields (avatar/banner by media asset id; allowMessagesFrom: EVERYONE | FOLLOWING (people you follow) | NONE decides who may start a conversation with you)" })
   @ApiZodBody(profilePatch)
-  @ApiJsonResponse(200, "Updated profile.", profileViewSchema)
+  @ApiJsonResponse(200, "Updated profile.", ownProfileViewSchema)
   updateProfile(@CurrentUser() auth: AuthUser, @Body() body: unknown) {
     const patch = profilePatch.parse(body);
     // Attaching happens in the profile update's own transaction: a media asset that is not usable rejects the whole PATCH.

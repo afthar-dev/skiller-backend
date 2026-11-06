@@ -243,7 +243,7 @@ export class MessagingService {
         SELECT m.* FROM "conversations" c
         JOIN LATERAL (SELECT * FROM "messages" WHERE "conversationId" = c."id" ORDER BY "id" DESC LIMIT 1) m ON TRUE
         WHERE c."id" IN (${Prisma.join(ids)})`,
-      this.gigs.cards(rows.flatMap((r) => (r.gigId ? [r.gigId] : []))),
+      this.gigs.visibleCards(userId, rows.flatMap((r) => (r.gigId ? [r.gigId] : []))),
     ]);
     const profiles = await this.profiles.summaries(others.map((o) => o.userId));
     const otherOf = new Map<string, ProfileSummary | null>(others.map((o) => [o.conversationId, profiles.get(o.userId) ?? null]));

@@ -23,7 +23,7 @@ export const toMessageView = (m: Pick<Message, "id" | "conversationId" | "sender
 export interface ConversationView {
   id: string;
   gigId: string | null;
-  /** The gig the conversation is about, while it still exists (live or paused). */
+  /** The gig the conversation is about while it is live and the viewer may see its seller; otherwise null (the conversation itself is unaffected). */
   gig: { id: string; slug: string; title: string } | null;
   /** Set for gig conversations: Skiller does not take part in the deal. */
   paymentNotice: string | null;

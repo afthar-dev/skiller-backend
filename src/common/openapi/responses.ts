@@ -24,8 +24,16 @@ export const profileViewSchema: Schema = {
     followingCount: { type: "integer" },
     isCreator: { type: "boolean" },
     verifiedAt: { ...isoDate, nullable: true },
-    allowMessagesFrom: { type: "string", enum: ["EVERYONE", "FOLLOWING", "NONE"], description: "Who may start a conversation with this person." },
     updatedAt: isoDate,
+  },
+};
+
+/** The owner's view of their own profile (/me, PATCH /me/profile): the public view plus private settings. */
+export const ownProfileViewSchema: Schema = {
+  ...profileViewSchema,
+  properties: {
+    ...(profileViewSchema.properties as Schema),
+    allowMessagesFrom: { type: "string", enum: ["EVERYONE", "FOLLOWING", "NONE"], description: "Who may start a conversation with you. Private: never shown on the public profile." },
   },
 };
 

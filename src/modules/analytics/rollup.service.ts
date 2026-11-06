@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { ActivityTracker } from "../../common/activity/activity-tracker";
+import { ACTIVITY_TTL_DAYS, ActivityTracker } from "../../common/activity/activity-tracker";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { addDays, istDateOf, istDayRange } from "../../common/clock/ist";
 import type { MetricPoint, MetricsProvider } from "../../common/metrics/metrics-provider";
@@ -74,17 +74,30 @@ export class RollupService {
   }
 
   /**
-   * DAU / WAU / MAU for `day` from the HyperLogLogs. A day whose set has expired (older than 35 days) or was never written yields nothing, so a
-   * rebuild of an old day keeps the numbers it had instead of overwriting them with zero.
+   * DAU / WAU / MAU for `day` from the HyperLogLogs. A day whose own set is gone yields nothing, so a rebuild of an old day keeps the numbers it had
+   * instead of overwriting them with zero. WAU and MAU merge several days' sets and are written only when none of those sets is *lost*: a smaller number
+   * from a partial window would replace a correct one. A day without a set is lost when its set has outlived the lifetime of the keys, or when that day
+   * was rolled up before (it has a stored `dau`); a day nobody ever tracked (before the platform started) is just empty.
    */
   private async activityPoints(day: string): Promise<MetricPoint[]> {
     const dau = await this.activity.daily(day);
     if (dau === null) return [];
-    const [wau, mau] = await Promise.all([this.activity.window(day, 7), this.activity.window(day, 30)]);
-    return [
-      { key: "dau", value: BigInt(dau) },
-      { key: "wau", value: BigInt(wau ?? dau) },
-      { key: "mau", value: BigInt(mau ?? dau) },
-    ];
+    const points: MetricPoint[] = [{ key: "dau", value: BigInt(dau) }];
+    for (const [key, days] of [["wau", 7], ["mau", 30]] as const) {
+      const window = await this.activity.window(day, days);
+      if (window.count === null || (await this.hasLostDays(window.missing))) {
+        this.logger.warn(`${key} for ${day} not written: the activity of ${window.missing.length} day(s) in its window is gone; the stored value stays`);
+        continue;
+      }
+      points.push({ key, value: BigInt(window.count) });
+    }
+    return points;
+  }
+
+  private async hasLostDays(missing: string[]): Promise<boolean> {
+    if (missing.length === 0) return false;
+    const horizon = addDays(istDateOf(this.clock.now()), -ACTIVITY_TTL_DAYS);
+    if (missing.some((d) => d < horizon)) return true;
+    return (await this.prisma.dailyMetric.count({ where: { key: "dau", day: { in: missing } } })) > 0;
   }
 }

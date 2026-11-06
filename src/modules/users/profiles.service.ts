@@ -21,8 +21,13 @@ export interface ProfileView {
   followingCount: number;
   isCreator: boolean;
   verifiedAt: string | null;
-  allowMessagesFrom: MessagePolicy;
   updatedAt: string;
+}
+
+/** What the owner sees of their own profile: the public view plus private settings. */
+export interface OwnProfileView extends ProfileView {
+  /** Who may start a conversation with the owner. Private: a public profile that showed it would tell a blocked sender from a closed inbox. */
+  allowMessagesFrom: MessagePolicy;
 }
 
 export interface ProfileSummary {
@@ -67,6 +72,7 @@ export interface PortfolioInput {
 
 const GENERATION_ATTEMPTS = 10;
 
+/** The public view of a profile (what GET /profiles/:handle returns). */
 export const toProfileView = (p: Profile): ProfileView => ({
   userId: p.userId,
   handle: p.handle,
@@ -81,9 +87,11 @@ export const toProfileView = (p: Profile): ProfileView => ({
   followingCount: p.followingCount,
   isCreator: p.isCreator,
   verifiedAt: p.verifiedAt ? p.verifiedAt.toISOString() : null,
-  allowMessagesFrom: p.allowMessagesFrom,
   updatedAt: p.updatedAt.toISOString(),
 });
+
+/** The owner's view (/me and PATCH /me/profile): the public view and the private settings. */
+export const toOwnProfileView = (p: Profile): OwnProfileView => ({ ...toProfileView(p), allowMessagesFrom: p.allowMessagesFrom });
 
 export const toSummary = (p: Pick<Profile, "userId" | "handle" | "displayName" | "headline" | "avatarAssetId">): ProfileSummary => ({
   id: p.userId,
@@ -188,7 +196,7 @@ export class ProfilesService {
     if (patch.allowMessagesFrom !== undefined) data.allowMessagesFrom = patch.allowMessagesFrom;
 
     try {
-      return toProfileView(
+      return toOwnProfileView(
         await this.prisma.$transaction(async (tx) => {
           const current = await tx.profile.findUniqueOrThrow({ where: { userId } });
           if (inTx) await inTx(tx, current);

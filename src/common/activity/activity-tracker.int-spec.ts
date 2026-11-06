@@ -33,7 +33,7 @@ describe("ActivityTracker (Redis HyperLogLog per IST day)", () => {
     await redis.quit();
   });
 
-  it("counts each member once a day however often they appear, and expires the day's set after 35 days", async () => {
+  it("counts each member once a day however often they appear, and expires the day's set after 62 days", async () => {
     const { tracker } = trackerAt(`${base}T10:00:00.000Z`);
     keyOf(base);
     const [a, b] = [randomUUID(), randomUUID()];
@@ -61,7 +61,7 @@ describe("ActivityTracker (Redis HyperLogLog per IST day)", () => {
     expect(await probe.daily(next)).toBe(1);
   });
 
-  it("WAU / MAU merge the last 7 / 30 day sets: a member active on several days counts once; a day without a set is skipped; no sets at all is null", async () => {
+  it("WAU / MAU merge the last 7 / 30 day sets: a member active on several days counts once; the days without a set are named; no sets at all is a null count", async () => {
     const start = addDays(base, 200);
     const regular = randomUUID();
     const oneOff = randomUUID();
@@ -75,11 +75,17 @@ describe("ActivityTracker (Redis HyperLogLog per IST day)", () => {
     const probe = trackerAt(`${start}T00:00:00.000Z`).tracker;
     const end = addDays(start, 9);
     expect(await probe.daily(end)).toBe(1);
-    expect(await probe.window(end, 7)).toBe(1); // days 3..9: only `regular`
-    expect(await probe.window(end, 30)).toBe(2); // days 0..9 hold `oneOff` on day 2
-    expect(await probe.window(addDays(start, 2), 7)).toBe(2);
+    expect(await probe.window(end, 7)).toEqual({ count: 1, missing: [] }); // days 3..9: only `regular`
+    const month = await probe.window(end, 30); // days 0..9 hold `oneOff` on day 2; the 20 days before day 0 have no set
+    expect(month.count).toBe(2);
+    expect(month.missing).toHaveLength(20);
+    expect(month.missing).toContain(addDays(start, -1));
+    expect(month.missing).not.toContain(start);
+    expect(await probe.window(addDays(start, 2), 7)).toMatchObject({ count: 2 });
     expect(await probe.daily(addDays(start, 40))).toBeNull();
-    expect(await probe.window(addDays(start, 80), 30)).toBeNull();
+    const none = await probe.window(addDays(start, 80), 30);
+    expect(none.count).toBeNull();
+    expect(none.missing).toHaveLength(30);
     // the temporary merge key is gone
     expect(await redis.keys("activity:tmp:*")).toHaveLength(0);
   });
@@ -91,26 +97,29 @@ describe("ActivityTracker (Redis HyperLogLog per IST day)", () => {
       },
     } as unknown as Redis;
     expect(() => new ActivityTracker(broken, new FakeClock()).record(randomUUID())).not.toThrow();
-    const rejecting = {
-      multi: () => ({ pfadd: () => ({ expire: () => ({ exec: () => Promise.reject(new Error("redis down")) }) }) }),
-    } as unknown as Redis;
-    const tracker = new ActivityTracker(rejecting, new FakeClock());
-    const user = randomUUID();
-    tracker.record(user);
-    await flush(); // an unhandled rejection would fail the run here
-    // a failed write is not remembered as done: the next request tries again
+  });
+
+  it("a failed write is not remembered as done: the same tracker writes the member again on the next request, then once a day", async () => {
+    let failing = true;
     const calls: string[] = [];
-    const recovering = {
+    const flaky = {
       multi: () => ({
         pfadd: (_k: string, u: string) => {
           calls.push(u);
-          return { expire: () => ({ exec: () => Promise.resolve([]) }) };
+          return { expire: () => ({ exec: () => (failing ? Promise.reject(new Error("redis down")) : Promise.resolve([])) }) };
         },
       }),
     } as unknown as Redis;
-    const t2 = new ActivityTracker(recovering, new FakeClock());
-    t2.record(user);
-    t2.record(user);
-    expect(calls).toEqual([user]); // one write per member per day per process
+    const tracker = new ActivityTracker(flaky, new FakeClock());
+    const user = randomUUID();
+    tracker.record(user);
+    await flush(); // the rejection is swallowed (an unhandled one would fail the run here) ...
+    failing = false;
+    tracker.record(user); // ... and the member is tried again, by the same tracker
+    await flush();
+    tracker.record(user); // written now: remembered
+    tracker.record(user);
+    await flush();
+    expect(calls).toEqual([user, user]);
   });
 });
