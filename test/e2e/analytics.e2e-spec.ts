@@ -525,13 +525,31 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
     it("the tracked member shows up in the day's DAU / WAU / MAU after a rollup of that day (approximate counts)", async () => {
       const today = istDateOf(t.clock.now());
       const tracker = t.app.get(ActivityTracker);
+      const redis = t.app.get(REDIS);
       const member = await t.login();
-      const before = (await tracker.daily(today)) ?? 0; // logging in is not activity; the first authenticated request below is
-      await http().get("/v1/conversations/unread-count").set(auth(member)).expect(200);
-      await until(async () => (await tracker.daily(today)) === before + 1); // exactly this member, counted once
+      // Today's set is shared with every other suite and approximate, so the member's own write is observed at the PFADD, not inferred from a count.
+      const added: string[] = [];
+      const original = redis.multi.bind(redis) as (...args: unknown[]) => ReturnType<typeof redis.multi>;
+      const spy = jest.spyOn(redis, "multi").mockImplementation(((...args: unknown[]) => {
+        const m = original(...args);
+        const pfadd = m.pfadd.bind(m);
+        m.pfadd = ((key: string, ...members: string[]) => {
+          added.push(`${key}|${members.join(",")}`);
+          return pfadd(key, ...members);
+        }) as typeof m.pfadd;
+        return m;
+      }) as never);
+      try {
+        await http().get("/v1/conversations/unread-count").set(auth(member)).expect(200);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(added).toContain(`activity:hll:${today}|${member.userId}`); // this member, into today's set
+      await until(async () => (await tracker.daily(today)) !== null);
       await rollup.rollupDay(today);
       const [p] = (await series(["dau", "wau", "mau"], today, today)).points;
-      expect(Number(p.values.dau)).toBe(before + 1);
+      expect(Number(p.values.dau)).toBe(await tracker.daily(today)); // the stored number is the set's count
+      expect(Number(p.values.dau)).toBeGreaterThanOrEqual(1);
       expect(Number(p.values.wau)).toBeGreaterThanOrEqual(Number(p.values.dau));
       expect(Number(p.values.mau)).toBeGreaterThanOrEqual(Number(p.values.wau));
     });
