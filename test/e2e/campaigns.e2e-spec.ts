@@ -260,7 +260,11 @@ describe("promo email campaigns", () => {
       const c = await made({ segment: a.segment });
       // the suspended member is not in the audience, so they are never even a recipient
       await launch(c.id);
-      await until(async () => (await recipients(c.id)).filter((r) => r.status === "SENT").length === 3);
+      // Wait for every recipient to settle: the skips are decided by the same queue as the sends, and may land after the third send.
+      await until(async () => {
+        const all = await recipients(c.id);
+        return all.length === 5 && all.every((r) => r.status === "SENT" || r.status === "SKIPPED");
+      });
       const byUser = new Map((await recipients(c.id)).map((r) => [r.userId, r]));
       expect(byUser.has(suspended.id)).toBe(false);
       expect(byUser.get(suppressed.id)).toMatchObject({ status: "SKIPPED", skipReason: "suppressed" });
