@@ -145,7 +145,7 @@ The frontend must not work around a missing API. When a phase finds a gap, it is
 Each phase has its own plan and uses Sonnet helpers, with one Opus final review and one fix wave at its end. No per-task reviews.
 
 1. **Foundation:** repo, tokens, app shell, API client, OTP sign-in, step-up, page states, profile, settings.
-2. **Courses and learning:** catalogs, detail, checkout, player, quizzes, certificates, reviews, Q&A.
+2. **Courses and learning:** trusted web-server identity for public API reads (rate limits) first, then catalogs, detail, checkout, player, quizzes, certificates, reviews, Q&A.
 3. **Creator money and studio:** upload engine, course builder, plans, wallet, payouts, invoices, refunds.
 4. **Reels:** feed, engagement, comments, posting, hashtags, moderation actions.
 5. **Gigs and messaging:** catalog, manager, messaging, notifications.
