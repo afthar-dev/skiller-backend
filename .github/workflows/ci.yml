@@ -84,6 +84,9 @@ jobs:
           pnpm openapi:export
           git diff --exit-code openapi.json
 
+      - name: Every operation has a typed response (the untyped allowlist may only shrink)
+        run: pnpm openapi:check-responses
+
   docker:
     needs: check
     runs-on: ubuntu-latest

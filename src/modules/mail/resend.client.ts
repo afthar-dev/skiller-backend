@@ -30,6 +30,8 @@ export class HttpResendClient implements ResendClient {
     private readonly apiKey: string,
     private readonly from: string,
     private readonly baseUrl = "https://api.resend.com",
+    /** The mail queue runs one send at a time: a hung Resend call must end (and be retried, the Idempotency-Key makes that safe) instead of holding every sign-in code behind it. */
+    private readonly timeoutMs = 10_000,
   ) {}
 
   async send(msg: ResendMessage): Promise<{ id: string }> {
@@ -41,6 +43,7 @@ export class HttpResendClient implements ResendClient {
         ...(msg.idempotencyKey ? { "Idempotency-Key": msg.idempotencyKey } : {}),
       },
       body: JSON.stringify({ from: this.from, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text, headers: msg.headers }),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) throw new ResendApiError(res.status, (await res.text().catch(() => "")).slice(0, 200));
     const body = (await res.json()) as { id: string };
