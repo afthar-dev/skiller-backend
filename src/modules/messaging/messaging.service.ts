@@ -57,7 +57,7 @@ export class MessagingService {
 
   /** Get-or-create the conversation with `recipientHandle` and append the first message. */
   async start(senderId: string, input: { recipientHandle: string; gigId?: string; message: string }): Promise<{ created: boolean; conversation: ConversationView; message: MessageView }> {
-    const recipient = await this.profiles.getByHandle(input.recipientHandle);
+    const recipient = await this.profiles.getByHandleAnyStatus(input.recipientHandle);
     const recipientId = recipient.userId;
     if (recipientId === senderId) throw messagingSelf();
     if (input.gigId && !(await this.gigs.liveGigOf(input.gigId, recipientId))) throw new AppError("GIG_NOT_FOUND", 404, "Gig not found");

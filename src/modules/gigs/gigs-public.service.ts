@@ -28,7 +28,7 @@ export class GigsPublicService {
 
   /** A seller's live gigs, newest first (by the time they first went live). */
   async byHandle(handle: string, page: PageQuery, viewerId: string | null) {
-    const profile = await this.profiles.getByHandle(handle);
+    const profile = await this.profiles.getByHandleAnyStatus(handle);
     if (!(await this.visibility.visibleSellers(viewerId, [profile.userId])).has(profile.userId)) return { items: [], nextCursor: null };
     let after: { t: Date; id: string } | undefined;
     if (page.cursor) {

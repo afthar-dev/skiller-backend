@@ -4,7 +4,7 @@ import { escapeLike } from "../../common/db/like";
 import { Prisma, type MessagePolicy, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { AccountService } from "../identity";
+import { AccountService, UserStatusCache } from "../identity";
 import { defaultDisplayName, generateHandle, isReservedHandle, isValidHandle, normalizeHandle } from "./handles";
 
 export interface ProfileView {
@@ -110,6 +110,7 @@ export class ProfilesService {
     private readonly prisma: PrismaService,
     private readonly accounts: AccountService,
     private readonly outbox: OutboxService,
+    private readonly statuses: UserStatusCache,
   ) {}
 
   /**
@@ -135,10 +136,27 @@ export class ProfilesService {
     throw new AppError("INTERNAL", 500, "Could not allocate a profile handle");
   }
 
+  /**
+   * The profile behind a public handle. A suspended or deleted account has none: like its reels and gigs, the profile is gone from every
+   * public read (and back when the account is active again), so this answers 404 exactly as for a handle that never existed.
+   */
   async getByHandle(handle: string): Promise<Profile> {
+    const profile = await this.getByHandleAnyStatus(handle);
+    if ((await this.statuses.get(profile.userId)) !== "ACTIVE") throw new AppError("PROFILE_NOT_FOUND", 404, "Profile not found");
+    return profile;
+  }
+
+  /** The profile row whatever the account's status: for undoing something the caller did earlier (unblock, unmute), never for showing it to anyone. */
+  async getByHandleAnyStatus(handle: string): Promise<Profile> {
     const profile = await this.prisma.profile.findUnique({ where: { handle: normalizeHandle(handle) } });
     if (!profile) throw new AppError("PROFILE_NOT_FOUND", 404, "Profile not found");
     return profile;
+  }
+
+  /** Of these users, the ones whose account is active: the only ones a public list may show. */
+  async activeIds(userIds: string[]): Promise<Set<string>> {
+    const statuses = await this.statuses.getMany(userIds);
+    return new Set(userIds.filter((id) => statuses.get(id) === "ACTIVE"));
   }
 
   async isCreator(userId: string): Promise<boolean> {

@@ -1,5 +1,6 @@
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
+import { UserStatusCache } from "../../src/modules/identity";
 import { AuthTestApp, createAuthTestApp, uniqueEmail } from "../support/auth-app";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
@@ -171,6 +172,66 @@ describe("profiles, follows and creator onboarding", () => {
       const res = await http().get(`/v1/profiles/nobody_${uniq()}`);
       expect(res.status).toBe(404);
       expect(res.body.error.code).toBe("PROFILE_NOT_FOUND");
+    });
+
+    /** What the admin API and a deletion leave behind: the status on the row, with the status cache brought in line the way both do. */
+    async function setStatus(userId: string, status: "ACTIVE" | "SUSPENDED" | "DELETED") {
+      await prisma.user.update({ where: { id: userId }, data: { status } });
+      await t.app.get(UserStatusCache).bust(userId);
+    }
+
+    it.each(["SUSPENDED", "DELETED"] as const)("%s accounts have no public profile and leave follower lists; an active account is back at once", async (status) => {
+      const hidden = await newUser();
+      const fan = await newUser();
+      const star = await newUser();
+      expect((await http().post(`/v1/profiles/${hidden.handle}/follow`).set(auth(fan))).status).toBe(204);
+      expect((await http().post(`/v1/profiles/${star.handle}/follow`).set(auth(hidden))).status).toBe(204);
+      expect((await http().get(`/v1/profiles/${hidden.handle}`)).status).toBe(200);
+
+      await setStatus(hidden.userId, status);
+
+      for (const path of [`/v1/profiles/${hidden.handle}`, `/v1/profiles/${hidden.handle}/followers`, `/v1/profiles/${hidden.handle}/following`]) {
+        const res = await http().get(path);
+        expect(res.status).toBe(404);
+        expect(res.body.error.code).toBe("PROFILE_NOT_FOUND");
+      }
+      // Following them is no more possible than reading them, and other members' lists no longer show them.
+      expect((await http().post(`/v1/profiles/${hidden.handle}/follow`).set(auth(star))).status).toBe(404);
+      expect((await http().get(`/v1/profiles/${star.handle}/followers`)).body.items).toEqual([]);
+      expect((await http().get(`/v1/profiles/${fan.handle}/following`)).body.items).toEqual([]);
+
+      if (status === "SUSPENDED") {
+        await setStatus(hidden.userId, "ACTIVE");
+        expect((await http().get(`/v1/profiles/${hidden.handle}`)).status).toBe(200);
+        expect((await http().get(`/v1/profiles/${star.handle}/followers`)).body.items.map((i: { handle: string }) => i.handle)).toEqual([hidden.handle]);
+      }
+    });
+
+    it("a suspended follower leaves no short or empty page behind", async () => {
+      const star = await newUser();
+      const fans = [await newUser(), await newUser(), await newUser()];
+      for (const f of fans) expect((await http().post(`/v1/profiles/${star.handle}/follow`).set(auth(f))).status).toBe(204);
+      const sorted = [...fans].sort((x, y) => (x.userId < y.userId ? -1 : 1));
+      await setStatus(sorted[1].userId, "SUSPENDED");
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const res: request.Response = await http().get(`/v1/profiles/${star.handle}/followers?limit=1${cursor ? `&cursor=${cursor}` : ""}`);
+        expect(res.body.items).toHaveLength(1);
+        seen.push(res.body.items[0].id);
+        cursor = res.body.nextCursor;
+      } while (cursor);
+      expect(seen).toEqual([sorted[0].userId, sorted[2].userId]);
+    });
+
+    it("a blocker can still unblock and unmute a member who was suspended afterwards", async () => {
+      const a = await newUser();
+      const b = await newUser();
+      expect((await http().put(`/v1/blocks/${b.handle}`).set(auth(a))).status).toBe(200);
+      expect((await http().put(`/v1/mutes/${b.handle}`).set(auth(a))).status).toBe(200);
+      await setStatus(b.userId, "SUSPENDED");
+      expect((await http().delete(`/v1/blocks/${b.handle}`).set(auth(a))).status).toBe(200);
+      expect((await http().delete(`/v1/mutes/${b.handle}`).set(auth(a))).status).toBe(200);
     });
   });
 

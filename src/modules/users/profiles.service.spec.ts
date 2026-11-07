@@ -1,6 +1,6 @@
 import type { PrismaService } from "../../common/prisma/prisma.service";
 import type { OutboxService } from "../../common/outbox/outbox.service";
-import type { AccountService } from "../identity";
+import type { AccountService, UserStatusCache } from "../identity";
 import { ProfilesService } from "./profiles.service";
 
 describe("ProfilesService module boundary", () => {
@@ -12,7 +12,7 @@ describe("ProfilesService module boundary", () => {
     } as unknown as PrismaService;
     const accounts = { findEmail: jest.fn().mockResolvedValue("abc@example.com") } as unknown as AccountService;
 
-    const profile = await new ProfilesService(prisma, accounts, { enqueue: jest.fn() } as unknown as OutboxService).ensure("u1");
+    const profile = await new ProfilesService(prisma, accounts, { enqueue: jest.fn() } as unknown as OutboxService, {} as UserStatusCache).ensure("u1");
     expect(profile).toBe(created);
     expect(accounts.findEmail).toHaveBeenCalledWith("u1");
   });
@@ -29,7 +29,7 @@ describe("ProfilesService.update events", () => {
       },
     };
     const prisma = { profile: { findUnique: jest.fn().mockResolvedValue({ userId: "u1" }) }, $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
-    return { service: new ProfilesService(prisma, {} as AccountService, { enqueue } as unknown as OutboxService), enqueue, tx };
+    return { service: new ProfilesService(prisma, {} as AccountService, { enqueue } as unknown as OutboxService, {} as UserStatusCache), enqueue, tx };
   };
 
   it("announces a changed display name in the transaction of the change, so courses can re-index", async () => {

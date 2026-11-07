@@ -163,7 +163,7 @@ export class ReelsService {
 
   /** A creator's published reels, newest first (by publish time). */
   async byHandle(handle: string, page: PageQuery, viewerId: string | null): Promise<{ items: ReelView[]; nextCursor: string | null }> {
-    const profile = await this.profiles.getByHandle(handle);
+    const profile = await this.profiles.getByHandleAnyStatus(handle);
     // Blocked either way: the profile tab is empty for this viewer.
     if ((await this.visibility.filterVisible(viewerId, { creatorIds: [profile.userId] }, { mutes: false })).length === 0) return { items: [], nextCursor: null };
     let after: { t: Date; id: string } | undefined;

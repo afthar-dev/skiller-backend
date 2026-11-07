@@ -37,7 +37,7 @@ export class RelationsController {
   @ApiOperation({ summary: "Unblock a member (idempotent)" })
   @ApiJsonResponse(200, "Not blocked.", objectSchema({ blocked: { type: "boolean" } }))
   async unblock(@CurrentUser() user: AuthUser, @Param("handle") handle: string) {
-    await this.blocks.unblock(user.id, (await this.profiles.getByHandle(handle)).userId);
+    await this.blocks.unblock(user.id, (await this.profiles.getByHandleAnyStatus(handle)).userId);
     return { blocked: false };
   }
 
@@ -55,7 +55,7 @@ export class RelationsController {
   @ApiOperation({ summary: "Unmute a creator (idempotent)" })
   @ApiJsonResponse(200, "Not muted.", objectSchema({ muted: { type: "boolean" } }))
   async unmute(@CurrentUser() user: AuthUser, @Param("handle") handle: string) {
-    await this.blocks.unmute(user.id, (await this.profiles.getByHandle(handle)).userId);
+    await this.blocks.unmute(user.id, (await this.profiles.getByHandleAnyStatus(handle)).userId);
     return { muted: false };
   }
 

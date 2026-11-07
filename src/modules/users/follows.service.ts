@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Profile } from "@prisma/client";
 import { UserBlocks } from "../moderation";
 import { ProfilesService, toSummary } from "./profiles.service";
 
@@ -69,24 +69,46 @@ export class FollowsService {
   // Ordered by the other party's user id (UUIDv7, so roughly by account age): the cursor is that id, which is unique per list.
   async followers(handle: string, page: PageQuery) {
     const target = await this.profiles.getByHandle(handle);
-    const rows = await this.prisma.follow.findMany({
-      where: { followeeId: target.userId, ...(page.cursor ? { followerId: { gt: page.cursor } } : {}) },
-      orderBy: { followerId: "asc" },
-      take: page.limit + 1,
-      include: { follower: true },
+    return this.visiblePage(page, async (after, take) => {
+      const rows = await this.prisma.follow.findMany({
+        where: { followeeId: target.userId, ...(after ? { followerId: { gt: after } } : {}) },
+        orderBy: { followerId: "asc" },
+        take,
+        include: { follower: true },
+      });
+      return rows.map((r) => r.follower);
     });
-    return toPage(rows.map((r) => ({ ...toSummary(r.follower) })), page.limit);
   }
 
   async following(handle: string, page: PageQuery) {
     const target = await this.profiles.getByHandle(handle);
-    const rows = await this.prisma.follow.findMany({
-      where: { followerId: target.userId, ...(page.cursor ? { followeeId: { gt: page.cursor } } : {}) },
-      orderBy: { followeeId: "asc" },
-      take: page.limit + 1,
-      include: { followee: true },
+    return this.visiblePage(page, async (after, take) => {
+      const rows = await this.prisma.follow.findMany({
+        where: { followerId: target.userId, ...(after ? { followeeId: { gt: after } } : {}) },
+        orderBy: { followeeId: "asc" },
+        take,
+        include: { followee: true },
+      });
+      return rows.map((r) => r.followee);
     });
-    return toPage(rows.map((r) => ({ ...toSummary(r.followee) })), page.limit);
+  }
+
+  /**
+   * A page of the profiles `fetch` yields in user-id order, without the suspended and deleted ones. Hidden members would otherwise leave
+   * short pages (or empty ones with a cursor), so it keeps reading batches until the page and the one-extra row that signals more are full.
+   */
+  private async visiblePage(page: PageQuery, fetch: (after: string | undefined, take: number) => Promise<Profile[]>) {
+    const take = page.limit + 1;
+    const visible: Profile[] = [];
+    let after = page.cursor;
+    while (visible.length < take) {
+      const batch = await fetch(after, take);
+      const active = await this.profiles.activeIds(batch.map((p) => p.userId));
+      visible.push(...batch.filter((p) => active.has(p.userId)));
+      if (batch.length < take) break;
+      after = batch[batch.length - 1].userId;
+    }
+    return toPage(visible.map(toSummary), page.limit);
   }
 
 }
