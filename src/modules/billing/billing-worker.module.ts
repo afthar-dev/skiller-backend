@@ -3,7 +3,7 @@ import { AuditService } from "../audit";
 import { ClockModule } from "../../common/clock/clock";
 import { NotificationsWorkerModule } from "../notifications";
 import { RbacWorkerModule } from "../rbac";
-import { AccountService } from "../identity";
+import { AccountService, UserStatusCache } from "../identity";
 import { ObjectStorageModule } from "../media";
 import { OrganizationsWorkerModule } from "../organizations";
 import { ProfilesService } from "../users";
@@ -15,7 +15,7 @@ import { EntitlementsModule } from "./entitlements.module";
 @Module({
   imports: [ClockModule, EntitlementsModule, OrganizationsWorkerModule, ObjectStorageModule, WalletWorkerModule, NotificationsWorkerModule, RbacWorkerModule],
   // AuditService: payout accounts audit their changes (it needs only Prisma). Invoices print buyer and seller names: the worker has no users module, so it builds the two small services itself (as notifications does).
-  providers: [...BILLING_CORE_PROVIDERS, AccountService, ProfilesService, AuditService],
+  providers: [...BILLING_CORE_PROVIDERS, AccountService, UserStatusCache, ProfilesService, AuditService],
   exports: BILLING_CORE_EXPORTS,
 })
 export class BillingWorkerModule {}

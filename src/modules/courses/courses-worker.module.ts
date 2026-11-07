@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ClockModule } from "../../common/clock/clock";
 import { BillingWorkerModule } from "../billing";
-import { AccountService } from "../identity";
+import { AccountService, UserStatusCache } from "../identity";
 import { ObjectStorageModule } from "../media";
 import { NotificationsWorkerModule } from "../notifications";
 import { OrganizationsWorkerModule } from "../organizations";
@@ -18,7 +18,7 @@ import { COURSES_CORE_PROVIDERS } from "./courses-core";
 @Module({
   imports: [ClockModule, BillingWorkerModule, RbacWorkerModule, ObjectStorageModule, NotificationsWorkerModule, OrganizationsWorkerModule],
   // Certificates print the learner's name: the worker has no users module, so it builds the small ProfilesService itself (as billing does for invoices).
-  providers: [...COURSES_CORE_PROVIDERS, AccountService, ProfilesService],
+  providers: [...COURSES_CORE_PROVIDERS, AccountService, UserStatusCache, ProfilesService],
   exports: [CourseMaintenanceProcessor, CourseCategories],
 })
 export class CoursesWorkerModule {}
