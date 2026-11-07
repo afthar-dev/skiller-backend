@@ -9,7 +9,22 @@ const nullableStr = { type: "string", nullable: true } as const;
 
 export const profileViewSchema: Schema = {
   type: "object",
-  required: ["userId", "handle", "displayName", "isCreator", "updatedAt"],
+  required: [
+    "userId",
+    "handle",
+    "displayName",
+    "headline",
+    "about",
+    "avatarAssetId",
+    "bannerAssetId",
+    "location",
+    "links",
+    "followersCount",
+    "followingCount",
+    "isCreator",
+    "verifiedAt",
+    "updatedAt",
+  ],
   properties: {
     userId: str,
     handle: str,

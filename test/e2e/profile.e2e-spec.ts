@@ -142,6 +142,10 @@ describe("profiles, follows and creator onboarding", () => {
         skills: expect.any(Array),
         portfolio: expect.any(Array),
       });
+      // Every field the OpenAPI schema marks required is always present (null when empty), never omitted.
+      for (const key of ["userId", "handle", "displayName", "headline", "about", "avatarAssetId", "bannerAssetId", "location", "links", "followersCount", "followingCount", "isCreator", "verifiedAt", "updatedAt"]) {
+        expect(pub.body).toHaveProperty(key);
+      }
       expect(pub.body.experience[0]).toMatchObject({ id: expect.any(String), title: "Only", company: "Gamma", startDate: "2023-01-01", endDate: null });
       expect(pub.body.experience).toHaveLength(1);
       expect(pub.body.education).toHaveLength(1);
