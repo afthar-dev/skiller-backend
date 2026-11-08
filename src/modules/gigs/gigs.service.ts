@@ -227,7 +227,7 @@ export class GigsService {
 
   /** Attaches an upload to the gig: the seller's own personal upload of this purpose that finished processing. */
   private async useAsset(tx: Prisma.TransactionClient, sellerId: string, assetId: string, purpose: "THUMBNAIL" | "GIG_GALLERY"): Promise<void> {
-    const info = await this.media.assetInfo(assetId);
+    const info = await this.media.assetInfo(assetId, tx);
     if (!info || info.ownerId !== sellerId || info.orgId !== null || info.purpose !== purpose || info.status !== "READY") throw mediaNotUsable();
     await this.media.attach(tx, assetId, sellerId, purpose);
   }
