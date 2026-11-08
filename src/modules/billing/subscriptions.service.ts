@@ -513,6 +513,8 @@ export class SubscriptionsService {
   private async startCheckout(owner: Owner, target: VersionWithPlan, actorId: string): Promise<CheckoutResult> {
     if (target.pricePaise <= 0n) throw new AppError("PLAN_NOT_PURCHASABLE", 422, "This plan is free; there is nothing to pay for");
     const keyId = this.config.razorpay.keyId;
+    // Before the transaction: it opens a transaction of its own, which would be a second pooled connection while this one holds the first.
+    const razorpayPlanId = await this.ensureRazorpayPlan(target);
     return this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sub-checkout:${owner.ownerType}:${owner.ownerId}`}))`;
@@ -522,7 +524,6 @@ export class SubscriptionsService {
         });
         if (reusable) return { subscriptionId: reusable.id, razorpaySubscriptionId: reusable.razorpaySubscriptionId!, keyId };
 
-        const razorpayPlanId = await this.ensureRazorpayPlan(target);
         const id = uuidv7();
         const created = await this.razorpay.createSubscription({
           planId: razorpayPlanId,
