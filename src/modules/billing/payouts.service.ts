@@ -157,6 +157,8 @@ export class PayoutsService {
       throw new AppError("PAYOUT_BELOW_MINIMUM", 422, "The amount is below the minimum payout", { minPaise: toApi(minPaise) });
     }
     const tdsBps = await this.settings.get("tds_bps");
+    // Read before the transaction (a cache miss is a database read; inside it needs a second pooled connection while the owner lock is held).
+    const upiMax = BigInt(await this.settings.get("upi_max_payout_paise"));
     const tdsPaise = (amountPaise * BigInt(tdsBps)) / 10_000n; // floor
     const netPaise = amountPaise - tdsPaise;
     if (netPaise <= 0n) throw new AppError("PAYOUT_BELOW_MINIMUM", 422, "Nothing would be paid out after tax", { minPaise: toApi(minPaise) });
@@ -166,7 +168,6 @@ export class PayoutsService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`payout-owner:${owner.ownerType}:${owner.ownerId}`}))`;
       const account = await this.payoutAccounts.payableAccount(owner, tx);
       if (account.type === "UPI") {
-        const upiMax = BigInt(await this.settings.get("upi_max_payout_paise"));
         if (netPaise > upiMax) throw new AppError("PAYOUT_ABOVE_UPI_LIMIT", 422, "This amount is above the UPI limit; use a bank account for larger payouts", { maxPaise: toApi(upiMax) });
       }
       const seller = await this.accounts.ensureSellerAccounts(tx, owner.ownerType, owner.ownerId);
