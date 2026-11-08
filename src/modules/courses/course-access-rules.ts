@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Course } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PermissionService, PlatformRoleDirectory } from "../rbac";
 import { ORG_AUTHOR_ROLES } from "./org-roles";
@@ -79,14 +80,14 @@ export class CourseAccessRules {
     return (await this.learnAccess(userId, target.course, target.lesson)) !== null;
   }
 
-  private async holdsSeat(userId: string, course: Pick<Owned, "ownerType" | "ownerId">): Promise<boolean> {
-    return course.ownerType === "ORG" && (await this.roles.roleKeysInOrg(userId, course.ownerId)).includes(ORG_LEARNER_ROLE);
+  private async holdsSeat(userId: string, course: Pick<Owned, "ownerType" | "ownerId">, db?: Prisma.TransactionClient | PrismaService): Promise<boolean> {
+    return course.ownerType === "ORG" && (await this.roles.roleKeysInOrg(userId, course.ownerId, db)).includes(ORG_LEARNER_ROLE);
   }
 
   /** The user holds a live (not expired) org-scoped org_learner grant in the organization that owns the course. Access checks for ORG_SEAT enrolments use this. */
-  async hasLiveSeat(userId: string, courseId: string): Promise<boolean> {
-    const course = await this.prisma.course.findUnique({ where: { id: courseId }, select: { ownerType: true, ownerId: true } });
+  async hasLiveSeat(userId: string, courseId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<boolean> {
+    const course = await db.course.findUnique({ where: { id: courseId }, select: { ownerType: true, ownerId: true } });
     if (!course || course.ownerType !== "ORG") return false;
-    return this.holdsSeat(userId, course);
+    return this.holdsSeat(userId, course, db);
   }
 }

@@ -193,6 +193,6 @@ export class CertificatesService {
     const e = await db.enrolment.findUnique({ where: { courseId_userId: { courseId, userId } }, select: { revokedAt: true, completedAt: true, source: true } });
     if (e === null || e.revokedAt !== null || e.completedAt === null) return false;
     // An organization seat counts only while the grant is live: the daily sweep may not have ended an expired one yet.
-    return e.source !== "ORG_SEAT" || (await this.rules.hasLiveSeat(userId, courseId));
+    return e.source !== "ORG_SEAT" || (await this.rules.hasLiveSeat(userId, courseId, db));
   }
 }
