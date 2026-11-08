@@ -663,4 +663,36 @@ describe("refunds", () => {
       expect((await prisma.creditNote.findFirstOrThrow({ where: { orderId: c.orderId } })).number).toBe("SKC/41-42/000001");
     });
   });
+
+  describe("refund state on my orders", () => {
+    it("shows the live refund (id, status, requestedAt) on the order and the order list, and null once it is rejected or when none was asked for", async () => {
+      const o = await pay();
+      const other = await pay({ buyer: o.buyer });
+      const buyer = await t.login(o.buyer.email);
+
+      const before = await http().get(`/v1/orders/${o.orderId}`).set(auth(buyer));
+      expectDeclared(before, "GET /v1/orders/{id}");
+      expect(before.body.refund).toBeNull();
+
+      const asked = await requestRefund(buyer, o.orderId);
+      expect(asked.status).toBe(201);
+      const row = await prisma.refund.findFirstOrThrow({ where: { orderId: o.orderId } });
+      const shape = { id: row.id, status: "REQUESTED", requestedAt: row.createdAt.toISOString() };
+
+      const one = await http().get(`/v1/orders/${o.orderId}`).set(auth(buyer));
+      expectDeclared(one, "GET /v1/orders/{id}");
+      expect(one.body.refund).toEqual(shape);
+
+      const list = await http().get("/v1/orders").set(auth(buyer));
+      expectDeclared(list, "GET /v1/orders");
+      const byId = new Map((list.body.items as { id: string; refund: unknown }[]).map((x) => [x.id, x.refund]));
+      expect(byId.get(o.orderId)).toEqual(shape);
+      expect(byId.get(other.orderId)).toBeNull();
+
+      expect((await reject(row.id)).status).toBe(200);
+      expect((await http().get(`/v1/orders/${o.orderId}`).set(auth(buyer))).body.refund).toBeNull();
+      const again = await http().get("/v1/orders").set(auth(buyer));
+      expect((again.body.items as { id: string; refund: unknown }[]).find((x) => x.id === o.orderId)!.refund).toBeNull();
+    });
+  });
 });

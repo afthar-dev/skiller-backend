@@ -20316,7 +20316,8 @@
           "createdAt",
           "paidAt",
           "invoiceId",
-          "creditNoteId"
+          "creditNoteId",
+          "refund"
         ],
         "properties": {
           "id": {
@@ -20375,6 +20376,34 @@
           "creditNoteId": {
             "type": "string",
             "nullable": true
+          },
+          "refund": {
+            "type": "object",
+            "nullable": true,
+            "description": "The order's live refund; null when none was asked for or it was rejected or failed.",
+            "required": [
+              "id",
+              "status",
+              "requestedAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "REQUESTED",
+                  "APPROVED",
+                  "PROCESSING",
+                  "PROCESSED"
+                ]
+              },
+              "requestedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         }
       },

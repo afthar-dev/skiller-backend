@@ -33,6 +33,13 @@ export const moneyComponents: Record<string, unknown> = {
     paidAt: { type: "string", format: "date-time", nullable: true },
     invoiceId: nullableStr,
     creditNoteId: nullableStr,
+    refund: {
+      type: "object",
+      nullable: true,
+      description: "The order's live refund; null when none was asked for or it was rejected or failed.",
+      required: ["id", "status", "requestedAt"],
+      properties: { id: str, status: { type: "string", enum: ["REQUESTED", "APPROVED", "PROCESSING", "PROCESSED"] }, requestedAt: { type: "string", format: "date-time" } },
+    },
   }),
   AdminOrder: {
     allOf: [ref("Order"), obj({ buyerId: str, sellerOwnerType: { type: "string", enum: ["USER", "ORG"] }, sellerOwnerId: str, commissionBps: int, razorpayPaymentId: nullableStr, fulfilmentFailedAt: { type: "string", format: "date-time", nullable: true } })],

@@ -1,17 +1,18 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { Coupon, Order, OrderItem } from "@prisma/client";
+import type { Coupon, Order, OrderItem, RefundStatus } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { AppError } from "../../common/errors/app-error";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CouponsService } from "./coupons.service";
 import { toApi } from "./money";
+import { LIVE_REFUND } from "./refunds.service";
 
 /** A CREATED order that was never paid is closed after this long. */
 export const ORDER_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const EXPIRY_BATCH = 500;
 
-type OrderRow = Order & { items: OrderItem[]; coupon: Pick<Coupon, "code"> | null; invoice: { id: string } | null; refunds: { creditNote: { id: string } | null }[] };
+type OrderRow = Order & { items: OrderItem[]; coupon: Pick<Coupon, "code"> | null; invoice: { id: string } | null; refunds: { id: string; status: RefundStatus; createdAt: Date; creditNote: { id: string } | null }[] };
 
 export interface OrderView {
   id: string;
@@ -29,9 +30,13 @@ export interface OrderView {
   invoiceId: string | null;
   /** The GST credit note, once the order is refunded. */
   creditNoteId: string | null;
+  /** The order's live refund (requested, approved, processing or processed); null when none was asked for or it was rejected or failed. */
+  refund: { id: string; status: RefundStatus; requestedAt: string } | null;
 }
 
-const include = { items: true, coupon: { select: { code: true } }, invoice: { select: { id: true } }, refunds: { where: { creditNote: { isNot: null } }, select: { creditNote: { select: { id: true } } }, take: 1 } } as const;
+const include = { items: true, coupon: { select: { code: true } }, invoice: { select: { id: true } }, // At most one refund per order is live (partial unique index), and only a PROCESSED one gets a credit note; one batched query for a whole page.
+  refunds: { where: { status: { in: LIVE_REFUND } }, select: { id: true, status: true, createdAt: true, creditNote: { select: { id: true } } }, take: 1 },
+} as const;
 
 export const toOrderView = (o: OrderRow): OrderView => ({
   id: o.id,
@@ -47,6 +52,7 @@ export const toOrderView = (o: OrderRow): OrderView => ({
   paidAt: o.paidAt?.toISOString() ?? null,
   invoiceId: o.invoice?.id ?? null,
   creditNoteId: o.refunds[0]?.creditNote?.id ?? null,
+  refund: o.refunds[0] ? { id: o.refunds[0].id, status: o.refunds[0].status, requestedAt: o.refunds[0].createdAt.toISOString() } : null,
 });
 
 export interface AdminOrderFilter {
