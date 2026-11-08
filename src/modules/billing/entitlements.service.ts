@@ -86,7 +86,15 @@ export class EntitlementsService {
    * limit that is false always refuses. Text limits (analytics_level) are read with limit(), not checked.
    */
   async check(owner: Owner, key: LimitKey, usageAfter: number): Promise<void> {
-    const limit = await this.limit(owner, key);
+    this.enforce(key, await this.limit(owner, key), usageAfter);
+  }
+
+  /**
+   * The comparison half of check(), for callers that already hold the limit. Read the limit BEFORE opening a database
+   * transaction (limit() may query the pool) and enforce inside it: reading it inside a transaction needs a second pooled
+   * connection while the first is held, and parallel callers then starve the pool and fail with P2024.
+   */
+  enforce<K extends LimitKey>(key: K, limit: PlanLimits[K], usageAfter: number): void {
     if (limit === null) return;
     if (typeof limit === "boolean") {
       if (!limit) throw this.reached(key, limit);

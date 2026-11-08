@@ -46,6 +46,10 @@ describe("gig listings", () => {
   }
 
   beforeAll(async () => {
+    // A small pool like CI's 1-CPU runner (Prisma sizes it by CPU count): code that needs a second connection inside a transaction deadlocks on it.
+    const url = new URL(process.env.DATABASE_URL!);
+    url.searchParams.set("connection_limit", "3");
+    process.env.DATABASE_URL = url.toString();
     t = await createAuthTestApp();
     prisma = t.app.get(PrismaService);
     categoryId = (await prisma.category.findFirstOrThrow({ where: { slug: "development" } })).id;
@@ -231,6 +235,7 @@ describe("gig listings", () => {
       const results = await Promise.all(gigs.map((g) => activate(c, g.id)));
       const ok = results.filter((r) => r.status === 200);
       const refused = results.filter((r) => r.status === 403);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 200, 200, 200, 200, 403, 403, 403]); // every call gets 200 or 403, never a 5xx
       expect([ok.length, refused.length]).toEqual([5, 3]);
       expect(refused[0].body.error).toMatchObject({ code: "ENTITLEMENT_LIMIT_REACHED", details: { key: "max_active_gigs", limit: 5 } });
       expect(await prisma.gig.count({ where: { sellerId: c.userId, status: "ACTIVE" } })).toBe(5);

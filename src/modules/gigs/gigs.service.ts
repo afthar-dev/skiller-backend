@@ -155,6 +155,8 @@ export class GigsService {
   /** DRAFT or PAUSED -> ACTIVE (the first time stamps publishedAt). Already live is a no-op. The plan's `max_active_gigs` is checked under a lock per seller, so parallel calls cannot exceed it. */
   async activate(sellerId: string, id: string, meta: ActionMeta = {}) {
     await this.owned(sellerId, id);
+    // Read before the transaction: inside it this needs a second pooled connection, and parallel activations then starve the pool (P2024 -> 500).
+    const limit = await this.entitlements.limit({ ownerType: "USER", ownerId: sellerId }, "max_active_gigs");
     const row = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`gig-seller:${sellerId}`}))`;
       const gig = await this.lockOwned(tx, sellerId, id);
@@ -163,7 +165,7 @@ export class GigsService {
       const reasons = reasonsNotPublishable(gig, gig.packages.map((p) => p.tier));
       if (reasons.length > 0) throw notPublishable(reasons);
       const others = await tx.gig.count({ where: { sellerId, status: { in: [...COUNTED_STATUSES] }, id: { not: id } } });
-      await this.entitlements.check({ ownerType: "USER", ownerId: sellerId }, "max_active_gigs", others + 1);
+      this.entitlements.enforce("max_active_gigs", limit, others + 1);
       await tx.gig.update({ where: { id }, data: { status: "ACTIVE", publishedAt: gig.publishedAt ?? this.clock.now() } });
       await this.audit.record(tx, { actorId: sellerId, action: "gig.activate", targetType: "gig", targetId: id, before: { status: gig.status }, after: { status: "ACTIVE" }, ...meta });
       return tx.gig.findUniqueOrThrow({ where: { id }, include: INCLUDE });
