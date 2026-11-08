@@ -1,4 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import { RefundEligibilityRegistry, type PaidOrder, type RefundEligibility, type RefundEligibilityResult } from "../billing";
 import { COURSE_PROGRESS_READER, type CourseProgressReader } from "./course-progress";
 
@@ -25,10 +26,10 @@ export class CourseRefundEligibility implements RefundEligibility, OnModuleInit 
     this.registry.register("COURSE", this);
   }
 
-  async check(input: { order: PaidOrder; now: Date }): Promise<RefundEligibilityResult> {
+  async check(input: { order: PaidOrder; now: Date; db?: Prisma.TransactionClient }): Promise<RefundEligibilityResult> {
     const inWindow = await this.window.check(input);
     if (!inWindow.eligible) return inWindow;
-    const pct = await this.progress.completedRequiredPct(input.order.buyerId, input.order.items[0].itemId);
+    const pct = await this.progress.completedRequiredPct(input.order.buyerId, input.order.items[0].itemId, input.db);
     if (pct >= REFUND_MAX_COMPLETED_PCT) {
       return { eligible: false, reason: `Refunds are possible only while less than ${REFUND_MAX_COMPLETED_PCT}% of the course is completed` };
     }

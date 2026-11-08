@@ -54,8 +54,8 @@ export class ProgressService implements CourseProgressReader {
   ) {}
 
   /** Percentage of required lessons the learner has completed (the figure kept on their enrolment). */
-  async completedRequiredPct(userId: string, courseId: string): Promise<number> {
-    const e = await this.prisma.enrolment.findUnique({ where: { courseId_userId: { courseId, userId } }, select: { progressPct: true } });
+  async completedRequiredPct(userId: string, courseId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<number> {
+    const e = await db.enrolment.findUnique({ where: { courseId_userId: { courseId, userId } }, select: { progressPct: true } });
     return e?.progressPct ?? 0;
   }
 

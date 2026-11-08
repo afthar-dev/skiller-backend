@@ -1,4 +1,6 @@
 
+import type { Prisma } from "@prisma/client";
+
 export const COURSE_PROGRESS_READER = Symbol("COURSE_PROGRESS_READER");
 
 /**
@@ -6,6 +8,6 @@ export const COURSE_PROGRESS_READER = Symbol("COURSE_PROGRESS_READER");
  * Returns the percentage (0..100) of the course's required lessons the learner has completed.
  */
 export interface CourseProgressReader {
-  completedRequiredPct(userId: string, courseId: string): Promise<number>;
+  completedRequiredPct(userId: string, courseId: string, db?: Prisma.TransactionClient): Promise<number>;
 }
 

@@ -41,7 +41,7 @@ export class RefundRequestsService {
           throw notEligible("A refund has already been requested or issued for this order");
         }
         const rule = this.eligibility.forType(order.items[0]?.itemType ?? "");
-        const verdict = await rule.check({ order, now: this.clock.now() });
+        const verdict = await rule.check({ order, now: this.clock.now(), db: tx });
         if (!verdict.eligible) throw notEligible(verdict.reason);
         const refund = await tx.refund.create({ data: { orderId, amountPaise: order.totalPaise, status: "REQUESTED", reason, requestedBy: buyerId } });
         return toRefundView(refund);

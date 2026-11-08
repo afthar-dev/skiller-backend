@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import type { PaidOrder } from "./sellable.registry";
 
 export type RefundEligibilityResult = { eligible: true } | { eligible: false; reason: string };
@@ -8,7 +9,8 @@ export type RefundEligibilityResult = { eligible: true } | { eligible: false; re
  * The service has already checked the generic facts (the order is PAID, no refund is live); this decides the rest.
  */
 export interface RefundEligibility {
-  check(input: { order: PaidOrder; now: Date }): Promise<RefundEligibilityResult>;
+  /** `db` is the caller's transaction when there is one: rules that read must read through it (the global client would need a second pooled connection). */
+  check(input: { order: PaidOrder; now: Date; db?: Prisma.TransactionClient }): Promise<RefundEligibilityResult>;
 }
 
 export const REFUND_WINDOW_DAYS = 7;
