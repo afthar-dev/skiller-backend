@@ -208,10 +208,10 @@ export class MediaService {
     return this.dto(asset);
   }
 
-  /** Processing state of several assets at once (ids that do not exist are absent from the map). */
-  async assetStatuses(assetIds: string[]): Promise<Map<string, MediaAsset["status"]>> {
+  /** Processing state of several assets at once (ids that do not exist are absent from the map). Inside a transaction pass it as `db`: the global client would need a second pooled connection. */
+  async assetStatuses(assetIds: string[], db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<Map<string, MediaAsset["status"]>> {
     if (assetIds.length === 0) return new Map();
-    const rows = await this.prisma.mediaAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, status: true } });
+    const rows = await db.mediaAsset.findMany({ where: { id: { in: assetIds } }, select: { id: true, status: true } });
     return new Map(rows.map((r) => [r.id, r.status]));
   }
 

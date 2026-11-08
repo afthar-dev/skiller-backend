@@ -50,10 +50,13 @@ export class ModerationService {
 
   /** IN_REVIEW -> PUBLISHED. The publish checks run again (the course and the owner's plan may have changed while queued). */
   async approve(id: string, meta: ActionMeta): Promise<CourseView> {
+    // Read before the transaction (a cache miss is a second pooled connection while the transaction holds the first). A course that does not exist is refused inside it.
+    const owner = await this.prisma.course.findUnique({ where: { id }, select: { ownerType: true, ownerId: true } });
+    const limit = owner ? await this.publishing.publishLimit(owner) : null;
     const row = await this.prisma.$transaction(async (tx) => {
       const course = await this.lockedInReview(tx, id, meta.actorId);
       await lockOwnerPublishing(tx, course);
-      await this.publishing.assertPublishable(tx, course);
+      await this.publishing.assertPublishable(tx, course, limit);
       const now = this.clock.now();
       const updated = await tx.course.update({
         where: { id },
