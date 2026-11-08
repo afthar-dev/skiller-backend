@@ -113,7 +113,7 @@ export class ModerationService {
     await lockCourse(tx, id);
     const course = await tx.course.findUnique({ where: { id } });
     if (!course) throw courseNotFound();
-    if (course.createdById === actorId || (await this.policy.authorIds(course)).includes(actorId)) {
+    if (course.createdById === actorId || (await this.policy.authorIds(course, tx)).includes(actorId)) {
       throw new AppError("COURSE_REVIEW_SELF", 403, "You cannot review a course you author");
     }
     return course;

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Course, CourseOwnerType } from "@prisma/client";
+import type { Course, CourseOwnerType, Prisma } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { PermissionService, PlatformRoleDirectory } from "../rbac";
@@ -60,10 +60,14 @@ export class CoursePolicy {
     return keys.some((k) => (ORG_AUTHOR_ROLES as readonly string[]).includes(k));
   }
 
-  /** Everyone who authors the course today: the creator for a USER course, the org owners and instructors for an ORG course. */
-  async authorIds(course: Pick<Course, "ownerType" | "ownerId">): Promise<string[]> {
+  /**
+   * Everyone who authors the course today: the creator for a USER course, the org owners and instructors for an ORG course.
+   * Inside a transaction pass it as `db`: the global client would need a second pooled connection while the transaction holds the first.
+   */
+  async authorIds(course: Pick<Course, "ownerType" | "ownerId">, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<string[]> {
     if (course.ownerType === "USER") return [course.ownerId];
-    const lists = await Promise.all(ORG_AUTHOR_ROLES.map((role) => this.roles.userIdsWithRoleInOrg(role, course.ownerId)));
+    const lists: string[][] = [];
+    for (const role of ORG_AUTHOR_ROLES) lists.push(await this.roles.userIdsWithRoleInOrg(role, course.ownerId, db)); // one at a time: a transaction runs one query at once
     return [...new Set(lists.flat())];
   }
 

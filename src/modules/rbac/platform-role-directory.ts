@@ -1,4 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { PrismaService } from "../../common/prisma/prisma.service";
 
@@ -14,9 +15,9 @@ export class PlatformRoleDirectory {
   ) {}
 
   /** Users holding the active role in one organization (e.g. every `org_owner`), by user id. */
-  async userIdsWithRoleInOrg(roleKey: string, orgId: string): Promise<string[]> {
+  async userIdsWithRoleInOrg(roleKey: string, orgId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<string[]> {
     const now = this.clock.now();
-    const rows = await this.prisma.userRole.findMany({
+    const rows = await db.userRole.findMany({
       where: { orgId, role: { key: roleKey }, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       select: { userId: true },
       distinct: ["userId"],

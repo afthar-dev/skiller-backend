@@ -131,7 +131,7 @@ export class ContentModerationService {
   /** Whoever authors the course (creator, or an owner or instructor of the owning organization) may not moderate what learners say in it: same rule as for course decisions. */
   private async assertNotAuthor(tx: Prisma.TransactionClient, courseId: string, actorId: string): Promise<void> {
     const course = await tx.course.findUnique({ where: { id: courseId } });
-    if (course && (course.createdById === actorId || (await this.policy.authorIds(course)).includes(actorId))) {
+    if (course && (course.createdById === actorId || (await this.policy.authorIds(course, tx)).includes(actorId))) {
       throw new AppError("COURSE_REVIEW_SELF", 403, "You cannot moderate content in a course you author");
     }
   }
