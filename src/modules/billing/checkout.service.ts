@@ -86,6 +86,8 @@ export class CheckoutService {
               code: req.couponCode,
               item: { type: req.itemType, id: req.itemId, sellerOwnerType: item.sellerOwnerType, sellerOwnerId: item.sellerOwnerId },
               listPaise: item.pricePaise,
+              // From the plan read above, before the transaction: reading it inside would need a second pooled connection.
+              creatorCoupons: plan.limits.creator_coupons === true,
             },
             tx,
           );

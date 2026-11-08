@@ -35,6 +35,8 @@ export interface CouponCheck {
   code: string;
   item: { type: string; id: string; sellerOwnerType: SellerOwnerType; sellerOwnerId: string };
   listPaise: Paise;
+  /** Whether the seller's plan includes creator coupons, when the caller already read it. Pass it from inside a transaction: reading it here needs a second pooled connection. */
+  creatorCoupons?: boolean;
 }
 
 const invalid = (message: string) => new AppError("COUPON_INVALID", 422, message);
@@ -132,7 +134,8 @@ export class CouponsService {
     if (coupon.fundedBy === "CREATOR") {
       // A creator can only discount their own items, and only while their plan still includes creator coupons.
       if (!ownedBySeller) throw notApplicable();
-      if ((await this.entitlements.limit({ ownerType: item.sellerOwnerType, ownerId: item.sellerOwnerId }, "creator_coupons")) !== true) throw notApplicable();
+      const creatorCoupons = check.creatorCoupons ?? (await this.entitlements.limit({ ownerType: item.sellerOwnerType, ownerId: item.sellerOwnerId }, "creator_coupons")) === true;
+      if (!creatorCoupons) throw notApplicable();
     }
 
     if (coupon.maxUses !== null && (await db.couponRedemption.count({ where: { couponId: coupon.id, status: { in: LIVE_REDEMPTION } } })) >= coupon.maxUses) {
