@@ -12,6 +12,7 @@ const money: Schema = { $ref: "#/components/schemas/Money" };
 const strings: Schema = { type: "array", items: str };
 const enumOf = (...values: string[]): Schema => ({ type: "string", enum: values });
 
+const thumbnailUrl: Schema = { ...nullableStr, description: "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready." };
 const ownerType = enumOf("USER", "ORG");
 const level = enumOf("BEGINNER", "INTERMEDIATE", "ADVANCED", "ALL");
 const lessonType = enumOf("VIDEO", "ARTICLE", "QUIZ", "RESOURCE");
@@ -32,6 +33,7 @@ const catalogCardProperties: Record<string, Schema> = {
   tags: strings,
   pricePaise: money,
   thumbnailAssetId: nullableStr,
+  thumbnailUrl,
   promoVideoAssetId: nullableStr,
   publishedAt: nullableDate,
   ratingAvg,
@@ -103,6 +105,7 @@ export const enrolmentSchema: Schema = objectSchema({
   courseSlug: str,
   courseTitle: str,
   thumbnailAssetId: nullableStr,
+  thumbnailUrl,
   courseStatus,
   flagged: { ...bool, description: "A moderator hid the course from the catalog; enrolled learners keep their access." },
   source: enumOf("PURCHASE", "FREE", "ORG_SEAT"),
@@ -117,7 +120,7 @@ const access = enumOf("ENROLLED", "AUTHOR", "PREVIEW", "REVIEW");
 
 /** The player's curriculum with the learner's progress. */
 export const learnCourseSchema: Schema = objectSchema({
-  course: objectSchema({ id: str, slug: str, title: str, status: courseStatus, progressPct: int, completedAt: nullableDate }),
+  course: objectSchema({ id: str, slug: str, title: str, status: courseStatus, progressPct: int, completedAt: nullableDate, thumbnailUrl }),
   access,
   sections: {
     type: "array",

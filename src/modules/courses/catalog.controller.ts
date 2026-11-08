@@ -8,6 +8,7 @@ import { ApiPagination, ApiZodQuery } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { CATALOG_SORTS, CatalogService } from "./catalog.service";
 import { catalogPageSchema } from "./course-responses";
+import { CourseThumbnails } from "./course-thumbnails";
 import { COURSE_LANGUAGES, COURSE_LEVELS } from "./course-rules";
 
 const paise = z.string().regex(/^\d{1,12}$/, "integer paise as a decimal string, e.g. \"49900\"").transform((v) => BigInt(v));
@@ -28,7 +29,10 @@ const querySchema = queryObject.refine((v) => v.minPrice === undefined || v.maxP
 @ApiTags("Courses")
 @Controller("courses")
 export class CatalogController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(
+    private readonly catalog: CatalogService,
+    private readonly thumbnails: CourseThumbnails,
+  ) {}
 
   @Public()
   @Get()
@@ -40,9 +44,10 @@ export class CatalogController {
   @ApiZodQuery(queryObject)
   @ApiPagination()
   @ApiJsonResponse(200, "A page of published courses; nextCursor is null on the last page.", catalogPageSchema)
-  list(@Query() query: Record<string, unknown>) {
+  async list(@Query() query: Record<string, unknown>) {
     const filters = querySchema.parse(query);
     const page = parsePage(query);
-    return this.catalog.search({ ...filters, cursor: page.cursor, limit: page.limit });
+    const found = await this.catalog.search({ ...filters, cursor: page.cursor, limit: page.limit });
+    return { ...found, items: await this.thumbnails.withUrls(found.items) };
   }
 }

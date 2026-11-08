@@ -5,6 +5,7 @@ import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { MediaService, ObjectStorage } from "../media";
 import { CourseAccessRules } from "./course-access-rules";
+import { CourseThumbnails } from "./course-thumbnails";
 import { courseNotFound } from "./course.policy";
 import { denied } from "./learn-errors";
 
@@ -19,6 +20,7 @@ export class LearnService {
     private readonly rules: CourseAccessRules,
     private readonly media: MediaService,
     private readonly storage: ObjectStorage,
+    private readonly thumbnails: CourseThumbnails,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
@@ -36,6 +38,7 @@ export class LearnService {
       mine ? this.prisma.enrolment.findFirst({ where: { userId, courseId: course.id, revokedAt: null } }) : Promise.resolve(null),
     ]);
     const byLesson = new Map(progress.map((p) => [p.lessonId, p]));
+    const { thumbnailUrl } = await this.thumbnails.withUrl(course);
     return {
       course: {
         id: course.id,
@@ -44,6 +47,7 @@ export class LearnService {
         status: course.status,
         progressPct: enrolment?.progressPct ?? 0,
         completedAt: enrolment?.completedAt?.toISOString() ?? null,
+        thumbnailUrl,
       },
       access: access.via,
       sections: sections.map((s) => ({

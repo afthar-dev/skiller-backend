@@ -10719,6 +10719,7 @@
                           "tags",
                           "pricePaise",
                           "thumbnailAssetId",
+                          "thumbnailUrl",
                           "promoVideoAssetId",
                           "publishedAt",
                           "ratingAvg",
@@ -10779,6 +10780,11 @@
                           "thumbnailAssetId": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "thumbnailUrl": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                           },
                           "promoVideoAssetId": {
                             "type": "string",
@@ -12886,6 +12892,7 @@
                     "tags",
                     "pricePaise",
                     "thumbnailAssetId",
+                    "thumbnailUrl",
                     "promoVideoAssetId",
                     "publishedAt",
                     "ratingAvg",
@@ -12947,6 +12954,11 @@
                     "thumbnailAssetId": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "thumbnailUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                     },
                     "promoVideoAssetId": {
                       "type": "string",
@@ -13019,6 +13031,7 @@
                     "courseSlug",
                     "courseTitle",
                     "thumbnailAssetId",
+                    "thumbnailUrl",
                     "courseStatus",
                     "flagged",
                     "source",
@@ -13042,6 +13055,11 @@
                     "thumbnailAssetId": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "thumbnailUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                     },
                     "courseStatus": {
                       "type": "string",
@@ -13093,6 +13111,7 @@
                     "courseSlug",
                     "courseTitle",
                     "thumbnailAssetId",
+                    "thumbnailUrl",
                     "courseStatus",
                     "flagged",
                     "source",
@@ -13116,6 +13135,11 @@
                     "thumbnailAssetId": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "thumbnailUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                     },
                     "courseStatus": {
                       "type": "string",
@@ -13232,6 +13256,7 @@
                           "courseSlug",
                           "courseTitle",
                           "thumbnailAssetId",
+                          "thumbnailUrl",
                           "courseStatus",
                           "flagged",
                           "source",
@@ -13255,6 +13280,11 @@
                           "thumbnailAssetId": {
                             "type": "string",
                             "nullable": true
+                          },
+                          "thumbnailUrl": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                           },
                           "courseStatus": {
                             "type": "string",
@@ -13367,7 +13397,8 @@
                         "title",
                         "status",
                         "progressPct",
-                        "completedAt"
+                        "completedAt",
+                        "thumbnailUrl"
                       ],
                       "properties": {
                         "id": {
@@ -13395,6 +13426,11 @@
                           "type": "string",
                           "format": "date-time",
                           "nullable": true
+                        },
+                        "thumbnailUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Public URL of the 1024 px wide rendition of the thumbnail (16:9 card size); null when there is no thumbnail or it is not ready."
                         }
                       }
                     },

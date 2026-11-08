@@ -9,6 +9,7 @@ import { parsePage } from "../../common/http/pagination";
 import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { enrolmentSchema, learningPageSchema, publicCourseSchema } from "./course-responses";
+import { CourseThumbnails } from "./course-thumbnails";
 import { CoursesService } from "./courses.service";
 import { EnrolmentsService } from "./enrolments.service";
 import { SelfEnrolmentService } from "./self-enrolment.service";
@@ -20,14 +21,15 @@ export class LearningController {
     private readonly selfEnrolment: SelfEnrolmentService,
     private readonly enrolments: EnrolmentsService,
     private readonly courses: CoursesService,
+    private readonly thumbnails: CourseThumbnails,
   ) {}
 
   @Public()
   @Get("courses/:slug")
   @ApiOperation({ summary: "Public page of a published course (hidden when flagged, unpublished or archived)" })
   @ApiJsonResponse(200, "The public page of the course.", publicCourseSchema)
-  page(@Param("slug") slug: string) {
-    return this.courses.publicPage(slug);
+  async page(@Param("slug") slug: string) {
+    return this.thumbnails.withUrl(await this.courses.publicPage(slug));
   }
 
   @AuthenticatedOnly()
@@ -38,7 +40,7 @@ export class LearningController {
   async enrol(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Res({ passthrough: true }) res: Response) {
     const { enrolment, created } = await this.selfEnrolment.enrol(user.id, slug);
     res.status(created ? 201 : 200);
-    return enrolment;
+    return this.thumbnails.withUrl(enrolment);
   }
 
   @AuthenticatedOnly()
@@ -46,7 +48,8 @@ export class LearningController {
   @ApiOperation({ summary: "My courses with progress, most recently enrolled first" })
   @ApiPagination()
   @ApiJsonResponse(200, "A page of enrolments; nextCursor is null on the last page.", learningPageSchema)
-  learning(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
-    return this.enrolments.learning(user.id, parsePage(query));
+  async learning(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
+    const page = await this.enrolments.learning(user.id, parsePage(query));
+    return { ...page, items: await this.thumbnails.withUrls(page.items) };
   }
 }
