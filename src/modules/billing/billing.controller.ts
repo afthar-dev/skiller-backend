@@ -11,6 +11,7 @@ import { parsePage } from "../../common/http/pagination";
 import { Idempotent } from "../../common/idempotency";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
 import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiJsonResponse, objectSchema, schemas } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { OrganizationsService } from "../organizations";
@@ -139,6 +140,10 @@ export class OrgSubscriptionsController {
   }
 }
 
+const orderStatus = { type: "string", enum: ["CREATED", "PAID", "FAILED", "EXPIRED", "REFUNDED", "PARTIALLY_REFUNDED"] };
+const verifiedSchema = objectSchema({ orderId: schemas.str, status: orderStatus, fulfilment: { type: "string", enum: ["FAILED"], description: "Set when the payment is booked but the seller refused to deliver; a refund follows." } }, ["orderId", "status"]);
+const downloadLinkSchema = objectSchema({ url: schemas.str, expiresInSec: { type: "integer" }, expiresAt: schemas.isoDate });
+
 const checkoutBody = z.object({ itemType: z.string().trim().min(1).max(40), itemId: z.string().trim().min(1).max(100), couponCode: z.string().trim().min(1).max(64).optional() });
 const verifyBody = z.object({ orderId: z.string().uuid(), razorpayOrderId: z.string().min(1).max(100), razorpayPaymentId: z.string().min(1).max(100), signature: z.string().min(1).max(200) }).strict();
 
@@ -169,6 +174,8 @@ export class CheckoutController {
   @Post("verify")
   @HttpCode(200)
   @ApiOperation({ summary: "Confirm a Razorpay payment (signature checked); 200 when the order is paid, 202 while the payment is not yet captured" })
+  @ApiJsonResponse(200, "The order is paid.", verifiedSchema)
+  @ApiJsonResponse(202, "The payment is not captured yet; verify again shortly.", verifiedSchema)
   @ApiZodBody(verifyBody)
   async verify(@CurrentUser() user: AuthUser, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const input = verifyBody.parse(body);
@@ -215,6 +222,7 @@ export class InvoicesController {
   @AuthenticatedOnly()
   @Get(":id/download")
   @ApiOperation({ summary: "A 5 minute signed URL for the invoice PDF (buyer, seller, or billing.view_any; anyone else gets 404)" })
+  @ApiJsonResponse(200, "A signed URL for the PDF.", downloadLinkSchema)
   @ApiErrorResponse(409, "The PDF is not ready yet.")
   download(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.invoices.downloadUrl(user.id, id);
@@ -229,6 +237,7 @@ export class CreditNotesController {
   @AuthenticatedOnly()
   @Get(":id/download")
   @ApiOperation({ summary: "A 5 minute signed URL for the GST credit note PDF of a refunded order (buyer, seller, or billing.view_any; anyone else gets 404)" })
+  @ApiJsonResponse(200, "A signed URL for the PDF.", downloadLinkSchema)
   @ApiErrorResponse(409, "The PDF is not ready yet.")
   download(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.invoices.creditNoteUrl(user.id, id);

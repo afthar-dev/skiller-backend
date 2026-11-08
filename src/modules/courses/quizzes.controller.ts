@@ -4,7 +4,9 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { quizAttemptSchema, quizViewSchema } from "./course-responses";
 import { QuizAttemptsService } from "./quiz-attempts.service";
 import { MAX_QUIZ_QUESTIONS, QuizzesService } from "./quizzes.service";
 
@@ -73,6 +75,7 @@ export class LearnQuizzesController {
   @AuthenticatedOnly()
   @Get(":id")
   @ApiOperation({ summary: "A quiz's questions for a learner. The right answers are included only once the learner has a passing attempt" })
+  @ApiJsonResponse(200, "The quiz as the learner sees it.", quizViewSchema)
   view(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.attempts.view(user.id, id);
   }
@@ -80,6 +83,7 @@ export class LearnQuizzesController {
   @AuthenticatedOnly()
   @Post(":id/attempts")
   @ApiOperation({ summary: "Submit answers (option ids per question). Score = floor(100 x right questions / total); one attempt per minute (429 QUIZ_COOLDOWN). Passing completes the lesson and reveals the answers" })
+  @ApiJsonResponse(201, "The score, whether it passed and when the next attempt is allowed.", quizAttemptSchema)
   @ApiZodBody(attemptSchema)
   attempt(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.attempts.attempt(user.id, id, attemptSchema.parse(body).answers);

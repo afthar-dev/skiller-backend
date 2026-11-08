@@ -8,6 +8,7 @@ import { OrganizationDirectory } from "../../src/modules/organizations";
 import { ProfilesService } from "../../src/modules/users";
 import { CertificatesService } from "../../src/modules/courses/certificates.service";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
+import { checkDeclared, expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -58,7 +59,7 @@ describe("course certificates", () => {
     return row;
   }
   const certs = (userId: string, courseId: string) => prisma.certificate.findMany({ where: { userId, courseId }, orderBy: { issuedAt: "asc" } });
-  const verify = (code: string, ip = uniqueIp()) => http().get(`/v1/certificates/${code}`).set("X-Forwarded-For", ip);
+  const verify = async (code: string, ip = uniqueIp()) => checkDeclared(await http().get(`/v1/certificates/${code}`).set("X-Forwarded-For", ip), "GET /v1/certificates/{code}");
 
   beforeAll(async () => {
     t = await createAuthTestApp();
@@ -99,6 +100,7 @@ describe("course certificates", () => {
       const dl = await http().get(`/v1/certificates/${cert.code}/download`).set(auth(me));
       expect(dl.status).toBe(200);
       expect(dl.body.expiresAt).toBe(new Date(t.clock.now().getTime() + 300_000).toISOString());
+      expectDeclared(dl, "GET /v1/certificates/{code}/download");
       const file = await fetch(dl.body.url);
       expect(file.status).toBe(200);
       const bytes = Buffer.from(await file.arrayBuffer());
@@ -188,6 +190,7 @@ describe("course certificates", () => {
       expect(res.status).toBe(200);
       expect(res.body.items.map((i: { courseTitle: string }) => i.courseTitle)).toEqual([b.title, a.title]);
       expect(res.body.items[0]).toMatchObject({ status: "VALID", courseSlug: b.slug });
+      expectDeclared(res, "GET /v1/me/certificates");
       expect(res.text).not.toContain(other.userId);
       expect((await http().get("/v1/me/certificates")).status).toBe(401);
     });
@@ -362,6 +365,7 @@ describe("course certificates", () => {
       const ok = await http().post(url).set(auth(me)).send({ name: "  Asha\n\u202EVerma\u200B  Rao " });
       expect(ok.status).toBe(200);
       expect(ok.body).toMatchObject({ id: cert.id, status: "VALID", learnerName: "Asha Verma Rao" });
+      expectDeclared(ok, "POST /v1/me/certificates/{id}/name");
       const row = await prisma.certificate.findUniqueOrThrow({ where: { id: cert.id } });
       expect(row).toMatchObject({ state: "VALID", learnerName: "Asha Verma Rao", objectKey: "certificates/" + cert.id + ".pdf" });
       expect((await verify(cert.code)).body).toMatchObject({ learnerName: "Asha Verma Rao", status: "VALID" });

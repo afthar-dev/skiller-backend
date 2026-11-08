@@ -2,6 +2,7 @@ import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { PermissionService } from "../../src/modules/rbac/permission.service";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -302,6 +303,7 @@ describe("course studio", () => {
   describe("categories", () => {
     it("are seeded and listed publicly", async () => {
       const res = await http().get("/v1/categories");
+      expectDeclared(res, "GET /v1/categories");
       expect(res.status).toBe(200);
       const names = res.body.items.map((x: { name: string }) => x.name);
       expect(names.length).toBeGreaterThanOrEqual(15);

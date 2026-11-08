@@ -11,6 +11,7 @@ import { AccountsService, LedgerService } from "../../src/modules/wallet";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
 import { entryLines, paidOrder, type Session } from "../support/orders";
 import { testState, TestItemProvider } from "../support/test-item";
+import { expectDeclared } from "../support/openapi-shape";
 
 const DAY = 86_400_000;
 
@@ -623,6 +624,7 @@ describe("refunds", () => {
 
       const buyer = await t.login(o.buyer.email);
       const dl = await http().get(`/v1/credit-notes/${cn.id}/download`).set(auth(buyer));
+      expectDeclared(dl, "GET /v1/credit-notes/{id}/download");
       expect(dl.status).toBe(200);
       expect(Buffer.from(await (await fetch(dl.body.url)).arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
       const staff = await finance();

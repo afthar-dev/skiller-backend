@@ -5,9 +5,11 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
+import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequirePermission } from "../rbac";
 import { CategoriesService, type CategoryMeta } from "./categories.service";
+import { categoryListSchema } from "./course-responses";
 
 const name = z.string().trim().min(2).max(60);
 const createSchema = z.object({ name, position: z.number().int().min(0).max(10_000).optional(), isActive: z.boolean().optional() }).strict();
@@ -23,6 +25,7 @@ export class CategoriesController {
   @Public()
   @Get()
   @ApiOperation({ summary: "Active course categories" })
+  @ApiJsonResponse(200, "Active categories in display order.", categoryListSchema)
   list() {
     return this.categories.listActive();
   }

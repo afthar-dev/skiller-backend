@@ -5,6 +5,7 @@ import "../../src/modules/billing"; // load order: billing before courses and rb
 import { EnrolmentsService } from "../../src/modules/courses";
 import { PermissionService, RolesService } from "../../src/modules/rbac";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -191,6 +192,7 @@ describe("learner access to course content", () => {
       const res = await http().get(`/v1/learn/courses/${c.slug}`).set(auth(learner));
       expect(res.status).toBe(200);
       expect(res.body.course).toMatchObject({ id: c.id, slug: c.slug, progressPct: 0 });
+      expectDeclared(res, "GET /v1/learn/courses/{slug}");
       const lessons = res.body.sections[0].lessons as Array<{ id: string; completed: boolean; positionSec: number; type: string }>;
       expect(lessons.map((l) => l.id)).toEqual([c.lessons.video.id, c.lessons.preview.id, c.lessons.article.id, c.lessons.resource.id, c.lessons.previewArticle.id]);
       expect(lessons.find((l) => l.id === c.lessons.article.id)).toMatchObject({ completed: true });
@@ -213,10 +215,13 @@ describe("learner access to course content", () => {
       await enrol(learner, c.slug);
       const article = await http().get(`/v1/learn/lessons/${c.lessons.article.id}`).set(auth(learner));
       expect(article.status).toBe(200);
+      expectDeclared(article, "GET /v1/learn/lessons/{id}");
       expect(article.body).toMatchObject({ id: c.lessons.article.id, type: "ARTICLE", articleBody: "# Hello", courseId: c.id });
       const video = await http().get(`/v1/learn/lessons/${c.lessons.video.id}`).set(auth(learner));
+      expectDeclared(video, "GET /v1/learn/lessons/{id}");
       expect(video.body).toMatchObject({ type: "VIDEO", videoAssetId: c.paidAsset, durationSec: 600 });
       const res = await http().get(`/v1/learn/lessons/${c.lessons.resource.id}`).set(auth(learner));
+      expectDeclared(res, "GET /v1/learn/lessons/{id}");
       expect(res.status).toBe(200);
       const url = new URL(res.body.resource.url);
       expect(url.searchParams.get("X-Amz-Expires")).toBe("300");
@@ -262,6 +267,7 @@ describe("learner access to course content", () => {
       const res = await http().get(`/v1/courses/${c.slug}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ id: c.id, slug: c.slug, pricePaise: "0" });
+      expectDeclared(res, "GET /v1/courses/{slug}");
       expect(res.body).not.toHaveProperty("flagReason");
       expect(res.body).not.toHaveProperty("rejectionReason");
       expect((await http().get(`/v1/courses/${(await course(owner, { status: "DRAFT" })).slug}`)).status).toBe(404);

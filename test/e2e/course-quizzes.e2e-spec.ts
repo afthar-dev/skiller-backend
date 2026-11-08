@@ -2,6 +2,7 @@ import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { checkDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 type Q = { id: string; prompt: string; kind: string; options: Array<{ id: string; text: string; isCorrect: boolean }> };
@@ -49,8 +50,8 @@ describe("course quizzes", () => {
     expect((await http().post(`/v1/courses/${slug}/enrol`).set(auth(s))).status).toBe(201);
     return s;
   }
-  const view = (s: Session, quizId: string) => http().get(`/v1/learn/quizzes/${quizId}`).set(auth(s));
-  const attempt = (s: Session, quizId: string, answers: unknown) => http().post(`/v1/learn/quizzes/${quizId}/attempts`).set(auth(s)).send({ answers });
+  const view = async (s: Session, quizId: string) => checkDeclared(await http().get(`/v1/learn/quizzes/${quizId}`).set(auth(s)), "GET /v1/learn/quizzes/{id}");
+  const attempt = async (s: Session, quizId: string, answers: unknown) => checkDeclared(await http().post(`/v1/learn/quizzes/${quizId}/attempts`).set(auth(s)).send({ answers }), "POST /v1/learn/quizzes/{id}/attempts");
   const answersFor = (qs: Q[], right: boolean) =>
     qs.map((q) => ({ questionId: q.id, optionIds: right ? q.options.filter((o) => o.isCorrect).map((o) => o.id) : [q.options.find((o) => !o.isCorrect)!.id] }));
   const enrolmentOf = (userId: string, courseId: string) => prisma.enrolment.findUniqueOrThrow({ where: { courseId_userId: { courseId, userId } } });

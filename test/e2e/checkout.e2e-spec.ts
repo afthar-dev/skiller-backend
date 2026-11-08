@@ -11,6 +11,7 @@ import { LedgerService } from "../../src/modules/wallet";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
 import { givePlan } from "../support/billing";
 import { createTestItem, testState, TestItemProvider } from "../support/test-item";
+import { checkDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -38,8 +39,7 @@ describe("checkout, coupons and fulfilment", () => {
   let financeAdmin: Session;
 
   const checkout = (buyer: Session, body: object, key: string = randomUUID()) => http().post("/v1/checkout").set(auth(buyer)).set("Idempotency-Key", key).send(body);
-  const verify = (buyer: Session, orderId: string, razorpayOrderId: string, paymentId: string, signature?: string) =>
-    http().post("/v1/checkout/verify").set(auth(buyer)).send({ orderId, razorpayOrderId, razorpayPaymentId: paymentId, signature: signature ?? fake.paymentSignature(razorpayOrderId, paymentId) });
+  const verify = async (buyer: Session, orderId: string, razorpayOrderId: string, paymentId: string, signature?: string) => checkDeclared(await http().post("/v1/checkout/verify").set(auth(buyer)).send({ orderId, razorpayOrderId, razorpayPaymentId: paymentId, signature: signature ?? fake.paymentSignature(razorpayOrderId, paymentId) }), "POST /v1/checkout/verify");
 
   /** A seller and one of their TEST_ITEMs. */
   async function listing(opts: { pricePaise?: bigint; plan?: string } = {}) {

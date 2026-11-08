@@ -7,10 +7,12 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequirePermission } from "../rbac";
 import { ContentModerationService } from "./content-moderation.service";
 import type { ActionMeta } from "./course-state";
+import { myReviewSchema, reviewListSchema } from "./course-responses";
 import { REVIEW_BODY_MAX, ReviewsService } from "./reviews.service";
 
 const reviewSchema = z.object({ rating: z.number().int().min(1).max(5), body: z.string().max(REVIEW_BODY_MAX).nullable().optional() }).strict();
@@ -28,6 +30,7 @@ export class ReviewsController {
   @Get()
   @ApiOperation({ summary: "Reviews of a published course, newest first, with the rating summary (the average is null until 3 learners rated)" })
   @ApiPagination()
+  @ApiJsonResponse(200, "A page of reviews and the rating summary.", reviewListSchema)
   list(@Param("slug") slug: string, @Query() query: Record<string, unknown>) {
     return this.reviews.list(slug, parsePage(query));
   }
@@ -35,6 +38,7 @@ export class ReviewsController {
   @AuthenticatedOnly()
   @Get("mine")
   @ApiOperation({ summary: "My review of this course (404 when I have none)" })
+  @ApiJsonResponse(200, "My review, including whether it is currently hidden.", myReviewSchema)
   mine(@CurrentUser() user: AuthUser, @Param("slug") slug: string) {
     return this.reviews.mine(user.id, slug);
   }
@@ -42,6 +46,7 @@ export class ReviewsController {
   @AuthenticatedOnly()
   @Put("mine")
   @ApiOperation({ summary: "Write or change my review: 1-5 stars and optional plain text (2000 characters). Enrolled learners only, not authors; 10 writes per hour" })
+  @ApiJsonResponse(200, "My review after the write.", myReviewSchema)
   @ApiZodBody(reviewSchema)
   put(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {
     const input = reviewSchema.parse(body);

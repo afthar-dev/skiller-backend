@@ -5,7 +5,9 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
+import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { publicCurriculumSchema } from "./course-responses";
 import { CurriculumService } from "./curriculum.service";
 import { MAX_MARKDOWN_CHARS } from "./markdown";
 import { singleLine } from "./text-schemas";
@@ -125,6 +127,7 @@ export class PublicCurriculumController {
   @Public()
   @Get(":slug/curriculum")
   @ApiOperation({ summary: "Public curriculum of a published course: titles, durations, free-preview flags" })
+  @ApiJsonResponse(200, "Sections and lessons with durations and totals.", publicCurriculumSchema)
   view(@Param("slug") slug: string) {
     return this.curriculum.publicView(slug);
   }

@@ -6,6 +6,7 @@ import { FakeRazorpayClient, FulfilmentService, RAZORPAY_CLIENT } from "../../sr
 import { COURSE_PROGRESS_READER, type CourseProgressReader } from "../../src/modules/courses";
 import { PermissionService, RolesService } from "../../src/modules/rbac";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
+import { checkDeclared, expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 const DAY = 86_400_000;
@@ -76,8 +77,7 @@ describe("course enrolment, sellable and refunds", () => {
     expect(res.status).toBe(201);
     return res.body as { orderId: string; razorpayOrderId: string; amountPaise: string };
   }
-  const verify = (buyer: Session, o: { orderId: string; razorpayOrderId: string }, paymentId: string) =>
-    http().post("/v1/checkout/verify").set(auth(buyer)).send({ orderId: o.orderId, razorpayOrderId: o.razorpayOrderId, razorpayPaymentId: paymentId, signature: fake.paymentSignature(o.razorpayOrderId, paymentId) });
+  const verify = async (buyer: Session, o: { orderId: string; razorpayOrderId: string }, paymentId: string) => checkDeclared(await http().post("/v1/checkout/verify").set(auth(buyer)).send({ orderId: o.orderId, razorpayOrderId: o.razorpayOrderId, razorpayPaymentId: paymentId, signature: fake.paymentSignature(o.razorpayOrderId, paymentId) }), "POST /v1/checkout/verify");
   async function buy(buyer: Session, courseId: string) {
     const o = await start(buyer, courseId);
     const payment = fake.capturePayment(o.razorpayOrderId);
@@ -297,7 +297,7 @@ describe("course enrolment, sellable and refunds", () => {
   });
 
   describe("enrol without checkout", () => {
-    const enrol = (s: Session, slug: string) => http().post(`/v1/courses/${slug}/enrol`).set(auth(s));
+    const enrol = async (s: Session, slug: string) => checkDeclared(await http().post(`/v1/courses/${slug}/enrol`).set(auth(s)), "POST /v1/courses/{slug}/enrol");
 
     it("anyone can enrol in a free published course; repeating is harmless", async () => {
       const seller = await creator();
@@ -469,6 +469,7 @@ describe("course enrolment, sellable and refunds", () => {
         expect((await http().post(`/v1/courses/${c.slug}/enrol`).set(auth(learner))).status).toBe(201);
       }
       const p1 = await http().get("/v1/me/learning").query({ limit: 2 }).set(auth(learner));
+      expectDeclared(p1, "GET /v1/me/learning");
       expect(p1.body.items.map((x: { courseId: string }) => x.courseId)).toEqual([courses[2].id, courses[1].id]);
       const p2 = await http().get("/v1/me/learning").query({ limit: 2, cursor: p1.body.nextCursor }).set(auth(learner));
       expect(p2.body.items.map((x: { courseId: string }) => x.courseId)).toEqual([courses[0].id]);

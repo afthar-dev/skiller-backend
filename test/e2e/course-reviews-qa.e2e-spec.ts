@@ -4,6 +4,7 @@ import "../../src/modules/billing"; // load order: billing before courses and rb
 import { EnrolmentsService } from "../../src/modules/courses";
 import { PermissionService } from "../../src/modules/rbac/permission.service";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { checkDeclared, expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -42,7 +43,7 @@ describe("course reviews and lesson Q&A", () => {
     expect((await http().post(`/v1/courses/${c.slug}/enrol`).set(auth(s))).status).toBe(201);
     return s;
   }
-  const review = (s: Session, slug: string, body: Record<string, unknown>) => http().put(`/v1/courses/${slug}/reviews/mine`).set(auth(s)).send(body);
+  const review = async (s: Session, slug: string, body: Record<string, unknown>) => checkDeclared(await http().put(`/v1/courses/${slug}/reviews/mine`).set(auth(s)).send(body), "PUT /v1/courses/{slug}/reviews/mine");
   const publicCourse = async (slug: string) => (await http().get(`/v1/courses/${slug}`)).body as { ratingAvg: number | null; ratingCount: number };
   const rowOf = (courseId: string) => prisma.course.findUniqueOrThrow({ where: { id: courseId } });
   const notifications = (userId: string, type: string) => prisma.notification.findMany({ where: { userId, type } });
@@ -79,6 +80,7 @@ describe("course reviews and lesson Q&A", () => {
       expect(second.body.id).toBe(first.body.id);
       expect(await prisma.review.count({ where: { courseId: c.id } })).toBe(1);
       expect((await http().get(`/v1/courses/${c.slug}/reviews/mine`).set(auth(me))).body).toMatchObject({ rating: 2, body: "Changed my mind" });
+      expectDeclared(await http().get(`/v1/courses/${c.slug}/reviews/mine`).set(auth(me)), "GET /v1/courses/{slug}/reviews/mine");
     });
 
     it("validates the rating (1-5) and the length of the text (2000)", async () => {
@@ -105,6 +107,7 @@ describe("course reviews and lesson Q&A", () => {
       await review(d, c.slug, { rating: 1 }); // an edit moves the average
       expect(await publicCourse(c.slug)).toMatchObject({ ratingAvg: 3.33, ratingCount: 3 });
       const list = await http().get(`/v1/courses/${c.slug}/reviews`);
+      expectDeclared(list, "GET /v1/courses/{slug}/reviews");
       expect(list.status).toBe(200);
       expect(list.body.items).toHaveLength(3);
       expect(list.body.summary).toMatchObject({ ratingAvg: 3.33, ratingCount: 3 });
@@ -254,9 +257,9 @@ describe("course reviews and lesson Q&A", () => {
   });
 
   describe("lesson Q&A", () => {
-    const ask = (s: Session, lessonId: string, body: unknown) => http().post(`/v1/learn/lessons/${lessonId}/questions`).set(auth(s)).send({ body });
-    const answer = (s: Session, questionId: string, body: unknown) => http().post(`/v1/learn/questions/${questionId}/answers`).set(auth(s)).send({ body });
-    const questions = (s: Session, lessonId: string, qs = "") => http().get(`/v1/learn/lessons/${lessonId}/questions${qs}`).set(auth(s));
+    const ask = async (s: Session, lessonId: string, body: unknown) => checkDeclared(await http().post(`/v1/learn/lessons/${lessonId}/questions`).set(auth(s)).send({ body }), "POST /v1/learn/lessons/{id}/questions");
+    const answer = async (s: Session, questionId: string, body: unknown) => checkDeclared(await http().post(`/v1/learn/questions/${questionId}/answers`).set(auth(s)).send({ body }), "POST /v1/learn/questions/{id}/answers");
+    const questions = async (s: Session, lessonId: string, qs = "") => checkDeclared(await http().get(`/v1/learn/lessons/${lessonId}/questions${qs}`).set(auth(s)), "GET /v1/learn/lessons/{id}/questions");
 
     it("lets enrolled learners and authors ask; strangers cannot read or ask", async () => {
       const owner = await creator();
@@ -320,6 +323,7 @@ describe("course reviews and lesson Q&A", () => {
       expect((await answer(peer, uniq(), "?")).status).toBe(404);
 
       const list = await http().get(`/v1/learn/questions/${q}/answers`).set(auth(asker));
+      expectDeclared(list, "GET /v1/learn/questions/{id}/answers");
       expect(list.status).toBe(200);
       expect(list.body.items.map((a: { body: string }) => a.body.slice(0, 8))).toEqual(["xxxxxxxx", "Official", "Because."]);
       expect(list.body.items[1].author).toMatchObject({ displayName: expect.any(String) });

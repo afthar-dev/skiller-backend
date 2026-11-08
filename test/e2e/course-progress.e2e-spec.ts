@@ -1,4 +1,5 @@
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { checkDeclared } from "../support/openapi-shape";
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
@@ -45,8 +46,8 @@ describe("lesson progress", () => {
     expect((await http().post(`/v1/courses/${slug}/enrol`).set(auth(s))).status).toBe(201);
     return s;
   }
-  const beat = (s: Session, lessonId: string, positionSec: number) => http().put(`/v1/learn/lessons/${lessonId}/progress`).set(auth(s)).send({ positionSec });
-  const complete = (s: Session, lessonId: string) => http().post(`/v1/learn/lessons/${lessonId}/complete`).set(auth(s));
+  const beat = async (s: Session, lessonId: string, positionSec: number) => checkDeclared(await http().put(`/v1/learn/lessons/${lessonId}/progress`).set(auth(s)).send({ positionSec }), "PUT /v1/learn/lessons/{id}/progress");
+  const complete = async (s: Session, lessonId: string) => checkDeclared(await http().post(`/v1/learn/lessons/${lessonId}/complete`).set(auth(s)), "POST /v1/learn/lessons/{id}/complete");
   const row = (userId: string, lessonId: string) => prisma.lessonProgress.findUnique({ where: { userId_lessonId: { userId, lessonId } } });
   const enrolment = (userId: string, courseId: string) => prisma.enrolment.findUniqueOrThrow({ where: { courseId_userId: { courseId, userId } } });
   const completedEvents = (userId: string, courseId: string) =>

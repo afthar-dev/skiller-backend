@@ -1,6 +1,7 @@
 import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
+import { expectDeclared } from "../support/openapi-shape";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
 
@@ -354,6 +355,7 @@ describe("course curriculum", () => {
 
       await prisma.course.update({ where: { id: course.id }, data: { status: "PUBLISHED", publishedAt: new Date(), slugLockedAt: new Date() } });
       const pub = await http().get(`/v1/courses/${course.slug}/curriculum`);
+      expectDeclared(pub, "GET /v1/courses/{slug}/curriculum");
       expect(pub.status).toBe(200);
       const lessons = pub.body.sections[0].lessons as Array<Record<string, unknown>>;
       expect(pub.body.sections[0].title).toBe("Basics");

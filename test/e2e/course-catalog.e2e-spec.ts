@@ -9,6 +9,7 @@ import { refreshCourseSearch } from "../../src/modules/courses/course-search";
 import { OrganizationsService } from "../../src/modules/organizations/organizations.service";
 import { ProfilesService } from "../../src/modules/users";
 import { AuthTestApp, createAuthTestApp, uniqueIp } from "../support/auth-app";
+import { checkDeclared, expectDeclared } from "../support/openapi-shape";
 
 interface Card {
   id: string;
@@ -75,9 +76,9 @@ describe("course search and catalog", () => {
     await refreshCourseSearch(prisma, c.id);
     return c;
   }
-  const search = (params: Record<string, string | number | undefined>) => {
+  const search = async (params: Record<string, string | number | undefined>) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]): [string, string] => [k, String(v)])).toString();
-    return http().get(`/v1/courses?${qs}`).set("X-Forwarded-For", uniqueIp());
+    return checkDeclared(await http().get(`/v1/courses?${qs}`).set("X-Forwarded-For", uniqueIp()), "GET /v1/courses");
   };
   const titles = (res: { body: { items: Card[] } }) => res.body.items.map((c) => c.title);
   /** Walks every page of a query and returns the ids in order. */
@@ -184,6 +185,7 @@ describe("course search and catalog", () => {
 
     it("lists the categories without signing in", async () => {
       const res = await http().get("/v1/categories");
+      expectDeclared(res, "GET /v1/categories");
       expect(res.status).toBe(200);
       expect(res.body.items.map((c: { slug: string }) => c.slug)).toContain("development");
     });

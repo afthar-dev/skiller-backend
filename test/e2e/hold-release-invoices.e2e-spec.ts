@@ -9,6 +9,7 @@ import { LedgerService } from "../../src/modules/wallet";
 import { AuthTestApp, createAuthTestApp } from "../support/auth-app";
 import { entryLines, paidOrder } from "../support/orders";
 import { TestItemProvider } from "../support/test-item";
+import { expectDeclared } from "../support/openapi-shape";
 
 const DAY = 86_400_000;
 
@@ -261,6 +262,7 @@ describe("hold release and invoices", () => {
       expect(text).toMatch(/GST \(18\.00%\) on platform fee/);
 
       const dl = await http().get(`/v1/invoices/${inv.id}/download`).set(auth(o.buyer));
+      expectDeclared(dl, "GET /v1/invoices/{id}/download");
       expect(dl.status).toBe(200);
       expect(dl.body.expiresInSec).toBe(300);
       const pdf = Buffer.from(await (await fetch(dl.body.url)).arrayBuffer());

@@ -4,7 +4,9 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { learnCourseSchema, lessonContentSchema, progressResultSchema } from "./course-responses";
 import { LearnService } from "./learn.service";
 import { ProgressService } from "./progress.service";
 
@@ -21,6 +23,7 @@ export class LearnController {
   @AuthenticatedOnly()
   @Get("courses/:slug")
   @ApiOperation({ summary: "The full curriculum of a course I may learn (enrolled, author), with my progress; 403 COURSE_NOT_ENROLLED otherwise" })
+  @ApiJsonResponse(200, "Sections and lessons with the learner's progress.", learnCourseSchema)
   course(@CurrentUser() user: AuthUser, @Param("slug") slug: string) {
     return this.learn.course(user.id, slug);
   }
@@ -28,6 +31,7 @@ export class LearnController {
   @AuthenticatedOnly()
   @Get("lessons/:id")
   @ApiOperation({ summary: "A lesson's content: article text, the video asset id for playback, a 5-minute resource download. Free-preview lessons are open to anyone" })
+  @ApiJsonResponse(200, "The lesson's content; only the field of its type is filled.", lessonContentSchema)
   lesson(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.learn.lesson(user.id, id);
   }
@@ -35,6 +39,7 @@ export class LearnController {
   @AuthenticatedOnly()
   @Put("lessons/:id/progress")
   @ApiOperation({ summary: "Video heartbeat: where the player is now. The server credits watch time (at most 2x real elapsed time), completes at 90% watched; one heartbeat per 5 s per lesson (429)" })
+  @ApiJsonResponse(200, "Where the learner is now, the watch time credited and the course progress.", progressResultSchema)
   @ApiZodBody(heartbeatSchema)
   heartbeat(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.progress.heartbeat(user.id, id, heartbeatSchema.parse(body).positionSec);
@@ -44,6 +49,7 @@ export class LearnController {
   @Post("lessons/:id/complete")
   @HttpCode(200)
   @ApiOperation({ summary: "Mark an article or resource lesson complete (videos complete by watching, quizzes by passing)" })
+  @ApiJsonResponse(200, "The lesson's progress after completion.", progressResultSchema)
   complete(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.progress.complete(user.id, id);
   }
