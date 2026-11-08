@@ -216,8 +216,8 @@ export class MediaService {
   }
 
   /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
-  assetInfo(assetId: string) {
-    return this.attachments.assetInfo(assetId);
+  assetInfo(assetId: string, db?: Prisma.TransactionClient | PrismaService) {
+    return this.attachments.assetInfo(assetId, db);
   }
 
   /** Where a READY private file (a course resource) lives, for a caller that has already decided the user may download it. */

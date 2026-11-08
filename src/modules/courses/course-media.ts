@@ -19,10 +19,10 @@ export class CourseMedia {
 
   /** Returns the asset's duration (seconds, rounded) so video lessons can copy it. */
   async attach(tx: Prisma.TransactionClient, course: Pick<Course, "ownerType" | "ownerId">, assetId: string, purpose: MediaPurpose): Promise<{ durationSec: number | null }> {
-    const info = await this.media.assetInfo(assetId);
+    const info = await this.media.assetInfo(assetId, tx);
     if (!info || info.purpose !== purpose || info.status !== "READY") throw notUsable();
     // An ORG course takes only media uploaded for that organization (it is what counts against the org's storage_gb); a USER course only personal uploads.
-    const ownerOk = course.ownerType === "USER" ? info.ownerId === course.ownerId && info.orgId === null : info.orgId === course.ownerId && (await this.policy.isOrgAuthor(info.ownerId, course.ownerId));
+    const ownerOk = course.ownerType === "USER" ? info.ownerId === course.ownerId && info.orgId === null : info.orgId === course.ownerId && (await this.policy.isOrgAuthor(info.ownerId, course.ownerId, tx));
     if (!ownerOk) throw notUsable();
     await this.media.attach(tx, assetId, info.ownerId, purpose);
     return { durationSec: info.durationSec === null ? null : Math.round(info.durationSec) };

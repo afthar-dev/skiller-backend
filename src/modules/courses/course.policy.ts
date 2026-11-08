@@ -55,8 +55,8 @@ export class CoursePolicy {
     return (await this.permissions.has(user.id, "course.review")) || (await this.permissions.has(user.id, "course.manage_any"));
   }
 
-  async isOrgAuthor(userId: string, orgId: string): Promise<boolean> {
-    const keys = await this.roles.roleKeysInOrg(userId, orgId);
+  async isOrgAuthor(userId: string, orgId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<boolean> {
+    const keys = await this.roles.roleKeysInOrg(userId, orgId, db);
     return keys.some((k) => (ORG_AUTHOR_ROLES as readonly string[]).includes(k));
   }
 

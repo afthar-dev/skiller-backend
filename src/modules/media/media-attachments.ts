@@ -15,9 +15,9 @@ export class MediaAttachments {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. */
-  async assetInfo(assetId: string): Promise<{ ownerId: string; orgId: string | null; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
-    return this.prisma.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, orgId: true, purpose: true, status: true, durationSec: true } });
+  /** Owner, purpose, state and duration of an asset, for modules that decide who may attach it. Not an access check: attach() re-verifies under a row lock. Inside a transaction pass it as `db`: the global client would need a second pooled connection. */
+  async assetInfo(assetId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<{ ownerId: string; orgId: string | null; purpose: MediaAsset["purpose"]; status: MediaAsset["status"]; durationSec: number | null } | null> {
+    return db.mediaAsset.findUnique({ where: { id: assetId }, select: { ownerId: true, orgId: true, purpose: true, status: true, durationSec: true } });
   }
 
   /** Duration in seconds by asset id (null when unknown), for modules that report on their videos in bulk. */

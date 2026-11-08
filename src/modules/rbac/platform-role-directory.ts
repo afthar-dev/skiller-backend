@@ -26,9 +26,9 @@ export class PlatformRoleDirectory {
   }
 
   /** Active role keys the user holds in one organization (org-scoped grants only; platform grants are not included). */
-  async roleKeysInOrg(userId: string, orgId: string): Promise<string[]> {
+  async roleKeysInOrg(userId: string, orgId: string, db: Prisma.TransactionClient | PrismaService = this.prisma): Promise<string[]> {
     const now = this.clock.now();
-    const rows = await this.prisma.userRole.findMany({
+    const rows = await db.userRole.findMany({
       where: { userId, orgId, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
       select: { role: { select: { key: true } } },
     });
