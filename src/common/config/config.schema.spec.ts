@@ -54,6 +54,22 @@ describe("loadConfig", () => {
     expect(loadConfig(validEnv).resend.baseUrl).toBeUndefined();
   });
 
+  it("RAZORPAY_BASE_URL is rejected in production and reaches config.razorpay.baseUrl elsewhere", () => {
+    const base = { ...validEnv, RAZORPAY_BASE_URL: "http://127.0.0.1:4020/v1/" };
+    const prod = { ...base, NODE_ENV: "production", API_BASE_URL: "https://api.skiller.in" };
+    expect(() => loadConfig(prod)).toThrow(ConfigError);
+    expect(() => loadConfig(prod)).toThrow(/RAZORPAY_BASE_URL/);
+    expect(loadConfig({ ...base, NODE_ENV: "development" }).razorpay.baseUrl).toBe("http://127.0.0.1:4020/v1");
+    expect(loadConfig(validEnv).razorpay.baseUrl).toBeUndefined();
+  });
+
+  it("SSR_SHARED_SECRET is optional and needs at least 32 characters", () => {
+    expect(loadConfig(validEnv).ssrSharedSecret).toBeUndefined();
+    expect(loadConfig({ ...validEnv, SSR_SHARED_SECRET: "x".repeat(32) }).ssrSharedSecret).toBe("x".repeat(32));
+    expect(() => loadConfig({ ...validEnv, SSR_SHARED_SECRET: "x".repeat(31) })).toThrow(ConfigError);
+    expect(() => loadConfig({ ...validEnv, SSR_SHARED_SECRET: "x".repeat(31) })).toThrow(/SSR_SHARED_SECRET/);
+  });
+
   it("TRUST_PROXY defaults to 0 and parses a hop count", () => {
     expect(loadConfig(validEnv).trustProxy).toBe(0);
     expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);

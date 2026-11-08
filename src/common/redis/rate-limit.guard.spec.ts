@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { RedisContainer, StartedRedisContainer } from "@testcontainers/redis";
 import IORedis from "ioredis";
 import { AppError } from "../errors/app-error";
+import { Public } from "../auth/public.decorator";
 import { RateLimit } from "./rate-limit.decorator";
 import { RateLimitGuard } from "./rate-limit.guard";
 
@@ -11,14 +12,25 @@ class Sample {
   limited() {}
 
   unlimited() {}
+
+  @Public()
+  @RateLimit({ key: (req) => `pub:${req.ip}`, limit: 2, windowSec: 60 })
+  publicRead() {}
+
+  @RateLimit({ key: (req) => `priv:${req.ip}`, limit: 2, windowSec: 60 })
+  privateRead() {}
 }
 
-function ctx(handler: () => void, body: Record<string, unknown>): ExecutionContext {
-  return {
+const SECRET = "s".repeat(40);
+
+function ctx(handler: () => void, body: Record<string, unknown>, headers: Record<string, string> = {}, ip = "127.0.0.1", method = "GET") {
+  const req = { body, ip, headers, method };
+  const context = {
     getHandler: () => handler,
     getClass: () => Sample,
-    switchToHttp: () => ({ getRequest: () => ({ body, ip: "127.0.0.1" }) }),
+    switchToHttp: () => ({ getRequest: () => req }),
   } as unknown as ExecutionContext;
+  return Object.assign(context, { req });
 }
 
 describe("RateLimitGuard", () => {
@@ -30,7 +42,7 @@ describe("RateLimitGuard", () => {
   beforeAll(async () => {
     container = await new RedisContainer("redis:7-alpine").start();
     redis = new IORedis(container.getConnectionUrl());
-    guard = new RateLimitGuard(new Reflector(), redis);
+    guard = new RateLimitGuard(new Reflector(), redis, { ssrSharedSecret: SECRET });
   });
 
   afterAll(async () => {
@@ -60,5 +72,63 @@ describe("RateLimitGuard", () => {
 
   it("ignores handlers without @RateLimit", async () => {
     await expect(guard.canActivate(ctx(sample.unlimited, {}))).resolves.toBe(true);
+  });
+
+  describe("trusted web server", () => {
+    const fresh = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+
+    it("with the secret and a client IP, limits count that address, not the caller's", async () => {
+      const ip = fresh();
+      const headers = { "x-skiller-server": SECRET, "x-skiller-client-ip": "203.0.113.9" };
+      const c = ctx(sample.privateRead, {}, headers, ip);
+      await guard.canActivate(c);
+      expect(c.req.ip).toBe("203.0.113.9");
+      expect(await redis.exists("rl:priv:203.0.113.9")).toBe(1);
+      expect(await redis.exists(`rl:priv:${ip}`)).toBe(0);
+      await redis.del("rl:priv:203.0.113.9");
+    });
+
+    it("with the secret and no client IP, a @Public read limit is skipped (a private one is not)", async () => {
+      const ip = fresh();
+      const headers = { "x-skiller-server": SECRET };
+      for (let i = 0; i < 5; i++) await expect(guard.canActivate(ctx(sample.publicRead, {}, headers, ip))).resolves.toBe(true);
+      expect(await redis.exists(`rl:pub:${ip}`)).toBe(0);
+      await guard.canActivate(ctx(sample.privateRead, {}, headers, ip));
+      expect(await redis.exists(`rl:priv:${ip}`)).toBe(1);
+      // a public route that is not a read (POST) still counts
+      await guard.canActivate(ctx(sample.publicRead, {}, headers, ip, "POST"));
+      expect(await redis.exists(`rl:pub:${ip}`)).toBe(1);
+    });
+
+    it("with a wrong secret both headers are ignored and req.ip is used", async () => {
+      const ip = fresh();
+      const headers = { "x-skiller-server": "wrong".repeat(10), "x-skiller-client-ip": "203.0.113.10" };
+      const c = ctx(sample.publicRead, {}, headers, ip);
+      await guard.canActivate(c);
+      expect(c.req.ip).toBe(ip);
+      expect(await redis.exists(`rl:pub:${ip}`)).toBe(1);
+      expect(await redis.exists("rl:pub:203.0.113.10")).toBe(0);
+      await guard.canActivate(ctx(sample.publicRead, {}, headers, ip));
+      await expect(guard.canActivate(ctx(sample.publicRead, {}, headers, ip))).rejects.toBeInstanceOf(AppError);
+    });
+
+    it("a client IP header without the secret is ignored", async () => {
+      const ip = fresh();
+      const c = ctx(sample.publicRead, {}, { "x-skiller-client-ip": "203.0.113.11" }, ip);
+      await guard.canActivate(c);
+      expect(c.req.ip).toBe(ip);
+      expect(await redis.exists("rl:pub:203.0.113.11")).toBe(0);
+    });
+
+    it("a malformed client IP counts as none, and with no secret configured the headers mean nothing", async () => {
+      const ip = fresh();
+      const c = ctx(sample.privateRead, {}, { "x-skiller-server": SECRET, "x-skiller-client-ip": "not an ip" }, ip);
+      await guard.canActivate(c);
+      expect(c.req.ip).toBe(ip);
+      const open = new RateLimitGuard(new Reflector(), redis, { ssrSharedSecret: undefined });
+      const d = ctx(sample.privateRead, {}, { "x-skiller-server": "", "x-skiller-client-ip": "203.0.113.12" }, ip);
+      await open.canActivate(d);
+      expect(d.req.ip).toBe(ip);
+    });
   });
 });

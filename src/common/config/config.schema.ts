@@ -31,6 +31,8 @@ const envSchema = z
   // Test and local development only: points the Resend client at a fake server. Rejected in production.
   RESEND_BASE_URL: z.string().url().optional(),
   RAZORPAY_KEY_ID: z.string().min(1),
+  // Test and local development only: points the Razorpay client at a fake server. Rejected in production.
+  RAZORPAY_BASE_URL: z.string().url().optional(),
   RAZORPAY_KEY_SECRET: z.string().min(1),
   // Verifies X-Razorpay-Signature on POST /v1/webhooks/razorpay (set on the Razorpay dashboard webhook, not the API key secret).
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
@@ -42,6 +44,8 @@ const envSchema = z
   SENTRY_DSN: z.string().url().optional(),
   // Number of reverse-proxy hops in front of the API whose X-Forwarded-For is trusted (0 = none).
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
+  // Shared with the web app's server (never its browser code). A request that carries it may name the real client in X-Skiller-Client-Ip.
+  SSR_SHARED_SECRET: secret("SSR_SHARED_SECRET").optional(),
   SUPER_ADMIN_EMAIL: z.string().email(),
   })
   .superRefine((e, ctx) => {
@@ -52,6 +56,10 @@ const envSchema = z
     // Mail redirected to another host in production would silently stop real delivery.
     if (e.NODE_ENV === "production" && e.RESEND_BASE_URL) {
       ctx.addIssue({ code: "custom", path: ["RESEND_BASE_URL"], message: "must not be set in production (it is for tests and local development)" });
+    }
+    // Payments sent to another host in production would silently stop real charges.
+    if (e.NODE_ENV === "production" && e.RAZORPAY_BASE_URL) {
+      ctx.addIssue({ code: "custom", path: ["RAZORPAY_BASE_URL"], message: "must not be set in production (it is for tests and local development)" });
     }
     // A shared secret would let a body signed for the Razorpay endpoint pass for a RazorpayX one.
     if (e.RAZORPAY_WEBHOOK_SECRET && e.RAZORPAY_WEBHOOK_SECRET === e.RAZORPAYX_WEBHOOK_SECRET) {
@@ -97,9 +105,10 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
       endpoint: e.R2_ENDPOINT ?? `https://${e.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     },
     resend: { apiKey: e.RESEND_API_KEY, fromAddress: e.RESEND_FROM_ADDRESS, webhookSecret: e.RESEND_WEBHOOK_SECRET, baseUrl: e.RESEND_BASE_URL?.replace(/\/+$/, "") },
-    razorpay: { keyId: e.RAZORPAY_KEY_ID, keySecret: e.RAZORPAY_KEY_SECRET, webhookSecret: e.RAZORPAY_WEBHOOK_SECRET },
+    razorpay: { keyId: e.RAZORPAY_KEY_ID, keySecret: e.RAZORPAY_KEY_SECRET, webhookSecret: e.RAZORPAY_WEBHOOK_SECRET, baseUrl: e.RAZORPAY_BASE_URL?.replace(/\/+$/, "") },
     razorpayx: { accountNumber: e.RAZORPAYX_ACCOUNT_NUMBER, webhookSecret: e.RAZORPAYX_WEBHOOK_SECRET },
     trustProxy: e.TRUST_PROXY,
+    ssrSharedSecret: e.SSR_SHARED_SECRET,
     sentryDsn: e.SENTRY_DSN,
     superAdminEmail: e.SUPER_ADMIN_EMAIL.toLowerCase(),
   };

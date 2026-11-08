@@ -153,11 +153,14 @@ RAZORPAY_KEY_SECRET=...
 RAZORPAY_WEBHOOK_SECRET=...
 RAZORPAYX_ACCOUNT_NUMBER=...
 RAZORPAYX_WEBHOOK_SECRET=...
+SSR_SHARED_SECRET=...
 SUPER_ADMIN_EMAIL=you@example.com
 SENTRY_DSN=...
 ```
 
 `TRUST_PROXY` is the number of proxies in front of the API. Rate limits depend on it. Confirm it by checking that logged IPs are real client IPs. If you later turn on the Cloudflare proxy for `api.`, add one.
+
+`SSR_SHARED_SECRET` is a random string of at least 32 characters (`openssl rand -base64 48`), identical on the API, the worker and the web app's Vercel project. Rotate it by changing all three. Never set `RAZORPAY_BASE_URL` in production: the API refuses to start with it.
 
 ### 3.6 First deploy
 
@@ -199,7 +202,7 @@ NEXT_PUBLIC_SITE_URL=https://skiller.in
 NEXT_PUBLIC_SENTRY_DSN=...
 ```
 
-Secrets don't belong here: the web app holds none. Vercel preview URLs can show public pages but can't sign in against production.
+Secrets don't belong here, with one exception: the web app holds only `SSR_SHARED_SECRET`, as a server-only Vercel variable (no `NEXT_PUBLIC_` prefix). Set the same value on the API and worker. The web app's server sends it as `X-Skiller-Server` with the visitor's address in `X-Skiller-Client-Ip`, so per-IP rate limits count visitors instead of Vercel. Vercel preview URLs can show public pages but can't sign in against production.
 
 ## 4. Each release
 

@@ -59,7 +59,7 @@ export const BILLING_CORE_PROVIDERS: Provider[] = [
   {
     provide: RAZORPAY_CLIENT,
     inject: [APP_CONFIG],
-    useFactory: (config: AppConfig) => new HttpRazorpayClient(config.razorpay.keyId, config.razorpay.keySecret),
+    useFactory: (config: AppConfig) => new HttpRazorpayClient(config.razorpay.keyId, config.razorpay.keySecret, { baseUrl: config.razorpay.baseUrl }),
   },
   {
     provide: RAZORPAYX_CLIENT,
