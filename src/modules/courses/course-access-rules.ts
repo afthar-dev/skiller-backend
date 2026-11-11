@@ -72,6 +72,11 @@ export class CourseAccessRules {
     return null;
   }
 
+  /** What a signed-out visitor may open: a free-preview lesson of a PUBLISHED, unflagged course (rule 3 of learnAccess, nothing else), without progress. */
+  anonymousLearnAccess(course: AccessCourse, lesson?: { isFreePreview: boolean }): LearnAccess | null {
+    return lesson?.isFreePreview && course.status === "PUBLISHED" && !course.flaggedAt ? { via: "PREVIEW", progress: false } : null;
+  }
+
   async canLearn(userId: string, target: { lessonId: string } | { course: AccessCourse; lesson?: { isFreePreview: boolean } }): Promise<boolean> {
     if ("lessonId" in target) {
       const lesson = await this.prisma.lesson.findUnique({ where: { id: target.lessonId }, select: { isFreePreview: true, course: true } });

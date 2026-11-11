@@ -1,6 +1,7 @@
 import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { RequestMethod } from "@nestjs/common";
 import { AUTHENTICATED_ONLY_KEY } from "../../common/auth/authenticated-only.decorator";
+import { OPTIONAL_AUTH_KEY } from "../../common/auth/optional-auth.decorator";
 import { IS_PUBLIC_KEY } from "../../common/auth/public.decorator";
 import { REQUIRE_PERMISSION_KEY } from "./require-permission.decorator";
 
@@ -17,7 +18,7 @@ const joinPath = (...parts: unknown[]) =>
     .join("/");
 
 /**
- * Throws if any route handler of `controllers` lacks @RequirePermission, @Public or @AuthenticatedOnly (on the method or its
+ * Throws if any route handler of `controllers` lacks @RequirePermission, @Public, @OptionalAuth or @AuthenticatedOnly (on the method or its
  * controller class). Called on bootstrap, so a forgotten decorator means the app does not start rather than shipping an open route.
  */
 export function assertAllRoutesGuarded(controllers: Controller[], globalPrefix = ""): void {
@@ -31,7 +32,7 @@ export function assertAllRoutesGuarded(controllers: Controller[], globalPrefix =
       const method = Reflect.getMetadata(METHOD_METADATA, handler) as RequestMethod | undefined;
       if (method === undefined) continue; // not a route
 
-      const guarded = [IS_PUBLIC_KEY, AUTHENTICATED_ONLY_KEY, REQUIRE_PERMISSION_KEY].some(
+      const guarded = [IS_PUBLIC_KEY, AUTHENTICATED_ONLY_KEY, OPTIONAL_AUTH_KEY, REQUIRE_PERMISSION_KEY].some(
         (key) => Reflect.getMetadata(key, handler) !== undefined || Reflect.getMetadata(key, controller) !== undefined,
       );
       if (guarded) continue;
@@ -42,7 +43,7 @@ export function assertAllRoutesGuarded(controllers: Controller[], globalPrefix =
   }
   if (unguarded.length > 0) {
     throw new Error(
-      `Unguarded routes: every route needs @RequirePermission, @Public or @AuthenticatedOnly.\n${unguarded.map((r) => `  - ${r}`).join("\n")}`,
+      `Unguarded routes: every route needs @RequirePermission, @Public, @OptionalAuth or @AuthenticatedOnly.\n${unguarded.map((r) => `  - ${r}`).join("\n")}`,
     );
   }
 }

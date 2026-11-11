@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * against edge/playback-gate/test/vectors.json.
  */
 export interface PlaybackClaims {
-  /** viewer user id */
+  /** viewer user id, or ANONYMOUS_VIEWER for a signed-out visitor watching a free preview */
   u: string;
   /** media asset id the token is valid for */
   a: string;
@@ -14,6 +14,8 @@ export interface PlaybackClaims {
   exp: number;
 }
 
+/** Not a user id (those are UUIDs), so a preview token can never be mistaken for a person. The gate only needs `u` to be a string. */
+export const ANONYMOUS_VIEWER = "anonymous";
 export const PLAYBACK_TOKEN_TTL_SEC = 10 * 60;
 export const MAX_TOKEN_LENGTH = 512;
 

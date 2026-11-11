@@ -3656,7 +3656,7 @@
             }
           },
           "401": {
-            "description": "Missing, invalid or expired access token.",
+            "description": "A token was sent but it is invalid, expired or revoked (no token at all is fine).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3676,14 +3676,15 @@
             }
           }
         },
+        "summary": "Signed HLS manifest URL for a private lesson video (token valid 10 minutes; re-call to refresh). Works signed out for the video of a free-preview lesson of a published course (60 per hour per address); everything else needs a token",
+        "tags": [
+          "Media"
+        ],
         "security": [
           {
             "bearer": []
-          }
-        ],
-        "summary": "Signed HLS manifest URL for a private lesson video (token valid 10 minutes; re-call to refresh)",
-        "tags": [
-          "Media"
+          },
+          {}
         ]
       }
     },
@@ -13701,7 +13702,7 @@
             }
           },
           "401": {
-            "description": "Missing, invalid or expired access token.",
+            "description": "A token was sent but it is invalid, expired or revoked (no token at all is fine).",
             "content": {
               "application/json": {
                 "schema": {
@@ -13721,14 +13722,15 @@
             }
           }
         },
+        "summary": "A lesson's content: article text, the video asset id for playback, a 5-minute resource download. Free-preview lessons of a published course are open to anyone, signed in or not (signed out: 60 reads per minute per address; any other lesson needs a token and enrolment)",
+        "tags": [
+          "Learning"
+        ],
         "security": [
           {
             "bearer": []
-          }
-        ],
-        "summary": "A lesson's content: article text, the video asset id for playback, a 5-minute resource download. Free-preview lessons are open to anyone",
-        "tags": [
-          "Learning"
+          },
+          {}
         ]
       }
     },

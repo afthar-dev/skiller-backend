@@ -1,5 +1,6 @@
 import { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from "@nestjs/swagger";
+import { OPTIONAL_AUTH_EXTENSION } from "../auth/optional-auth.decorator";
 import { errorResponseObject, errorResponseSchema } from "./error-response";
 import { moneyComponents } from "./money";
 
@@ -20,8 +21,13 @@ export function buildOpenApiDocument(app: INestApplication): OpenAPIObject {
   doc.components = { ...doc.components, schemas: { ...doc.components?.schemas, ...(moneyComponents as Record<string, never>), ErrorResponse: errorResponseSchema as never } };
   for (const item of Object.values(doc.paths)) {
     for (const method of METHODS) {
-      const op = (item as Record<string, { responses: Record<string, unknown> } | undefined>)[method];
-      if (op) op.responses.default ??= errorResponseObject("Error response (see `error.code`).");
+      const op = (item as Record<string, ({ responses: Record<string, unknown>; security?: unknown[] } & Record<string, unknown>) | undefined>)[method];
+      if (!op) continue;
+      op.responses.default ??= errorResponseObject("Error response (see `error.code`).");
+      if (op[OPTIONAL_AUTH_EXTENSION]) {
+        delete op[OPTIONAL_AUTH_EXTENSION];
+        op.security = [{ bearer: [] }, {}];
+      }
     }
   }
   return doc;

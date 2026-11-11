@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { RedisContainer, StartedRedisContainer } from "@testcontainers/redis";
 import IORedis from "ioredis";
 import { AppError } from "../errors/app-error";
+import { OptionalAuth } from "../auth/optional-auth.decorator";
 import { Public } from "../auth/public.decorator";
 import { RateLimit } from "./rate-limit.decorator";
 import { RateLimitGuard } from "./rate-limit.guard";
@@ -19,6 +20,10 @@ class Sample {
 
   @RateLimit({ key: (req) => `priv:${req.ip}`, limit: 2, windowSec: 60 })
   privateRead() {}
+
+  @OptionalAuth()
+  @RateLimit({ key: (req) => `opt:${req.ip}`, limit: 2, windowSec: 60, anonymousOnly: true })
+  optionalRead() {}
 }
 
 const SECRET = "s".repeat(40);
@@ -72,6 +77,33 @@ describe("RateLimitGuard", () => {
 
   it("ignores handlers without @RateLimit", async () => {
     await expect(guard.canActivate(ctx(sample.unlimited, {}))).resolves.toBe(true);
+  });
+
+  describe("optional-auth routes with an anonymous-only limit", () => {
+    const fresh = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+
+    it("counts a request without a token per address and refuses past the limit", async () => {
+      const ip = fresh();
+      await guard.canActivate(ctx(sample.optionalRead, {}, {}, ip));
+      await guard.canActivate(ctx(sample.optionalRead, {}, {}, ip));
+      await expect(guard.canActivate(ctx(sample.optionalRead, {}, {}, ip))).rejects.toBeInstanceOf(AppError);
+    });
+
+    it("never counts or refuses a request that carries a token", async () => {
+      const ip = fresh();
+      for (let i = 0; i < 5; i++) await expect(guard.canActivate(ctx(sample.optionalRead, {}, { authorization: "Bearer x" }, ip))).resolves.toBe(true);
+      expect(await redis.exists(`rl:opt:${ip}`)).toBe(0);
+    });
+
+    it("the trusted server with no visitor is not limited on a signed-out read; with a visitor named, that address is counted", async () => {
+      const ip = fresh();
+      const server = { "x-skiller-server": SECRET };
+      for (let i = 0; i < 5; i++) await expect(guard.canActivate(ctx(sample.optionalRead, {}, server, ip))).resolves.toBe(true);
+      expect(await redis.exists(`rl:opt:${ip}`)).toBe(0);
+      const visitor = fresh();
+      await guard.canActivate(ctx(sample.optionalRead, {}, { ...server, "x-skiller-client-ip": visitor }, ip));
+      expect(await redis.exists(`rl:opt:${visitor}`)).toBe(1);
+    });
   });
 
   describe("trusted web server", () => {

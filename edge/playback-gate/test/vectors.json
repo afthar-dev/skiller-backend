@@ -10,6 +10,15 @@
         "exp": 2000000600
       },
       "token": "eyJ1IjoiMDE5MmYzYTAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.WX3fAKovjpwj7OP8bt-DWdHrSuVDkAhkC_rfnNPfzn8"
+    },
+    {
+      "name": "signed-out preview token (u is not a user id)",
+      "claims": {
+        "u": "anonymous",
+        "a": "0192f3a0-0000-7000-8000-00000000000a",
+        "exp": 2000000600
+      },
+      "token": "eyJ1IjoiYW5vbnltb3VzIiwiYSI6IjAxOTJmM2EwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwYSIsImV4cCI6MjAwMDAwMDYwMH0.s7UiWraxT9xWE7rbHTo0TW-7ew_Ro9Uy27ee_xye7wY"
     }
   ],
   "invalid": [

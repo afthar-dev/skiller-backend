@@ -68,6 +68,14 @@ describe("playback gate", () => {
       expect(lines.every((l) => l.endsWith(`?t=${TOKEN}`))).toBe(true);
     });
 
+    it("serves a signed-out preview token (u is not a user id) like any other valid token, for its own asset only", async () => {
+      const anon = vectors.valid.find((v) => v.claims.u === "anonymous")!.token;
+      const res = await get(withT(`/${prefix(ASSET)}/hls/index.m3u8`, anon));
+      expect(res.status).toBe(200);
+      expect((await res.text()).split("\n").filter((l) => l && !l.startsWith("#"))).toEqual([`360p/index.m3u8?t=${anon}`, `720p/index.m3u8?t=${anon}`]);
+      expect((await get(withT(`/${prefix(OTHER_ASSET)}/hls/index.m3u8`, anon))).status).toBe(403);
+    });
+
     it("serves variant playlists rewritten", async () => {
       const res = await get(withT(`/${prefix(ASSET)}/hls/360p/index.m3u8`));
       expect(res.status).toBe(200);

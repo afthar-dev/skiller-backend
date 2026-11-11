@@ -4,6 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import type { Request } from "express";
 import type { Redis } from "ioredis";
+import { OPTIONAL_AUTH_KEY } from "../auth/optional-auth.decorator";
 import { IS_PUBLIC_KEY } from "../auth/public.decorator";
 import { APP_CONFIG } from "../config/config.module";
 import type { AppConfig } from "../config/config.schema";
@@ -41,7 +42,10 @@ export class RateLimitGuard implements CanActivate {
     // Server-side rendering with no visitor behind it (a build, a revalidation): counting its own address would throttle the site itself.
     if (trusted && !clientIp && this.isPublicRead(context, req)) return true;
 
-    for (const option of options) await this.consume(req, option);
+    for (const option of options) {
+      if (option.anonymousOnly && req.headers?.authorization) continue;
+      await this.consume(req, option);
+    }
     return true;
   }
 
@@ -60,7 +64,10 @@ export class RateLimitGuard implements CanActivate {
 
   private isPublicRead(context: ExecutionContext, req: Request): boolean {
     if (req.method !== "GET" && req.method !== "HEAD") return false;
-    return this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]) === true;
+    const targets = [context.getHandler(), context.getClass()];
+    if (this.reflector.getAllAndOverride<boolean | undefined>(IS_PUBLIC_KEY, targets) === true) return true;
+    // A signed-out read of an optional-auth route is a public read; with a token it is a signed-in call and keeps its limits.
+    return this.reflector.getAllAndOverride<boolean | undefined>(OPTIONAL_AUTH_KEY, targets) === true && !req.headers?.authorization;
   }
 
   private consume(req: Request, options: RateLimitOptions): Promise<void> {

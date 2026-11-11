@@ -10,7 +10,7 @@ import { REDIS } from "../../common/redis/redis.constants";
 import { AccountService } from "../identity";
 import { assetPrefix } from "./media.rules";
 import { PLAYBACK_ACCESS_POLICY, type PlaybackAccessPolicy } from "./playback-policy";
-import { PLAYBACK_TOKEN_TTL_SEC, signPlaybackToken } from "./playback-token";
+import { ANONYMOUS_VIEWER, PLAYBACK_TOKEN_TTL_SEC, signPlaybackToken } from "./playback-token";
 
 export const PLAYBACKS_PER_HOUR = 120;
 
@@ -33,8 +33,9 @@ export class PlaybackService {
   ) {}
 
   /** Mints a 10-minute token for the private HLS of a READY lesson video. The Cloudflare playback gate verifies it. */
-  async grant(userId: string, assetId: string): Promise<PlaybackGrant> {
-    await consumeRateLimit(this.redis, `playback:${userId}`, PLAYBACKS_PER_HOUR, 3600);
+  async grant(userId: string | null, assetId: string): Promise<PlaybackGrant> {
+    // A signed-out visitor is limited per address by the route (ANON_PLAYBACKS_PER_HOUR); a signed-in one per user here.
+    if (userId) await consumeRateLimit(this.redis, `playback:${userId}`, PLAYBACKS_PER_HOUR, 3600);
 
     const asset = await this.prisma.mediaAsset.findUnique({ where: { id: assetId } });
     if (!asset) throw new AppError("MEDIA_NOT_FOUND", 404, "Media not found");
@@ -44,19 +45,19 @@ export class PlaybackService {
     }
     if (asset.status !== "READY") throw new AppError("MEDIA_NOT_READY", 409, "This video is still processing");
 
-    const email = await this.accounts.findEmail(userId);
+    const email = userId ? await this.accounts.findEmail(userId) : null;
     const exp = Math.floor(this.clock.now().getTime() / 1000) + PLAYBACK_TOKEN_TTL_SEC;
-    const token = signPlaybackToken({ u: userId, a: asset.id, exp }, this.config.playbackSecret);
+    const token = signPlaybackToken({ u: userId ?? ANONYMOUS_VIEWER, a: asset.id, exp }, this.config.playbackSecret);
     return {
       manifestUrl: `${this.config.r2.playbackBaseUrl.replace(/\/+$/, "")}/${assetPrefix(asset)}/hls/index.m3u8?t=${token}`,
       expiresAt: new Date(exp * 1000).toISOString(),
-      watermark: email ?? userId,
+      watermark: userId ? (email ?? userId) : "Free preview",
     };
   }
 
-  private async allowed(userId: string, asset: Parameters<PlaybackAccessPolicy["canPlay"]>[1]): Promise<boolean> {
+  private async allowed(userId: string | null, asset: Parameters<PlaybackAccessPolicy["canPlay"]>[1]): Promise<boolean> {
     for (const policy of this.policies) {
-      if (await policy.canPlay(userId, asset)) return true;
+      if (userId ? await policy.canPlay(userId, asset) : await policy.canPlayAnonymously?.(asset)) return true;
     }
     return false;
   }

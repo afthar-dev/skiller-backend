@@ -51,7 +51,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `KYC_PEPPER` | no | 32+ character secret keying the HMAC of PAN numbers (duplicate-PAN detection); defaults to `OTP_PEPPER`. Changing it stops old accounts matching new ones. |
 | `SUPER_ADMIN_EMAIL` | yes | Gets the `super_admin` role at seed time. |
 | `TRUST_PROXY` | no | Reverse-proxy hops in front of the API (default `0`). |
-| `SSR_SHARED_SECRET` | no | 32+ character secret shared with the web app's server (a server-only variable, never in browser code). A request with it in `X-Skiller-Server` may name the visitor in `X-Skiller-Client-Ip`: per-IP rate limits then count that address, and a `@Public` GET with no client IP is not rate-limited. Without the secret both headers are ignored. |
+| `SSR_SHARED_SECRET` | no | 32+ character secret shared with the web app's server (a server-only variable, never in browser code). A request with it in `X-Skiller-Server` may name the visitor in `X-Skiller-Client-Ip`: per-IP rate limits then count that address, and a `@Public` GET (or a signed-out `@OptionalAuth` GET) with no client IP is not rate-limited. Without the secret both headers are ignored. |
 | `SENTRY_DSN` | no | Enables Sentry. Only server errors (status >= 500) are reported. |
 | `LOG_LEVEL` | no | Pino level, default `info`. |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | no | Worker only; default `ffmpeg` / `ffprobe` on `PATH`. |
@@ -165,6 +165,8 @@ The `courses` module owns every course table (categories, courses, sections, les
 **Markdown rendering rule for clients.** See "Rendering course Markdown" under Notes for the frontend: render with markdown-it `html: false` and the exported link validator (`createMarkdownRenderer()` / `isSafeLinkDestination` from `src/modules/courses/index.ts`).
 
 **Playback.** Lesson videos are private HLS. The player asks `GET /v1/media/:id/playback` (enrolled learners, free-preview lessons and authors only; refunded learners lose access at once). The returned token lasts 10 minutes: refresh it by calling the route again before `expiresAt` and after any 401/403 from the edge gate.
+
+**Signed-out previews.** `GET /v1/learn/lessons/:id` and `GET /v1/media/:id/playback` are optional-auth (`@OptionalAuth`): with no `Authorization` header a visitor may open a free-preview lesson (its article, video asset id and resource download link) and play its video, but only when the lesson belongs to a PUBLISHED, unflagged course. Anything else answers exactly what a signed-in non-enrolled user gets (403 `COURSE_NOT_ENROLLED` or 404 for lessons, 403 `FORBIDDEN` or 404 for media), never more detail. A request that does send a token is validated as always, so an expired token is still 401 (refresh and retry), never a quiet downgrade to visitor. The preview lesson answers `access: "PREVIEW"`, `canTrackProgress: false`; progress, completion and everything else under `/v1/learn` stay signed-in only. Playback tokens for visitors carry `u: "anonymous"` (not a user id; the edge gate only needs `u` to be a string, so it needs no change) and the `watermark` is the fixed text `Free preview`. Limits count per address, signed-out callers only: 60 lesson reads per minute and 60 playback tokens per hour (signed-in playback keeps its 120 per hour per user). Behind the web app's server, send `X-Skiller-Server` and `X-Skiller-Client-Ip` so the visitor's address is the one counted; a server call with the secret and no client IP (a build, a revalidation) is not limited.
 
 **Organization seats.** An `org_learner` of an organization enrols free in that organization's courses (`POST /v1/courses/:slug/enrol`, source `ORG_SEAT`) without checkout. Removing the member (`org.member_removed`) or letting the learner grant expire (daily `courses.seats.sweep`) revokes only `ORG_SEAT` enrolments, never purchases.
 
@@ -293,7 +295,7 @@ Orphaned permissions (keys in the database no longer declared in code) are repor
 ## Notes for the frontend
 
 - **Resumable uploads**: multipart part URLs are valid for 1 hour. If a part URL expires (or the page reloads), call `POST /v1/media/uploads/:id/parts` with `{ partNumbers: [..] }` to get fresh URLs for those parts (owner only, while the upload is still pending, 60 requests per hour), upload them, then `complete`.
-- **Playback tokens expire after 10 minutes.** `GET /v1/media/:id/playback` returns a `manifestUrl` whose token is valid for 10 minutes (`expiresAt`). The player must call this route again and reload the manifest before expiry (and after a 401/403 from the edge gate); do not cache the URL longer than that.
+- **Playback tokens expire after 10 minutes.** `GET /v1/media/:id/playback` returns a `manifestUrl` whose token is valid for 10 minutes (`expiresAt`). The player must call this route again and reload the manifest before expiry (and after a 401/403 from the edge gate); do not cache the URL longer than that. Signed-out preview playback uses the same route and the same 10-minute rule.
 - Access tokens last 15 minutes; refresh by `POST /v1/auth/refresh` (httpOnly cookie `skiller_rt`, path `/v1/auth`, so send requests with credentials).
 - Sensitive admin actions need a step-up (`/v1/auth/step-up/request` + `/verify`), valid for 5 minutes per session.
 - Lists use cursor pagination: `?cursor=&limit=` and return `{ items, nextCursor }`.

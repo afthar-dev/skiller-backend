@@ -69,13 +69,14 @@ export class LearnService {
     };
   }
 
-  async lesson(userId: string, lessonId: string) {
+  /** `userId` is null for a signed-out visitor, who may open free-preview lessons only (the same refusals as any non-enrolled user otherwise). */
+  async lesson(userId: string | null, lessonId: string) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId }, include: { course: true } });
     if (!lesson) throw new AppError("LESSON_NOT_FOUND", 404, "Lesson not found");
-    const access = await this.rules.learnAccess(userId, lesson.course, lesson);
+    const access = userId ? await this.rules.learnAccess(userId, lesson.course, lesson) : this.rules.anonymousLearnAccess(lesson.course, lesson);
     if (!access) throw denied(lesson.course);
 
-    const progress = access.progress ? await this.prisma.lessonProgress.findUnique({ where: { userId_lessonId: { userId, lessonId } } }) : null;
+    const progress = userId && access.progress ? await this.prisma.lessonProgress.findUnique({ where: { userId_lessonId: { userId, lessonId } } }) : null;
     return {
       id: lesson.id,
       courseId: lesson.courseId,

@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import type { AuthUser } from "../../common/auth/auth-user";
+import { OPTIONAL_AUTH_KEY } from "../../common/auth/optional-auth.decorator";
 import { IS_PUBLIC_KEY } from "../../common/auth/public.decorator";
 import { AppError } from "../../common/errors/app-error";
 import { SessionService } from "./session.service";
@@ -24,6 +25,8 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const header = req.headers.authorization;
     const match = typeof header === "string" ? /^Bearer\s+(\S+)$/i.exec(header) : null;
+    // Optional-auth routes let a request with no Authorization header through as a visitor; one that sends a token is checked in full below.
+    if (!header && this.reflector.getAllAndOverride<boolean | undefined>(OPTIONAL_AUTH_KEY, [context.getHandler(), context.getClass()])) return true;
     if (!match) throw new AppError("AUTH_REQUIRED", 401, "Authentication required");
 
     const { sub, sid } = this.tokens.verifyAccess(match[1]);

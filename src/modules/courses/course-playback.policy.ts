@@ -21,6 +21,13 @@ export class CoursePlaybackPolicy implements PlaybackAccessPolicy, OnModuleInit 
     this.policies.register(this);
   }
 
+  /** A signed-out visitor may play the video of a free-preview lesson of a PUBLISHED, unflagged course. */
+  async canPlayAnonymously(asset: MediaAsset): Promise<boolean> {
+    if (asset.purpose !== "COURSE_LESSON") return false;
+    const lessons = await this.prisma.lesson.findMany({ where: { videoAssetId: asset.id }, select: { isFreePreview: true, course: true } });
+    return lessons.some((lesson) => this.rules.anonymousLearnAccess(lesson.course, lesson) !== null);
+  }
+
   async canPlay(userId: string, asset: MediaAsset): Promise<boolean> {
     if (asset.purpose !== "COURSE_LESSON") return false;
     const lessons = await this.prisma.lesson.findMany({ where: { videoAssetId: asset.id }, select: { isFreePreview: true, course: true } });

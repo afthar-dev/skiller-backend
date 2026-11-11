@@ -4,11 +4,16 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { OptionalAuth, OptionalUser } from "../../common/auth/optional-auth.decorator";
+import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { learnCourseSchema, lessonContentSchema, progressResultSchema } from "./course-responses";
 import { LearnService } from "./learn.service";
 import { ProgressService } from "./progress.service";
+
+/** Signed-out visitors read free-preview lessons; they are limited per address. Signed-in users are not limited here. */
+export const ANON_LESSON_READS_PER_MINUTE = 60;
 
 const heartbeatSchema = z.object({ positionSec: z.number().int().min(0).max(86_400) }).strict();
 
@@ -28,12 +33,13 @@ export class LearnController {
     return this.learn.course(user.id, slug);
   }
 
-  @AuthenticatedOnly()
+  @OptionalAuth()
+  @RateLimit({ key: (req) => `learn:lesson:ip:${req.ip}`, limit: ANON_LESSON_READS_PER_MINUTE, windowSec: 60, anonymousOnly: true })
   @Get("lessons/:id")
-  @ApiOperation({ summary: "A lesson's content: article text, the video asset id for playback, a 5-minute resource download. Free-preview lessons are open to anyone" })
+  @ApiOperation({ summary: "A lesson's content: article text, the video asset id for playback, a 5-minute resource download. Free-preview lessons of a published course are open to anyone, signed in or not (signed out: 60 reads per minute per address; any other lesson needs a token and enrolment)" })
   @ApiJsonResponse(200, "The lesson's content; only the field of its type is filled.", lessonContentSchema)
-  lesson(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.learn.lesson(user.id, id);
+  lesson(@OptionalUser() user: AuthUser | null, @Param("id") id: string) {
+    return this.learn.lesson(user?.id ?? null, id);
   }
 
   @AuthenticatedOnly()

@@ -1,8 +1,9 @@
 import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
-import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { OptionalAuth, OptionalUser } from "../../common/auth/optional-auth.decorator";
+import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { RequirePermission } from "../rbac";
 import { API_PURPOSES, toPurpose } from "./media.rules";
 import { MediaService } from "./media.service";
@@ -31,6 +32,9 @@ const completeSchema = z
   .strict();
 
 const partsSchema = z.object({ partNumbers: z.array(z.number().int().min(1).max(10_000)).min(1).max(1000) }).strict();
+
+/** Signed-out visitors (free previews) are limited per address; signed-in users per account (PLAYBACKS_PER_HOUR in PlaybackService). */
+export const ANON_PLAYBACKS_PER_HOUR = 60;
 
 const idParam = z.string().uuid();
 
@@ -76,11 +80,12 @@ export class MediaController {
 
   /** Signed HLS manifest URL (10-minute token) for a private lesson video. Access is decided by the registered playback policies. */
   @Get(":id/playback")
-  @AuthenticatedOnly()
-  @ApiOperation({ summary: "Signed HLS manifest URL for a private lesson video (token valid 10 minutes; re-call to refresh)" })
+  @OptionalAuth()
+  @RateLimit({ key: (req) => `playback:ip:${req.ip}`, limit: ANON_PLAYBACKS_PER_HOUR, windowSec: 3600, anonymousOnly: true })
+  @ApiOperation({ summary: "Signed HLS manifest URL for a private lesson video (token valid 10 minutes; re-call to refresh). Works signed out for the video of a free-preview lesson of a published course (60 per hour per address); everything else needs a token" })
   @ApiJsonResponse(200, "Playback grant. The token in manifestUrl expires after 10 minutes: call this route again and reload the manifest.", objectSchema({ manifestUrl: schemas.str, expiresAt: schemas.isoDate, watermark: schemas.str }))
-  playbackGrant(@CurrentUser() user: AuthUser, @Param("id") id: string) {
-    return this.playback.grant(user.id, idParam.parse(id));
+  playbackGrant(@OptionalUser() user: AuthUser | null, @Param("id") id: string) {
+    return this.playback.grant(user?.id ?? null, idParam.parse(id));
   }
 
   /** Poll target for the frontend: status plus public URLs once READY. */

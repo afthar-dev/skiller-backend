@@ -5,6 +5,8 @@ export interface RateLimitOptions {
   key: (req: Request) => string;
   limit: number;
   windowSec: number;
+  /** Only count requests that carry no Authorization header (signed-out callers on an @OptionalAuth route). */
+  anonymousOnly?: boolean;
 }
 
 export const RATE_LIMIT_KEY = "skiller:rate-limit";

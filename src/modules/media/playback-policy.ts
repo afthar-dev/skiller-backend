@@ -5,6 +5,8 @@ import { PermissionService } from "../rbac";
 /** Decides whether a user may get a playback token for an asset. Any registered policy returning true allows. */
 export interface PlaybackAccessPolicy {
   canPlay(userId: string, asset: MediaAsset): Promise<boolean>;
+  /** Whether someone who is not signed in may play it. Omit for "never". */
+  canPlayAnonymously?(asset: MediaAsset): Promise<boolean>;
 }
 
 /**
