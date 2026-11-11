@@ -15,6 +15,9 @@ import { createTestItem, TestItemProvider } from "../support/test-item";
  * is a database read, and it used to happen inside the transaction: a second pooled connection while the first is held. With a small
  * pool and parallel checkouts, every connection was held and nobody could get another (P2024, 500).
  */
+/** The prefix of EntitlementsService's cached plans (`ent:<ownerType>:<ownerId>:<epoch>`). */
+const PLAN_CACHE_PREFIX = "ent:";
+
 describe("checkout with a creator coupon on a small connection pool", () => {
   let t: AuthTestApp;
   let prisma: PrismaService;
@@ -24,10 +27,19 @@ describe("checkout with a creator coupon on a small connection pool", () => {
   const auth = (s: { accessToken: string }) => ({ Authorization: `Bearer ${s.accessToken}` });
   afterEach(() => jest.restoreAllMocks());
 
-  /** Plan reads fall through to Postgres, as when the cached entries expired or Redis is unavailable. */
+  /**
+   * Plan reads fall through to Postgres, as when the cached entries expired or Redis is unavailable. Returns how many plan reads were
+   * refused: a test must see more than zero, or the cache key prefix changed and the test no longer exercises the database path.
+   */
   function planCacheUnavailable() {
     const original = redis.get.bind(redis) as (key: string) => Promise<string | null>;
-    jest.spyOn(redis, "get").mockImplementation(((key: string) => (key.startsWith("ent:") ? Promise.reject(new Error("redis unavailable")) : original(key))) as never);
+    const seen = { refused: 0 };
+    jest.spyOn(redis, "get").mockImplementation(((key: string) => {
+      if (!key.startsWith(PLAN_CACHE_PREFIX)) return original(key);
+      seen.refused++;
+      return Promise.reject(new Error("redis unavailable"));
+    }) as never);
+    return seen;
   }
 
   /** A Pro seller with an item and a creator-funded 10% coupon on their items. */
@@ -56,18 +68,20 @@ describe("checkout with a creator coupon on a small connection pool", () => {
     const listings = [];
     for (let i = 0; i < BURST; i++) listings.push(await listing());
     const buyers = await Promise.all(listings.map(() => t.login()));
-    planCacheUnavailable();
+    const cache = planCacheUnavailable();
     const res = await Promise.all(listings.map((l, i) => checkout(buyers[i], l.itemId, l.code)));
     expect(statuses(res)).toEqual(Array(BURST).fill(201));
     expect(res.map((r) => r.body.amountPaise)).toEqual(Array(BURST).fill("90000"));
+    expect(cache.refused).toBeGreaterThan(0);
   });
 
   it("a creator coupon of a seller whose plan has no creator coupons is still refused", async () => {
     const l = await listing("free");
     const buyer = await t.login();
-    planCacheUnavailable();
+    const cache = planCacheUnavailable();
     const res = await checkout(buyer, l.itemId, l.code);
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("COUPON_NOT_APPLICABLE");
+    expect(cache.refused).toBeGreaterThan(0);
   });
 });
