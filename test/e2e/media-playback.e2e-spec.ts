@@ -42,8 +42,17 @@ describe("signed private playback", () => {
   });
   afterAll(() => t?.close());
 
-  it("requires authentication", async () => {
-    expect((await http().get(`/v1/media/${uuidv7()}/playback`)).status).toBe(401);
+  // The route is optional-auth since signed-out visitors may play free-preview videos (test/e2e/course-preview-anonymous.e2e-spec.ts):
+  // no token is a visitor (an unknown asset is 404, a private one 403), but a token that is sent must still be good.
+  it("treats a missing token as a visitor who can play nothing private, and still rejects a bad token", async () => {
+    expect((await http().get(`/v1/media/${uuidv7()}/playback`)).status).toBe(404);
+    expect((await http().get(`/v1/media/${uuidv7()}/playback`).set({ Authorization: "Bearer nonsense" })).status).toBe(401);
+  });
+
+  it("refuses a visitor the private lesson video of a user", async () => {
+    const owner = await t.login();
+    const asset = await lesson(owner);
+    expect((await http().get(`/v1/media/${asset.id}/playback`)).status).toBe(403);
   });
 
   it("gives the owner a manifest URL with a 10-minute token for exactly that asset, plus the email watermark", async () => {
