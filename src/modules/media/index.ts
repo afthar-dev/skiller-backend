@@ -1,6 +1,8 @@
 // Public surface of the media module. Other modules import only from here.
 // Object storage first: billing imports it while media is still loading (billing <-> media), so it must not wait on anything that imports billing.
 export { ObjectStorage, ObjectStorageModule } from "./object-storage";
+// The URL resolver depends on nothing but prisma and config; users imports it while media is still loading, so it goes first.
+export { MediaUrlResolver } from "./media-url-resolver";
 // Services first, modules last: users and media reference each other, so the module export must not run before the services exist.
 export { MediaAttachments } from "./media-attachments";
 export { MediaPurger } from "./media-purger";

@@ -6,6 +6,7 @@ import { MediaPurger } from "./media-purger";
 import { MediaLifecycle } from "./media-lifecycle";
 import { MediaController } from "./media.controller";
 import { MediaService } from "./media.service";
+import { MediaUrlResolver } from "./media-url-resolver";
 import { OwnerOrAdminPlaybackPolicy, PLAYBACK_ACCESS_POLICY, PlaybackPolicies } from "./playback-policy";
 import { PlaybackService } from "./playback.service";
 import { R2Client } from "./r2.client";
@@ -17,6 +18,7 @@ import { R2Client } from "./r2.client";
   controllers: [MediaController],
   providers: [
     R2Client,
+    MediaUrlResolver,
     MediaLifecycle,
     MediaAttachments,
     MediaPurger,
@@ -27,7 +29,7 @@ import { R2Client } from "./r2.client";
     // The live array of registered policies (any true allows); Phase 3 adds its enrolment policy via PlaybackPolicies.register().
     { provide: PLAYBACK_ACCESS_POLICY, useFactory: (registry: PlaybackPolicies) => registry.policies, inject: [PlaybackPolicies] },
   ],
-  exports: [MediaService, MediaAttachments, MediaPurger, PlaybackPolicies],
+  exports: [MediaService, MediaUrlResolver, MediaAttachments, MediaPurger, PlaybackPolicies],
 })
 export class MediaModule implements OnModuleInit {
   constructor(

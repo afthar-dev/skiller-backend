@@ -19,7 +19,8 @@ import { ProfilesService } from "../users";
 import { MediaAttachments } from "./media-attachments";
 import { MediaLifecycle } from "./media-lifecycle";
 import { effectiveMaxBytes } from "./media-limits";
-import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, assetPrefix, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { publicUrlsOf } from "./media-url-resolver";
 import { R2Client, isNoSuchUpload } from "./r2.client";
 
 export interface MediaAssetDto {
@@ -339,19 +340,7 @@ export class MediaService {
   }
 
   private urls(a: MediaAsset): Record<string, string> | null {
-    if (a.bucket !== "PUBLIC" || a.status !== "READY") return null;
-    const base = this.config.r2.publicBaseUrl;
-    const prefix = assetPrefix(a);
-    const renditions = a.renditions as Record<string, unknown> | unknown[] | null;
-    if (a.purpose === "REEL" || a.purpose === "COURSE_PROMO") {
-      const out: Record<string, string> = { hls: `${base}/${prefix}/hls/index.m3u8` };
-      if (a.posterKey) out.poster = `${base}/${a.posterKey}`;
-      return out;
-    }
-    if (renditions && !Array.isArray(renditions)) {
-      return Object.fromEntries(Object.entries(renditions).map(([size, key]) => [size, `${base}/${String(key)}`]));
-    }
-    return null;
+    return publicUrlsOf(a, this.config.r2.publicBaseUrl);
   }
 }
 

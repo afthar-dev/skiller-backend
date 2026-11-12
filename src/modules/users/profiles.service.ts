@@ -1,11 +1,11 @@
-import { forwardRef, Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { escapeLike } from "../../common/db/like";
 import { Prisma, type MessagePolicy, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AccountService, UserStatusCache } from "../identity";
-import { MediaService } from "../media";
+import { MediaUrlResolver } from "../media";
 import { defaultDisplayName, generateHandle, isReservedHandle, isValidHandle, normalizeHandle } from "./handles";
 
 export interface ProfileView {
@@ -133,8 +133,7 @@ export class ProfilesService {
     private readonly accounts: AccountService,
     private readonly outbox: OutboxService,
     private readonly statuses: UserStatusCache,
-    // users and media import each other through their index files; forwardRef keeps this working whichever index loads first.
-    @Inject(forwardRef(() => MediaService)) private readonly media: MediaService,
+    private readonly media: MediaUrlResolver,
   ) {}
 
   /** Public avatar / banner URLs of several profiles, one query for all. Null where the asset is missing, not READY or not public. */

@@ -58,6 +58,10 @@ describe("WorkerModule boot (src/worker.ts path)", () => {
     expect(registered).toEqual(expect.arrayContaining(["user.profile_updated", "org.renamed"]));
     const { ProfilesService } = await import("./modules/users");
     expect((app.get(ProfilesService) as unknown as { outbox?: unknown }).outbox).toBeDefined();
+    // Profiles read avatar URLs through the media URL resolver, which the worker graph must provide (no Media<->Profiles provider cycle).
+    const { MediaUrlResolver } = await import("./modules/media");
+    expect(app.get(MediaUrlResolver)).toBeDefined();
+    await expect(app.get(ProfilesService).mediaUrls([{ avatarAssetId: null, bannerAssetId: null }])).resolves.toEqual([{ avatarUrl: null, bannerUrl: null }]);
     const expected = Object.entries(HANDLED).filter(([, handled]) => handled).map(([type]) => type).sort();
     expect(registered).toEqual(expected);
 

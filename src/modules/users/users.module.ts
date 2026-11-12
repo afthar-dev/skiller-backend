@@ -1,5 +1,5 @@
 import { Module, forwardRef } from "@nestjs/common";
-import { MediaModule } from "../media";
+import { MediaModule, MediaUrlResolver } from "../media";
 import { ModerationModule } from "../moderation";
 import { CreatorService } from "./creator.service";
 import { FollowsService } from "./follows.service";
@@ -12,7 +12,7 @@ import { RelationsController } from "./relations.controller";
 @Module({
   imports: [forwardRef(() => MediaModule), forwardRef(() => ModerationModule)],
   controllers: [MeController, ProfilesController, RelationsController],
-  providers: [ProfilesService, FollowsService, CreatorService, ProfileRegistrationHandler],
+  providers: [MediaUrlResolver, ProfilesService, FollowsService, CreatorService, ProfileRegistrationHandler],
   exports: [ProfilesService, FollowsService],
 })
 export class UsersModule {}
