@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Queue } from "bullmq";
+import { v7 as uuidv7 } from "uuid";
 import { InjectQueue } from "../../common/queue/queue.decorators";
 import { QueueNames } from "../../common/queue/queue.constants";
 import type { MailRef } from "./mail-hooks";
@@ -25,8 +26,10 @@ export class MailService {
   /** Enqueues only; the worker renders and calls Resend. */
   async send<T extends MailTemplate>(template: T, to: string, data: MailData[T], opts: MailSendOptions = {}): Promise<void> {
     const job: MailJobData = { template, to, data, category: opts.category ?? "transactional", ...(opts.ref ? { ref: opts.ref } : {}) } as MailJobData;
+    // Every mail has a globally unique job id (the worker derives Resend's Idempotency-Key from it). BullMQ's own counter restarts after a
+    // Redis flush while Resend remembers keys for 24 h, which made a later mail (a second sign-in code) look like a duplicate and vanish.
     // The OTP code is plaintext in the job data: drop the job as soon as it is done (or shortly after failing).
     const retention = template === "otp" ? { removeOnComplete: true, removeOnFail: { age: 3600 } } : {};
-    await this.queue.add("send", job, { ...retention, ...(opts.idempotencyKey ? { jobId: `mail-${opts.idempotencyKey}` } : {}) });
+    await this.queue.add("send", job, { ...retention, jobId: `mail-${opts.idempotencyKey ?? uuidv7()}` });
   }
 }

@@ -1,6 +1,8 @@
 import request from "supertest";
 import { QueueNames, queueToken } from "../../src/common/queue/queue.constants";
 import type { Queue } from "bullmq";
+import type { Redis } from "ioredis";
+import { REDIS } from "../../src/common/redis/redis.constants";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import { UserStatusCache } from "../../src/modules/identity/user-status.cache";
 import { AuthTestApp, createAuthTestApp, readRefreshCookie, uniqueEmail, uniqueIp } from "../support/auth-app";
@@ -269,5 +271,34 @@ describe("auth", () => {
     }
     const jobs = await queue.getJobs(["completed", "failed", "waiting", "active", "delayed"]);
     expect(jobs.filter((j) => (j.data as { to: string }).to === email.toLowerCase())).toHaveLength(0);
+  });
+
+  describe("second sign-in code (same email within seconds)", () => {
+    const codesFor = (email: string) => t.mail.sent.filter((m) => m.to === email.toLowerCase());
+
+    it("two back-to-back requests each deliver their own code", async () => {
+      const email = uniqueEmail("twice");
+      const a = await t.requestOtp(email);
+      const b = await t.requestOtp(email);
+      expect(a.challengeId).not.toBe(b.challengeId);
+      await t.codeFor(email, 1);
+      expect(codesFor(email)).toHaveLength(2);
+      const keys = codesFor(email).map((m) => m.idempotencyKey);
+      expect(new Set(keys).size).toBe(2);
+    });
+
+    it("a reset queue job counter (Redis restart, flushed queue) cannot make Resend swallow a later code", async () => {
+      const first = uniqueEmail("reset");
+      await t.login(first);
+      // BullMQ numbers jobs from this counter; after a Redis flush it restarts at 1 while Resend still remembers the old keys for 24 h.
+      const client = t.app.get<Redis>(REDIS);
+      await client.del(`bull:${QueueNames.mail}:id`);
+      const second = uniqueEmail("reset");
+      const before = t.mail.sent.length;
+      await t.login(second);
+      await client.del(`bull:${QueueNames.mail}:id`);
+      await t.login(second);
+      expect(t.mail.sent.length).toBe(before + 2);
+    });
   });
 });
