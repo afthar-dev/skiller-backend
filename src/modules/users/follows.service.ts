@@ -4,7 +4,7 @@ import { toPage, type PageQuery } from "../../common/http/pagination";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import type { Prisma, Profile } from "@prisma/client";
 import { UserBlocks } from "../moderation";
-import { ProfilesService, toSummary } from "./profiles.service";
+import { ProfilesService } from "./profiles.service";
 
 @Injectable()
 export class FollowsService {
@@ -108,7 +108,7 @@ export class FollowsService {
       if (batch.length < take) break;
       after = batch[batch.length - 1].userId;
     }
-    return toPage(visible.map(toSummary), page.limit);
+    return toPage(await this.profiles.summarize(visible), page.limit);
   }
 
 }

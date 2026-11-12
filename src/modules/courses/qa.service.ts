@@ -21,9 +21,10 @@ interface Author {
   handle: string | null;
   displayName: string;
   avatarAssetId: string | null;
+  avatarUrl: string | null;
 }
 
-const ANONYMOUS: Author = { handle: null, displayName: "Learner", avatarAssetId: null };
+const ANONYMOUS: Author = { handle: null, displayName: "Learner", avatarAssetId: null, avatarUrl: null };
 
 const questionNotFound = () => new AppError("QUESTION_NOT_FOUND", 404, "Question not found");
 const notAllowedToPost = () => new AppError("QA_NOT_ALLOWED", 403, "Enrol in this course to take part in the discussion");
@@ -140,7 +141,7 @@ export class QaService {
 
   private async authorsOf(userIds: string[]): Promise<Map<string, Author>> {
     const summaries = await this.profiles.summaries([...new Set(userIds)]);
-    return new Map([...summaries].map(([id, s]) => [id, { handle: s.handle, displayName: s.displayName, avatarAssetId: s.avatarAssetId }]));
+    return new Map([...summaries].map(([id, s]) => [id, { handle: s.handle, displayName: s.displayName, avatarAssetId: s.avatarAssetId, avatarUrl: s.avatarUrl }]));
   }
 
   private questionView(q: Question, authors: Map<string, Author>, answerCount: number) {

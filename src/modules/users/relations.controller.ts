@@ -86,7 +86,7 @@ export class RelationsController {
     return {
       items: page.items.flatMap((i) => {
         const s = summaries.get(i.userId);
-        return s ? [{ id: s.id, handle: s.handle, displayName: s.displayName, since: i.since.toISOString() }] : [];
+        return s ? [{ id: s.id, handle: s.handle, displayName: s.displayName, avatarUrl: s.avatarUrl, since: i.since.toISOString() }] : [];
       }),
       nextCursor: page.nextCursor,
     };

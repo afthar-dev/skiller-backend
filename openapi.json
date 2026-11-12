@@ -1320,6 +1320,8 @@
                         "about",
                         "avatarAssetId",
                         "bannerAssetId",
+                        "avatarUrl",
+                        "bannerUrl",
                         "location",
                         "links",
                         "followersCount",
@@ -1353,6 +1355,16 @@
                         "bannerAssetId": {
                           "type": "string",
                           "nullable": true
+                        },
+                        "avatarUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Public URL of the READY avatar; null when there is none or it is not ready."
+                        },
+                        "bannerUrl": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Public URL of the READY banner; null when there is none or it is not ready."
                         },
                         "location": {
                           "type": "string",
@@ -1548,6 +1560,8 @@
                     "about",
                     "avatarAssetId",
                     "bannerAssetId",
+                    "avatarUrl",
+                    "bannerUrl",
                     "location",
                     "links",
                     "followersCount",
@@ -1581,6 +1595,16 @@
                     "bannerAssetId": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "avatarUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the READY avatar; null when there is none or it is not ready."
+                    },
+                    "bannerUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the READY banner; null when there is none or it is not ready."
                     },
                     "location": {
                       "type": "string",
@@ -2275,6 +2299,8 @@
                     "about",
                     "avatarAssetId",
                     "bannerAssetId",
+                    "avatarUrl",
+                    "bannerUrl",
                     "location",
                     "links",
                     "followersCount",
@@ -2312,6 +2338,16 @@
                     "bannerAssetId": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "avatarUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the READY avatar; null when there is none or it is not ready."
+                    },
+                    "bannerUrl": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Public URL of the READY banner; null when there is none or it is not ready."
                     },
                     "location": {
                       "type": "string",
@@ -2634,7 +2670,8 @@
                         "required": [
                           "id",
                           "handle",
-                          "displayName"
+                          "displayName",
+                          "avatarUrl"
                         ],
                         "properties": {
                           "id": {
@@ -2651,6 +2688,10 @@
                             "nullable": true
                           },
                           "avatarAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
                             "type": "string",
                             "nullable": true
                           }
@@ -2733,7 +2774,8 @@
                         "required": [
                           "id",
                           "handle",
-                          "displayName"
+                          "displayName",
+                          "avatarUrl"
                         ],
                         "properties": {
                           "id": {
@@ -2750,6 +2792,10 @@
                             "nullable": true
                           },
                           "avatarAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "avatarUrl": {
                             "type": "string",
                             "nullable": true
                           }
@@ -3077,6 +3123,7 @@
                           "id",
                           "handle",
                           "displayName",
+                          "avatarUrl",
                           "since"
                         ],
                         "properties": {
@@ -3088,6 +3135,10 @@
                           },
                           "displayName": {
                             "type": "string"
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
                           },
                           "since": {
                             "type": "string",
@@ -3180,6 +3231,7 @@
                           "id",
                           "handle",
                           "displayName",
+                          "avatarUrl",
                           "since"
                         ],
                         "properties": {
@@ -3191,6 +3243,10 @@
                           },
                           "displayName": {
                             "type": "string"
+                          },
+                          "avatarUrl": {
+                            "type": "string",
+                            "nullable": true
                           },
                           "since": {
                             "type": "string",
@@ -17103,7 +17159,8 @@
                             "required": [
                               "handle",
                               "displayName",
-                              "avatarAssetId"
+                              "avatarAssetId",
+                              "avatarUrl"
                             ],
                             "properties": {
                               "handle": {
@@ -17114,6 +17171,10 @@
                                 "type": "string"
                               },
                               "avatarAssetId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "avatarUrl": {
                                 "type": "string",
                                 "nullable": true
                               }
@@ -17478,7 +17539,8 @@
                       "required": [
                         "handle",
                         "displayName",
-                        "avatarAssetId"
+                        "avatarAssetId",
+                        "avatarUrl"
                       ],
                       "properties": {
                         "handle": {
@@ -17489,6 +17551,10 @@
                           "type": "string"
                         },
                         "avatarAssetId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "avatarUrl": {
                           "type": "string",
                           "nullable": true
                         }
@@ -18070,7 +18136,8 @@
                             "required": [
                               "handle",
                               "displayName",
-                              "avatarAssetId"
+                              "avatarAssetId",
+                              "avatarUrl"
                             ],
                             "properties": {
                               "handle": {
@@ -18081,6 +18148,10 @@
                                 "type": "string"
                               },
                               "avatarAssetId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "avatarUrl": {
                                 "type": "string",
                                 "nullable": true
                               }
@@ -18198,7 +18269,8 @@
                       "required": [
                         "handle",
                         "displayName",
-                        "avatarAssetId"
+                        "avatarAssetId",
+                        "avatarUrl"
                       ],
                       "properties": {
                         "handle": {
@@ -18209,6 +18281,10 @@
                           "type": "string"
                         },
                         "avatarAssetId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "avatarUrl": {
                           "type": "string",
                           "nullable": true
                         }
@@ -18328,7 +18404,8 @@
                             "required": [
                               "handle",
                               "displayName",
-                              "avatarAssetId"
+                              "avatarAssetId",
+                              "avatarUrl"
                             ],
                             "properties": {
                               "handle": {
@@ -18339,6 +18416,10 @@
                                 "type": "string"
                               },
                               "avatarAssetId": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "avatarUrl": {
                                 "type": "string",
                                 "nullable": true
                               }
@@ -18456,7 +18537,8 @@
                       "required": [
                         "handle",
                         "displayName",
-                        "avatarAssetId"
+                        "avatarAssetId",
+                        "avatarUrl"
                       ],
                       "properties": {
                         "handle": {
@@ -18467,6 +18549,10 @@
                           "type": "string"
                         },
                         "avatarAssetId": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "avatarUrl": {
                           "type": "string",
                           "nullable": true
                         }

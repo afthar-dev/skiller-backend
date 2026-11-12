@@ -110,6 +110,7 @@ describe("course reviews and lesson Q&A", () => {
       expectDeclared(list, "GET /v1/courses/{slug}/reviews");
       expect(list.status).toBe(200);
       expect(list.body.items).toHaveLength(3);
+      expect(list.body.items[0].author).toHaveProperty("avatarUrl", null); // learners here have no avatar
       expect(list.body.summary).toMatchObject({ ratingAvg: 3.33, ratingCount: 3 });
     });
 

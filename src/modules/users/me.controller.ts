@@ -8,7 +8,7 @@ import { PermissionService } from "../rbac";
 import { RolesService } from "../rbac";
 import { MediaService } from "../media";
 import { CreatorService } from "./creator.service";
-import { ProfilesService, toOwnProfileView } from "./profiles.service";
+import { ProfilesService } from "./profiles.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { ApiJsonResponse, educationItemSchema, experienceItemSchema, listOf, objectSchema, ownProfileViewSchema, portfolioItemSchema, schemas } from "../../common/openapi/responses";
@@ -113,7 +113,7 @@ export class MeController {
       this.roles.platformRoleKeys(auth.id),
       this.permissions.effective(auth.id),
     ]);
-    return { user, profile: toOwnProfileView(profile), roles, permissions: [...effective.platform].sort() };
+    return { user, profile: await this.profiles.ownViewOf(profile), roles, permissions: [...effective.platform].sort() };
   }
 
   @Patch("profile")

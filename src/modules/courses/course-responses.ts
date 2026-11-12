@@ -75,7 +75,7 @@ export const publicCurriculumSchema: Schema = objectSchema({
   totals: objectSchema({ sections: int, lessons: int, durationSec: int }),
 });
 
-const reviewAuthor = objectSchema({ handle: nullableStr, displayName: str, avatarAssetId: nullableStr });
+const reviewAuthor = objectSchema({ handle: nullableStr, displayName: str, avatarAssetId: nullableStr, avatarUrl: nullableStr });
 
 /** A review as the course page shows it. */
 export const reviewViewSchema: Schema = objectSchema({ id: str, rating: int, body: nullableStr, createdAt: isoDate, updatedAt: isoDate, reply: nullableStr, repliedAt: nullableDate, author: reviewAuthor });
@@ -230,7 +230,7 @@ export const publicCertificateSchema: Schema = objectSchema({
 
 export const certificateDownloadSchema: Schema = objectSchema({ url: str, expiresAt: isoDate });
 
-const author = objectSchema({ handle: nullableStr, displayName: str, avatarAssetId: nullableStr });
+const author = objectSchema({ handle: nullableStr, displayName: str, avatarAssetId: nullableStr, avatarUrl: nullableStr });
 
 export const questionViewSchema: Schema = objectSchema({ id: str, lessonId: str, body: str, createdAt: isoDate, answerCount: int, author });
 export const questionPageSchema: Schema = pageSchema(questionViewSchema);

@@ -1,10 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { forwardRef, Inject, Injectable } from "@nestjs/common";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { escapeLike } from "../../common/db/like";
 import { Prisma, type MessagePolicy, type Profile } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AccountService, UserStatusCache } from "../identity";
+import { MediaService } from "../media";
 import { defaultDisplayName, generateHandle, isReservedHandle, isValidHandle, normalizeHandle } from "./handles";
 
 export interface ProfileView {
@@ -15,6 +16,10 @@ export interface ProfileView {
   about: string | null;
   avatarAssetId: string | null;
   bannerAssetId: string | null;
+  /** Public URL of the READY avatar (256 px rendition); null when there is none, it is not ready or not public. */
+  avatarUrl: string | null;
+  /** Public URL of the READY banner (1024 px rendition); null likewise. */
+  bannerUrl: string | null;
   location: string | null;
   links: unknown;
   followersCount: number;
@@ -36,6 +41,7 @@ export interface ProfileSummary {
   displayName: string;
   headline: string | null;
   avatarAssetId: string | null;
+  avatarUrl: string | null;
 }
 
 export interface ProfilePatch {
@@ -72,8 +78,21 @@ export interface PortfolioInput {
 
 const GENERATION_ATTEMPTS = 10;
 
-/** The public view of a profile (what GET /profiles/:handle returns). */
-export const toProfileView = (p: Profile): ProfileView => ({
+/** Rendition at `width` px, else the widest one there is (a small source has fewer). Null when there are none. */
+export function pickRendition(urls: Record<string, string> | undefined, width: number): string | null {
+  if (!urls) return null;
+  if (urls[width]) return urls[width];
+  const widest = Object.keys(urls).map(Number).filter(Number.isFinite).sort((a, b) => b - a)[0];
+  return widest === undefined ? null : urls[String(widest)];
+}
+
+export interface ProfileMediaUrls {
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+}
+
+/** The public view of a profile (what GET /profiles/:handle returns). `urls` come from ProfilesService.mediaUrls. */
+export const toProfileView = (p: Profile, urls: ProfileMediaUrls): ProfileView => ({
   userId: p.userId,
   handle: p.handle,
   displayName: p.displayName,
@@ -81,6 +100,8 @@ export const toProfileView = (p: Profile): ProfileView => ({
   about: p.about,
   avatarAssetId: p.avatarAssetId,
   bannerAssetId: p.bannerAssetId,
+  avatarUrl: urls.avatarUrl,
+  bannerUrl: urls.bannerUrl,
   location: p.location,
   links: p.links,
   followersCount: p.followersCount,
@@ -91,14 +112,15 @@ export const toProfileView = (p: Profile): ProfileView => ({
 });
 
 /** The owner's view (/me and PATCH /me/profile): the public view and the private settings. */
-export const toOwnProfileView = (p: Profile): OwnProfileView => ({ ...toProfileView(p), allowMessagesFrom: p.allowMessagesFrom });
+export const toOwnProfileView = (p: Profile, urls: ProfileMediaUrls): OwnProfileView => ({ ...toProfileView(p, urls), allowMessagesFrom: p.allowMessagesFrom });
 
-export const toSummary = (p: Pick<Profile, "userId" | "handle" | "displayName" | "headline" | "avatarAssetId">): ProfileSummary => ({
+export const toSummary = (p: Pick<Profile, "userId" | "handle" | "displayName" | "headline" | "avatarAssetId">, avatarUrl: string | null): ProfileSummary => ({
   id: p.userId,
   handle: p.handle,
   displayName: p.displayName,
   headline: p.headline,
   avatarAssetId: p.avatarAssetId,
+  avatarUrl,
 });
 
 const isoDate = (s: string) => new Date(`${s.slice(0, 10)}T00:00:00.000Z`);
@@ -111,7 +133,33 @@ export class ProfilesService {
     private readonly accounts: AccountService,
     private readonly outbox: OutboxService,
     private readonly statuses: UserStatusCache,
+    // users and media import each other through their index files; forwardRef keeps this working whichever index loads first.
+    @Inject(forwardRef(() => MediaService)) private readonly media: MediaService,
   ) {}
+
+  /** Public avatar / banner URLs of several profiles, one query for all. Null where the asset is missing, not READY or not public. */
+  async mediaUrls(rows: Array<Pick<Profile, "avatarAssetId" | "bannerAssetId">>): Promise<ProfileMediaUrls[]> {
+    const ids = rows.flatMap((r) => [r.avatarAssetId, r.bannerAssetId].filter((x): x is string => x !== null));
+    const urls = await this.media.publicUrls(ids);
+    return rows.map((r) => ({
+      avatarUrl: r.avatarAssetId ? pickRendition(urls.get(r.avatarAssetId), 256) : null,
+      bannerUrl: r.bannerAssetId ? pickRendition(urls.get(r.bannerAssetId), 1024) : null,
+    }));
+  }
+
+  async viewOf(profile: Profile): Promise<ProfileView> {
+    return toProfileView(profile, (await this.mediaUrls([profile]))[0]);
+  }
+
+  async ownViewOf(profile: Profile): Promise<OwnProfileView> {
+    return toOwnProfileView(profile, (await this.mediaUrls([profile]))[0]);
+  }
+
+  /** Summaries of profile rows already in hand (a page of followers), avatar URLs batched. */
+  async summarize(rows: Profile[]): Promise<ProfileSummary[]> {
+    const urls = await this.mediaUrls(rows);
+    return rows.map((r, i) => toSummary(r, urls[i].avatarUrl));
+  }
 
   /**
    * Creates the user's profile if missing and returns it. Safe to call any number of times, concurrently and from the outbox
@@ -188,7 +236,8 @@ export class ProfilesService {
 
   async summaries(userIds: string[]): Promise<Map<string, ProfileSummary>> {
     const rows = await this.prisma.profile.findMany({ where: { userId: { in: userIds } } });
-    return new Map(rows.map((r) => [r.userId, toSummary(r)]));
+    const summaries = await this.summarize(rows);
+    return new Map(summaries.map((x) => [x.id, x]));
   }
 
   /** `inTx` runs inside the update's transaction before the write, with the current row (used to attach/detach media so a rejected asset aborts the whole update). */
@@ -214,16 +263,15 @@ export class ProfilesService {
     if (patch.allowMessagesFrom !== undefined) data.allowMessagesFrom = patch.allowMessagesFrom;
 
     try {
-      return toOwnProfileView(
-        await this.prisma.$transaction(async (tx) => {
-          const current = await tx.profile.findUniqueOrThrow({ where: { userId } });
-          if (inTx) await inTx(tx, current);
-          const row = await tx.profile.update({ where: { userId }, data });
-          // Courses copy the creator's name for search: tell them (the handler reads the current name).
-          if (row.displayName !== current.displayName) await this.outbox.enqueue(tx, { type: "user.profile_updated", userId });
-          return row;
-        }),
-      );
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const current = await tx.profile.findUniqueOrThrow({ where: { userId } });
+        if (inTx) await inTx(tx, current);
+        const row = await tx.profile.update({ where: { userId }, data });
+        // Courses copy the creator's name for search: tell them (the handler reads the current name).
+        if (row.displayName !== current.displayName) await this.outbox.enqueue(tx, { type: "user.profile_updated", userId });
+        return row;
+      });
+      return await this.ownViewOf(updated);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         throw new AppError("HANDLE_TAKEN", 409, "This handle is already taken");

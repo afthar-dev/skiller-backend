@@ -8,7 +8,7 @@ import { parsePage } from "../../common/http/pagination";
 import { SessionService } from "../identity";
 import { TokenService } from "../identity";
 import { FollowsService } from "./follows.service";
-import { ProfilesService, toProfileView } from "./profiles.service";
+import { ProfilesService } from "./profiles.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { ApiJsonResponse, ApiNoContent, pageSchema, profileSummarySchema, publicProfileSchema } from "../../common/openapi/responses";
@@ -49,7 +49,7 @@ export class ProfilesController {
       this.profiles.portfolio(profile.userId),
       viewerId ? this.follows.isFollowing(viewerId, profile.userId) : Promise.resolve(undefined),
     ]);
-    return { ...toProfileView(profile), experience, education, skills, portfolio, ...(isFollowing === undefined ? {} : { isFollowing }) };
+    return { ...(await this.profiles.viewOf(profile)), experience, education, skills, portfolio, ...(isFollowing === undefined ? {} : { isFollowing }) };
   }
 
   @AuthenticatedOnly()

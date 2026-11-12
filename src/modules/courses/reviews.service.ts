@@ -26,9 +26,10 @@ interface Author {
   handle: string | null;
   displayName: string;
   avatarAssetId: string | null;
+  avatarUrl: string | null;
 }
 
-const ANONYMOUS: Author = { handle: null, displayName: "Learner", avatarAssetId: null };
+const ANONYMOUS: Author = { handle: null, displayName: "Learner", avatarAssetId: null, avatarUrl: null };
 
 /** What a reader of the course page sees of a review. The reviewer's user id is not part of it. */
 const toPublic = (r: Review, author: Author | undefined) => ({
@@ -81,7 +82,7 @@ export class ReviewsService {
     return {
       items: items.map((r) => {
         const a = authors.get(r.userId);
-        return toPublic(r, a ? { handle: a.handle, displayName: a.displayName, avatarAssetId: a.avatarAssetId } : undefined);
+        return toPublic(r, a ? { handle: a.handle, displayName: a.displayName, avatarAssetId: a.avatarAssetId, avatarUrl: a.avatarUrl } : undefined);
       }),
       nextCursor,
       summary: {

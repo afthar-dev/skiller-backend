@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { SettingsService } from "../admin";
 import { Prisma, type MediaAsset } from "@prisma/client";
 import type { Queue } from "bullmq";
@@ -65,7 +65,8 @@ export class MediaService {
     private readonly r2: R2Client,
     private readonly lifecycle: MediaLifecycle,
     private readonly attachments: MediaAttachments,
-    private readonly profiles: ProfilesService,
+    // users and media import each other through their index files; forwardRef keeps this working whichever index loads first.
+    @Inject(forwardRef(() => ProfilesService)) private readonly profiles: ProfilesService,
     private readonly permissions: PermissionService,
     private readonly roles: PlatformRoleDirectory,
     private readonly settings: SettingsService,

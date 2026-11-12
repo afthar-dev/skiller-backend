@@ -215,7 +215,7 @@ export class OrganizationsService {
       nextCursor: result.nextCursor,
       items: result.items.map((i) => {
         const p = profiles.get(i.userId);
-        return { userId: i.userId, roles: i.roles, handle: p?.handle ?? null, displayName: p?.displayName ?? null };
+        return { userId: i.userId, roles: i.roles, handle: p?.handle ?? null, displayName: p?.displayName ?? null, avatarUrl: p?.avatarUrl ?? null };
       }),
     };
   }

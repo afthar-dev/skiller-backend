@@ -17,6 +17,8 @@ export const profileViewSchema: Schema = {
     "about",
     "avatarAssetId",
     "bannerAssetId",
+    "avatarUrl",
+    "bannerUrl",
     "location",
     "links",
     "followersCount",
@@ -33,6 +35,8 @@ export const profileViewSchema: Schema = {
     about: nullableStr,
     avatarAssetId: nullableStr,
     bannerAssetId: nullableStr,
+    avatarUrl: { ...nullableStr, description: "Public URL of the READY avatar; null when there is none or it is not ready." },
+    bannerUrl: { ...nullableStr, description: "Public URL of the READY banner; null when there is none or it is not ready." },
     location: nullableStr,
     links: { type: "array", items: { type: "object", properties: { label: str, url: str } } },
     followersCount: { type: "integer" },
@@ -76,8 +80,8 @@ const bool = { type: "boolean" } as const;
 
 /** Compact member card used in follower, following, block and mute lists. */
 export const profileSummarySchema: Schema = objectSchema(
-  { id: str, handle: str, displayName: str, headline: nullableStr, avatarAssetId: nullableStr },
-  ["id", "handle", "displayName"],
+  { id: str, handle: str, displayName: str, headline: nullableStr, avatarAssetId: nullableStr, avatarUrl: nullableStr },
+  ["id", "handle", "displayName", "avatarUrl"],
 );
 
 /** A cursor page: `nextCursor` is null on the last page. */
@@ -114,4 +118,4 @@ export const publicProfileSchema: Schema = {
 };
 
 /** One row of GET /me/blocks and /me/mutes. */
-export const relationItemSchema: Schema = objectSchema({ id: str, handle: str, displayName: str, since: isoDate });
+export const relationItemSchema: Schema = objectSchema({ id: str, handle: str, displayName: str, avatarUrl: nullableStr, since: isoDate });
