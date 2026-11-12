@@ -61,15 +61,34 @@ describe("SessionService", () => {
     expect(row.rotatedAt).not.toBeNull();
   });
 
-  it("REFRESH_RACE: old token inside 10 s is a 409 and the new token still works", async () => {
+  it("dropped response: old token inside 10 s returns the same new token and Redis never holds it raw", async () => {
     const userId = await newUser();
-    const { refreshToken: t0 } = await sessions.create(userId, meta);
+    const { session, refreshToken: t0 } = await sessions.create(userId, meta);
     const { refreshToken: t1 } = await sessions.rotate(t0, meta);
-    clock.advanceSec(10);
+    const stored = await redis.get(`sessions:grace:${createHash("sha256").update(t0).digest("hex")}`);
+    expect(stored).toBeTruthy();
+    expect(stored).not.toContain(t1);
+    expect(Buffer.from(stored!, "base64url").toString("utf8")).not.toContain(t1);
+    clock.advance(9_999);
+    await expect(sessions.rotate(t0, meta)).resolves.toEqual({ userId, sessionId: session.id, refreshToken: t1 });
+    await expect(sessions.rotate(t0, meta)).resolves.toMatchObject({ refreshToken: t1 });
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).toBeNull();
+    await expect(sessions.rotate(t1, meta)).resolves.toMatchObject({ userId });
+  });
+
+  it("grace falls back to REFRESH_RACE when the entry is missing, and never serves a revoked session", async () => {
+    const userId = await newUser();
+    const { session, refreshToken: t0 } = await sessions.create(userId, meta);
+    await sessions.rotate(t0, meta);
+    await redis.del(`sessions:grace:${createHash("sha256").update(t0).digest("hex")}`);
     const err = await errOf(sessions.rotate(t0, meta));
     expect(err.code).toBe("REFRESH_RACE");
     expect(err.status).toBe(409);
-    await expect(sessions.rotate(t1, meta)).resolves.toMatchObject({ userId });
+    const b = await sessions.create(userId, meta);
+    await sessions.rotate(b.refreshToken, meta);
+    await sessions.revoke(b.session.id);
+    expect((await errOf(sessions.rotate(b.refreshToken, meta))).code).toBe("AUTH_SESSION_EXPIRED");
+    expect(session.id).not.toBe(b.session.id);
   });
 
   it("AUTH_TOKEN_REUSED: old token after 10 s revokes the whole family, including the new token", async () => {
@@ -123,12 +142,16 @@ describe("SessionService", () => {
     expect((await errOf(sessions.rotate(refreshToken, meta))).code).toBe("AUTH_SESSION_EXPIRED");
   });
 
-  it("concurrent rotations of one token: exactly one wins, the rest are REFRESH_RACE", async () => {
+  it("concurrent rotations of one token: one rotation happens, every caller gets that same new token or REFRESH_RACE", async () => {
     const userId = await newUser();
-    const { refreshToken } = await sessions.create(userId, meta);
+    const { session, refreshToken } = await sessions.create(userId, meta);
     const results = await Promise.allSettled(Array.from({ length: 6 }, () => sessions.rotate(refreshToken, meta)));
-    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const ok = results.filter((r): r is PromiseFulfilledResult<{ refreshToken: string }> => r.status === "fulfilled");
+    expect(ok.length).toBeGreaterThanOrEqual(1);
+    expect(new Set(ok.map((r) => r.value.refreshToken)).size).toBe(1);
     for (const r of results) if (r.status === "rejected") expect((r.reason as AppError).code).toBe("REFRESH_RACE");
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
+    expect(row.refreshHash).toBe(createHash("sha256").update(ok[0].value.refreshToken).digest("hex"));
   });
 
   it("revoke sets sessions:revoked:{sid} with a 15 min TTL; revokeAllForUser honours exceptSessionId; list hides revoked", async () => {

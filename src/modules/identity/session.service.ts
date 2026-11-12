@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Session } from "@prisma/client";
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import type { Redis } from "ioredis";
 import { v7 as uuidv7 } from "uuid";
 import { CLOCK, type Clock } from "../../common/clock/clock";
@@ -14,6 +14,8 @@ export const REFRESH_RACE_WINDOW_MS = 10_000;
 /** Matches the access token lifetime: after this a revoked session's tokens are expired anyway. */
 export const REVOKED_KEY_TTL_SEC = 16 * 60;
 const MARKER_ATTEMPTS = 3;
+/** Redis TTL of a grace entry; the DB rotatedAt check is what enforces the exact 10 s window. */
+const GRACE_KEY_TTL_SEC = 12;
 
 // Ops: Redis must run with maxmemory-policy noeviction (see README); an evicted marker would re-enable a revoked access token.
 
@@ -25,6 +27,25 @@ export interface SessionMeta {
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const newRefreshToken = () => randomBytes(32).toString("base64url");
 const revokedKey = (sessionId: string) => `sessions:revoked:${sessionId}`;
+const graceKey = (oldHash: string) => `sessions:grace:${oldHash}`;
+/** Key derived from the OLD token: Redis holds only ciphertext that just the holder of that token can open. */
+const graceKeyFor = (oldToken: string) => createHash("sha256").update(`refresh-grace:${oldToken}`).digest();
+const sealGrace = (oldToken: string, newToken: string): string => {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", graceKeyFor(oldToken), iv);
+  const body = Buffer.concat([cipher.update(newToken, "utf8"), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64url");
+};
+const openGrace = (oldToken: string, sealed: string): string | null => {
+  try {
+    const raw = Buffer.from(sealed, "base64url");
+    const decipher = createDecipheriv("aes-256-gcm", graceKeyFor(oldToken), raw.subarray(0, 12));
+    decipher.setAuthTag(raw.subarray(12, 28));
+    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
+  } catch {
+    return null;
+  }
+};
 const clip = (userAgent: string) => userAgent.slice(0, 512);
 
 @Injectable()
@@ -84,7 +105,10 @@ export class SessionService {
           userAgent: clip(meta.userAgent),
         },
       });
-      if (won.count === 1) return { userId: current.userId, sessionId: current.id, refreshToken: next };
+      if (won.count === 1) {
+        await this.storeGrace(refreshToken, hash, next);
+        return { userId: current.userId, sessionId: current.id, refreshToken: next };
+      }
       // Lost the race (or the session was revoked meanwhile): re-evaluate, now via previousHash.
       if (mayRetry) return this.rotateOnce(refreshToken, meta, false);
       throw this.sessionExpired();
@@ -93,6 +117,10 @@ export class SessionService {
     const stale = await this.prisma.session.findUnique({ where: { previousHash: hash } });
     if (stale) {
       if (stale.rotatedAt && now.getTime() - stale.rotatedAt.getTime() <= REFRESH_RACE_WINDOW_MS) {
+        // Idempotent rotation: a response lost on the way is retried with the old cookie; hand back the token already issued.
+        if (stale.revokedAt || stale.expiresAt <= now) throw this.sessionExpired();
+        const replay = await this.replayGrace(refreshToken, hash, stale.refreshHash);
+        if (replay) return { userId: stale.userId, sessionId: stale.id, refreshToken: replay };
         throw new AppError("REFRESH_RACE", 409, "Refresh already in progress; retry with the newest cookie");
       }
       await this.revokeFamily(stale.familyId, now);
@@ -100,6 +128,27 @@ export class SessionService {
     }
 
     throw this.sessionExpired();
+  }
+
+  private async storeGrace(oldToken: string, oldHash: string, newToken: string): Promise<void> {
+    try {
+      await this.redis.set(graceKey(oldHash), sealGrace(oldToken, newToken), "EX", GRACE_KEY_TTL_SEC);
+    } catch (err) {
+      // Without the entry a lost response degrades to the old 409 path; rotation itself must not fail.
+      this.logger.warn(`could not store refresh grace entry: ${(err as Error).message}`);
+    }
+  }
+
+  private async replayGrace(oldToken: string, oldHash: string, currentHash: string): Promise<string | null> {
+    let sealed: string | null;
+    try {
+      sealed = await this.redis.get(graceKey(oldHash));
+    } catch {
+      return null;
+    }
+    if (!sealed) return null;
+    const token = openGrace(oldToken, sealed);
+    return token && sha256(token) === currentHash ? token : null;
   }
 
   /** Revokes a session. With `ownerId`, only a session of that user; returns false if there is no such session. */

@@ -110,13 +110,13 @@ describe("auth", () => {
     expect(newToo.body.error.code).toBe("AUTH_SESSION_EXPIRED");
   });
 
-  it("Review Focus 1: old cookie reused within 10 s is 409 REFRESH_RACE and the new cookie still works", async () => {
+  it("Review Focus 1: old cookie within 10 s gets the same new cookie again (dropped response) and it still works", async () => {
     const { cookie: c0 } = await t.login();
     const c1 = readRefreshCookie(await refresh(c0.value))!;
     t.clock.advance(3_000);
-    const race = await refresh(c0.value);
-    expect(race.status).toBe(409);
-    expect(race.body.error.code).toBe("REFRESH_RACE");
+    const again = await refresh(c0.value);
+    expect(again.status).toBe(200);
+    expect(readRefreshCookie(again)!.value).toBe(c1.value);
     const ok = await refresh(c1.value);
     expect(ok.status).toBe(200);
     expect(readRefreshCookie(ok)!.value).not.toBe(c1.value);
