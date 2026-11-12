@@ -104,6 +104,31 @@ describe("SessionService", () => {
     expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).not.toBeNull();
   });
 
+  it("a token two generations old is reuse at once: it revokes the family, while the previous token keeps its 10 s grace", async () => {
+    const userId = await newUser();
+    const { session, refreshToken: t0 } = await sessions.create(userId, meta);
+    const { refreshToken: t1 } = await sessions.rotate(t0, meta);
+    const { refreshToken: t2 } = await sessions.rotate(t1, meta);
+    // t1 is the immediately previous token: a lost response is still replayed inside the window
+    expect((await sessions.rotate(t1, meta)).refreshToken).toBe(t2);
+    // t0 is older than one generation: not a race, whatever the clock says
+    const err = await errOf(sessions.rotate(t0, meta));
+    expect(err.code).toBe("AUTH_TOKEN_REUSED");
+    expect(err.status).toBe(401);
+    expect((await errOf(sessions.rotate(t2, meta))).code).toBe("AUTH_SESSION_EXPIRED");
+    expect(await sessions.isRevoked(session.id)).toBe(true);
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).not.toBeNull();
+  });
+
+  it("remembers only the last 20 retired tokens per session", async () => {
+    const userId = await newUser();
+    let { session, refreshToken } = await sessions.create(userId, meta);
+    for (let i = 0; i < 25; i++) refreshToken = (await sessions.rotate(refreshToken, meta)).refreshToken;
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
+    expect(row.retiredHashes).toHaveLength(20);
+    void session;
+  });
+
   it("family revocation covers every session of the family", async () => {
     const userId = await newUser();
     const a = await sessions.create(userId, meta);

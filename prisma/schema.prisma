@@ -107,23 +107,26 @@ model OtpChallenge {
 }
 
 model Session {
-  id           String    @id @default(uuid(7))
-  userId       String
-  familyId     String
-  refreshHash  String    @unique
-  previousHash String?   @unique
-  rotatedAt    DateTime?
-  userAgent    String
-  ip           String
-  lastUsedAt   DateTime
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(uuid(7))
+  userId        String
+  familyId      String
+  refreshHash   String    @unique
+  previousHash  String?   @unique
+  /// Hashes of tokens older than previousHash (newest first, capped): presenting one is reuse, not a race.
+  retiredHashes String[]  @default([])
+  rotatedAt     DateTime?
+  userAgent     String
+  ip            String
+  lastUsedAt    DateTime
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([familyId])
+  @@index([retiredHashes], type: Gin)
   @@map("sessions")
 }
 
@@ -1611,31 +1614,31 @@ enum CampaignRecipientStatus {
 
 /// A promotional email campaign. createdById / approvedById point at users (no FK: users is another module).
 model Campaign {
-  id           String         @id @default(uuid(7))
-  name         String
-  subject      String
+  id             String         @id @default(uuid(7))
+  name           String
+  subject        String
   /// Markdown, validated by assertSafeMarkdown; the unsubscribe footer is added by the mail template.
-  bodyMarkdown String
+  bodyMarkdown   String
   /// Validated by growth's segmentSchema: roles, plan, interests, lastActive, hasPurchased.
-  segment      Json
-  status       CampaignStatus @default(DRAFT)
-  scheduledAt  DateTime?
-  startedAt    DateTime?
-  finishedAt   DateTime?
+  segment        Json
+  status         CampaignStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
   /// Recipient rows written when sending started.
-  audienceSize Int?
-  createdById  String
+  audienceSize   Int?
+  createdById    String
   /// Whoever last changed the draft (the creator until someone else edits it); the approver can be neither the creator nor this admin.
   lastEditedById String?
   /// Required (and not the creator or the last editor) for audiences above 10,000; withdrawn by any edit.
-  approvedById String?
-  approvedAt   DateTime?
+  approvedById   String?
+  approvedAt     DateTime?
   /// SHA-256 of the subject, body and segment the approver saw; the approval counts only while the campaign still hashes to this.
-  approvalHash String?
+  approvalHash   String?
   /// Distinct recipients per Resend event: delivered, opened, clicked, bounced, complained.
-  stats        Json           @default("{}")
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  stats          Json           @default("{}")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   recipients CampaignRecipient[]
 
@@ -1788,23 +1791,23 @@ enum GigTier {
 
 /// A creator's service listing. Display only: Skiller does not process gig payments (see `gig_orders`).
 model Gig {
-  id           String    @id @default(uuid(7))
-  sellerId     String
-  slug         String    @unique
-  title        String
+  id                 String                   @id @default(uuid(7))
+  sellerId           String
+  slug               String                   @unique
+  title              String
   /// Markdown, validated by assertSafeMarkdown.
-  description  String    @default("")
-  categoryId   String
-  tags         String[]
-  status       GigStatus @default(DRAFT)
-  coverAssetId String?
+  description        String                   @default("")
+  categoryId         String
+  tags               String[]
+  status             GigStatus                @default(DRAFT)
+  coverAssetId       String?
   /// The lowest package price (paise), kept by the gigs service on every package write; the catalog filters and sorts on it.
   startingPricePaise BigInt?
   /// Full-text document (simple config): title A, tags B, description C. Kept by the gigs_search_vector trigger, never by Prisma; its partial GIN indexes are hand-written.
-  searchVector Unsupported("tsvector")?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  publishedAt  DateTime?
+  searchVector       Unsupported("tsvector")?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  publishedAt        DateTime?
 
   category Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   packages GigPackage[]

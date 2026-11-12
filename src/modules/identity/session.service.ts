@@ -14,6 +14,8 @@ export const REFRESH_RACE_WINDOW_MS = 10_000;
 /** Matches the access token lifetime: after this a revoked session's tokens are expired anyway. */
 export const REVOKED_KEY_TTL_SEC = 16 * 60;
 const MARKER_ATTEMPTS = 3;
+/** How many tokens older than the previous one a session remembers, to recognise their reuse. */
+const RETIRED_HASHES_KEPT = 20;
 /** Redis TTL of a grace entry; the DB rotatedAt check is what enforces the exact 10 s window. */
 const GRACE_KEY_TTL_SEC = 12;
 
@@ -106,6 +108,8 @@ export class SessionService {
         },
       });
       if (won.count === 1) {
+        // The token that was "previous" is now two generations old: remember it (capped) so its reuse is theft, not a race.
+        if (current.previousHash) await this.retire(current.id, current.previousHash);
         await this.storeGrace(refreshToken, hash, next);
         return { userId: current.userId, sessionId: current.id, refreshToken: next };
       }
@@ -127,7 +131,22 @@ export class SessionService {
       throw new AppError("AUTH_TOKEN_REUSED", 401, "Refresh token reuse detected; please sign in again");
     }
 
+    const retired = await this.prisma.session.findFirst({ where: { retiredHashes: { has: hash } }, select: { familyId: true } });
+    if (retired) {
+      await this.revokeFamily(retired.familyId, now);
+      throw new AppError("AUTH_TOKEN_REUSED", 401, "Refresh token reuse detected; please sign in again");
+    }
+
     throw this.sessionExpired();
+  }
+
+  private async retire(sessionId: string, hash: string): Promise<void> {
+    try {
+      await this.prisma.$executeRaw`UPDATE "sessions" SET "retiredHashes" = (array_prepend(${hash}::text, "retiredHashes"))[1:${RETIRED_HASHES_KEPT}] WHERE "id" = ${sessionId}`;
+    } catch (err) {
+      // Detection of old tokens degrades; rotation itself must not fail.
+      this.logger.warn(`could not record a retired refresh token: ${(err as Error).message}`);
+    }
   }
 
   private async storeGrace(oldToken: string, oldHash: string, newToken: string): Promise<void> {
