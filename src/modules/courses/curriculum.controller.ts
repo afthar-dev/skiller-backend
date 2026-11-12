@@ -44,6 +44,7 @@ const updateLessonSchema = z
 
 const orderSchema = z
   .object({
+    expectedVersion: z.string().min(1).max(64),
     sections: z
       .array(z.object({ id: uuid, lessonIds: z.array(uuid).max(500) }).strict())
       .max(50),
@@ -65,7 +66,7 @@ export class StudioCurriculumController {
 
   @AuthenticatedOnly()
   @Put("order")
-  @ApiOperation({ summary: "Reorder the whole curriculum in one call: every section and lesson exactly once, positions become dense 0..n" })
+  @ApiOperation({ summary: "Reorder the whole curriculum in one call: every section and lesson exactly once, positions become dense 0..n. Send the `version` the order was built from; a newer curriculum answers 409 ORDER_STALE" })
   @ApiJsonResponse(200, "The curriculum in its new order.", studioCurriculumSchema)
   @ApiZodBody(orderSchema)
   order(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {

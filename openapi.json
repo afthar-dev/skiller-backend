@@ -13004,9 +13004,13 @@
                 "schema": {
                   "type": "object",
                   "required": [
+                    "version",
                     "sections"
                   ],
                   "properties": {
+                    "version": {
+                      "type": "string"
+                    },
                     "sections": {
                       "type": "array",
                       "items": {
@@ -13156,6 +13160,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "expectedVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
                   "sections": {
                     "type": "array",
                     "items": {
@@ -13184,6 +13193,7 @@
                   }
                 },
                 "required": [
+                  "expectedVersion",
                   "sections"
                 ],
                 "additionalProperties": false
@@ -13199,9 +13209,13 @@
                 "schema": {
                   "type": "object",
                   "required": [
+                    "version",
                     "sections"
                   ],
                   "properties": {
+                    "version": {
+                      "type": "string"
+                    },
                     "sections": {
                       "type": "array",
                       "items": {
@@ -13325,7 +13339,7 @@
             "bearer": []
           }
         ],
-        "summary": "Reorder the whole curriculum in one call: every section and lesson exactly once, positions become dense 0..n",
+        "summary": "Reorder the whole curriculum in one call: every section and lesson exactly once, positions become dense 0..n. Send the `version` the order was built from; a newer curriculum answers 409 ORDER_STALE",
         "tags": [
           "Course studio"
         ]

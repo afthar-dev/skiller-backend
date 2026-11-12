@@ -37,7 +37,7 @@ describe("course curriculum", () => {
       .post(`${base(courseId)}/lessons`)
       .set(auth(s))
       .send({ sectionId, title: `Lesson ${uniq()}`, type: "ARTICLE", ...over });
-  const curriculum = async (s: Session, courseId: string) => (await http().get(`${base(courseId)}/curriculum`).set(auth(s))).body as { sections: Array<{ id: string; position: number; lessons: Array<Record<string, unknown> & { id: string; position: number }> }> };
+  const curriculum = async (s: Session, courseId: string) => (await http().get(`${base(courseId)}/curriculum`).set(auth(s))).body as { version: string; sections: Array<{ id: string; position: number; lessons: Array<Record<string, unknown> & { id: string; position: number }> }> };
   const asset = (ownerId: string, purpose: "COURSE_LESSON" | "COURSE_RESOURCE", over: Record<string, unknown> = {}) =>
     prisma.mediaAsset.create({
       data: {
@@ -113,7 +113,7 @@ describe("course curriculum", () => {
         await http().get(`${base(course.id)}/curriculum`).set(auth(b)),
         await http().post(`${base(course.id)}/sections`).set(auth(b)).send({ title: "x" }),
         await http().post(`${base(course.id)}/lessons`).set(auth(b)).send({ sectionId: s.id, title: "x", type: "ARTICLE" }),
-        await http().put(`${base(course.id)}/order`).set(auth(b)).send({ sections: [] }),
+        await http().put(`${base(course.id)}/order`).set(auth(b)).send({ sections: [], expectedVersion: "x" }),
       ]) {
         expect(res.status).toBe(404);
       }
@@ -145,6 +145,7 @@ describe("course curriculum", () => {
     it("applies a full reorder, moving lessons across sections, with dense positions", async () => {
       const { c, course, sections, lessons } = await seeded();
       const order = {
+        expectedVersion: (await curriculum(c, course.id)).version,
         sections: [
           { id: sections[2].id, lessonIds: [lessons[0][1], lessons[2][0]] },
           { id: sections[0].id, lessonIds: [] },
@@ -165,6 +166,7 @@ describe("course curriculum", () => {
     it("rejects anything that is not an exact permutation and changes nothing", async () => {
       const { c, course, sections, lessons } = await seeded();
       const before = JSON.stringify(await curriculum(c, course.id));
+      const expectedVersion = (JSON.parse(before) as { version: string }).version;
       const all = lessons.flat();
       const foreign = (await addLesson(c, course.id, (await addSection(c, (await newCourse(c)).id)).id).catch(() => null)) ?? null;
       void foreign;
@@ -177,12 +179,37 @@ describe("course curriculum", () => {
         { sections: [...sections.map((s, i) => ({ id: s.id, lessonIds: i === 0 ? all : [] })), { id: "00000000-0000-7000-8000-000000000000", lessonIds: [] }] }, // unknown section
       ];
       for (const body of bad) {
-        const res = await http().put(`${base(course.id)}/order`).set(auth(c)).send(body);
+        const res = await http().put(`${base(course.id)}/order`).set(auth(c)).send({ ...body, expectedVersion });
         expect(res.status).toBe(422);
         expect(res.body.error.code).toBe("ORDER_INVALID");
       }
-      expect((await http().put(`${base(course.id)}/order`).set(auth(c)).send({ sections: "nope" })).status).toBe(400);
+      expect((await http().put(`${base(course.id)}/order`).set(auth(c)).send({ sections: "nope", expectedVersion })).status).toBe(400);
       expect(JSON.stringify(await curriculum(c, course.id))).toBe(before);
+    });
+
+    it("answers 409 ORDER_STALE when the curriculum changed since the version the order was built from", async () => {
+      const { c, course, sections, lessons } = await seeded();
+      const seen = await curriculum(c, course.id);
+      const shape = (ids: string[], lessonIds: string[][]) => ({ sections: ids.map((id, i) => ({ id, lessonIds: lessonIds[i] })) });
+      // tab A reorders sections and saves from the version both tabs loaded
+      const a = await http().put(`${base(course.id)}/order`).set(auth(c)).send({ ...shape([sections[2].id, sections[0].id, sections[1].id], [lessons[2], lessons[0], lessons[1]]), expectedVersion: seen.version });
+      expect(a.status).toBe(200);
+      expect(a.body.version).not.toBe(seen.version);
+      const afterA = JSON.stringify(await curriculum(c, course.id));
+      // tab B built a different full permutation from the same, now stale, version
+      const b = await http().put(`${base(course.id)}/order`).set(auth(c)).send({ ...shape(sections.map((s) => s.id), [[lessons[0][1], lessons[0][0]], lessons[1], lessons[2]]), expectedVersion: seen.version });
+      expect(b.status).toBe(409);
+      expect(b.body.error.code).toBe("ORDER_STALE");
+      expect(JSON.stringify(await curriculum(c, course.id))).toBe(afterA);
+      // the version from A's response is current
+      const again = await http().put(`${base(course.id)}/order`).set(auth(c)).send({ ...shape(sections.map((s) => s.id), lessons), expectedVersion: a.body.version });
+      expect(again.status).toBe(200);
+      // a missing version is a validation error; adding a lesson also stales it
+      expect((await http().put(`${base(course.id)}/order`).set(auth(c)).send(shape(sections.map((s) => s.id), lessons))).status).toBe(400);
+      const v = (await curriculum(c, course.id)).version;
+      await addLesson(c, course.id, sections[0].id);
+      const stale = await http().put(`${base(course.id)}/order`).set(auth(c)).send({ ...shape(sections.map((s) => s.id), lessons), expectedVersion: v });
+      expect(stale.status).toBe(409);
     });
 
     it("concurrent lesson creation keeps positions dense and unique", async () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { Prisma, type Lesson, type LessonType } from "@prisma/client";
 import { AppError } from "../../common/errors/app-error";
@@ -55,6 +56,8 @@ export interface UpdateLessonInput {
 }
 
 export interface OrderInput {
+  /** The `version` of the curriculum the author arranged this order from. */
+  expectedVersion: string;
   sections: Array<{ id: string; lessonIds: string[] }>;
 }
 
@@ -94,9 +97,10 @@ export class CurriculumService {
     private readonly progress: ProgressService,
   ) {}
 
-  async authorView(user: { id: string }, courseId: string): Promise<{ sections: SectionView[] }> {
+  async authorView(user: { id: string }, courseId: string): Promise<{ version: string; sections: SectionView[] }> {
     await this.policy.loadForRead(user, courseId);
-    return { sections: await this.read(this.prisma, courseId) };
+    const sections = await this.read(this.prisma, courseId);
+    return { version: curriculumVersion(sections), sections };
   }
 
   async createSection(user: { id: string }, courseId: string, input: { title: string }): Promise<SectionView> {
@@ -231,10 +235,13 @@ export class CurriculumService {
    * The whole structure in one call: every section of the course exactly once, every lesson exactly once, each under the section it
    * should end up in. Anything else is rejected with nothing changed. Positions are rewritten as dense 0..n.
    */
-  async reorder(user: { id: string }, courseId: string, order: OrderInput): Promise<{ sections: SectionView[] }> {
+  async reorder(user: { id: string }, courseId: string, order: OrderInput): Promise<{ version: string; sections: SectionView[] }> {
     await this.policy.loadForAuthor(user, courseId);
     return this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
+      if (curriculumVersion(await this.read(tx, courseId)) !== order.expectedVersion) {
+        throw new AppError("ORDER_STALE", 409, "The curriculum changed since you loaded it: reload it and arrange it again");
+      }
       const [sections, lessons] = await Promise.all([
         tx.courseSection.findMany({ where: { courseId }, select: { id: true } }),
         tx.lesson.findMany({ where: { courseId }, select: { id: true } }),
@@ -252,7 +259,8 @@ export class CurriculumService {
         const rows = order.sections.flatMap((s) => s.lessonIds.map((id, position) => Prisma.sql`(${id}::text, ${s.id}::text, ${position}::int)`));
         await tx.$executeRaw`UPDATE "lessons" AS l SET "sectionId" = v.sid, "position" = v.pos, "updatedAt" = now() FROM (VALUES ${Prisma.join(rows)}) AS v(id, sid, pos) WHERE l."id" = v.id`;
       }
-      return { sections: await this.read(tx, courseId) };
+      const read = await this.read(tx, courseId);
+      return { version: curriculumVersion(read), sections: read };
     });
   }
 
@@ -308,6 +316,15 @@ function assertFieldsMatchType(type: LessonType, input: { videoAssetId?: string 
   if (input.videoAssetId !== undefined && type !== "VIDEO") throw wrongField("videoAssetId", type);
   if (input.articleBody !== undefined && type !== "ARTICLE") throw wrongField("articleBody", type);
   if (input.resourceAssetId !== undefined && type !== "RESOURCE") throw wrongField("resourceAssetId", type);
+}
+
+/**
+ * A fingerprint of the arrangement: which sections exist, in what order, and which lessons sit where. Any reorder, move, add or delete
+ * changes it, so a save built from an older load is recognised without a column to maintain.
+ */
+export function curriculumVersion(sections: SectionView[]): string {
+  const parts = sections.map((s) => `${s.id}:${s.position}[${s.lessons.map((l) => `${l.id}:${l.position}`).join(",")}]`);
+  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 24);
 }
 
 function assertPermutation(what: string, given: string[], existing: string[]): void {

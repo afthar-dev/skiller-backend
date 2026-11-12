@@ -288,7 +288,7 @@ describe("course studio", () => {
         await http().patch(`/v1/studio/courses/${course.id}`).set(auth(mod)).send({ title: "Hijack" }),
         await http().delete(`/v1/studio/courses/${course.id}`).set(auth(mod)),
         await http().post(`/v1/studio/courses/${course.id}/sections`).set(auth(mod)).send({ title: "x" }),
-        await http().put(`/v1/studio/courses/${course.id}/order`).set(auth(mod)).send({ sections: [] }),
+        await http().put(`/v1/studio/courses/${course.id}/order`).set(auth(mod)).send({ sections: [], expectedVersion: "x" }),
       ]) {
         expect(res.status).toBe(403);
       }

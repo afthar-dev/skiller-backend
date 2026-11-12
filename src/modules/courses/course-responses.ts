@@ -289,7 +289,7 @@ export const studioLessonSchema: Schema = objectSchema({
 
 export const studioSectionSchema: Schema = objectSchema({ id: str, title: str, position: int, lessons: { type: "array", items: studioLessonSchema } });
 
-export const studioCurriculumSchema: Schema = objectSchema({ sections: { type: "array", items: studioSectionSchema } });
+export const studioCurriculumSchema: Schema = objectSchema({ version: str, sections: { type: "array", items: studioSectionSchema } });
 
 export const studioQuizSchema: Schema = objectSchema({
   id: str,

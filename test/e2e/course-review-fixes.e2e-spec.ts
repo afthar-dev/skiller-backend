@@ -103,7 +103,7 @@ describe("course review fixes", () => {
         await http().post(`${base(course.id)}/lessons`).set(auth(c)).send({ sectionId: course.sectionId, title: "X", type: "ARTICLE" }),
         await http().patch(`${base(course.id)}/lessons/${course.lessonId}`).set(auth(c)).send({ title: "X" }),
         await http().delete(`${base(course.id)}/lessons/${course.lessonId}`).set(auth(c)),
-        await http().put(`${base(course.id)}/order`).set(auth(c)).send({ sections: [{ id: course.sectionId, lessonIds: [course.lessonId] }] }),
+        await http().put(`${base(course.id)}/order`).set(auth(c)).send({ expectedVersion: "x", sections: [{ id: course.sectionId, lessonIds: [course.lessonId] }] }),
         await http().delete(`${base(course.id)}/sections/${course.sectionId}`).set(auth(c)),
         await http().patch(base(course.id)).set(auth(c)).send({ thumbnailAssetId: (await thumb(c.userId)).id }),
       ];
