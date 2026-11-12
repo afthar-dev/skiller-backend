@@ -1,3 +1,4 @@
+import { MediaService } from "../media";
 import { Test } from "@nestjs/testing";
 import { randomUUID } from "node:crypto";
 import { PrismaModule } from "../../common/prisma/prisma.module";
@@ -16,7 +17,7 @@ describe("ProfilesService.ensure", () => {
 
   beforeAll(async () => {
     applyTestEnv({ DATABASE_URL: process.env.DATABASE_URL!, REDIS_URL: process.env.REDIS_URL! });
-    const mod = await Test.createTestingModule({ imports: [ConfigModule, PrismaModule], providers: [AccountService, OutboxService, ProfilesService, { provide: UserStatusCache, useValue: {} }] }).compile();
+    const mod = await Test.createTestingModule({ imports: [ConfigModule, PrismaModule], providers: [AccountService, OutboxService, ProfilesService, { provide: UserStatusCache, useValue: {} }, { provide: MediaService, useValue: { publicUrls: async () => new Map() } }] }).compile();
     await mod.init();
     prisma = mod.get(PrismaService);
     service = mod.get(ProfilesService);
