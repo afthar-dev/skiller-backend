@@ -23555,6 +23555,7 @@
           "failureReason",
           "verifiedAt",
           "cooldownEndsAt",
+          "underReview",
           "createdAt"
         ],
         "properties": {
@@ -23612,6 +23613,10 @@
             "type": "string",
             "format": "date-time",
             "description": "Payouts are blocked until this moment."
+          },
+          "underReview": {
+            "type": "boolean",
+            "description": "Payouts are held until our team has checked the account."
           },
           "createdAt": {
             "type": "string",

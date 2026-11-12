@@ -162,6 +162,7 @@ export const moneyComponents: Record<string, unknown> = {
     failureReason: nullableStr,
     verifiedAt: { type: "string", format: "date-time", nullable: true },
     cooldownEndsAt: { type: "string", format: "date-time", description: "Payouts are blocked until this moment." },
+    underReview: { type: "boolean", description: "Payouts are held until our team has checked the account." },
     createdAt: { type: "string", format: "date-time" },
   }),
   CurrentPayoutAccount: obj({ account: { allOf: [ref("PayoutAccount")], nullable: true } }),

@@ -240,6 +240,7 @@ describe("payout accounts and KYC", () => {
       await t.app.get(RolesService).grantSystem(finance.userId, "finance_admin");
       await h.deliverX(fakeX.validationWebhook(rowC.razorpayxFundAccountId, "active", { registeredName: "Somebody Else" }));
       expect(await prisma.payoutAccount.findUniqueOrThrow({ where: { id: rowC.id } })).toMatchObject({ status: "VERIFIED", panNameMatch: false, reviewFlag: "NAME_MISMATCH" });
+      expect((await h.http().get("/v1/wallet/payout-account").set(h.auth(s))).body.account).toMatchObject({ underReview: true });
       const alert = await until(() => prisma.notification.findFirst({ where: { userId: finance.userId, type: "finance.alert", sourceEventId: `finance:name-mismatch:${rowC.id}` } }));
       expect(alert.body).toContain("blocked until");
     });
@@ -299,6 +300,7 @@ describe("payout accounts and KYC", () => {
       const res = await h.putAccount(s, h.bankBody());
       const got = await h.http().get("/v1/wallet/payout-account").set(h.auth(s));
       expect(got.body.account).toEqual(res.body);
+      expect(got.body.account.underReview).toBe(false);
       const plain = await t.login();
       expect((await h.http().get("/v1/wallet/payout-account").set(h.auth(plain))).status).toBe(403);
     });

@@ -46,6 +46,8 @@ export interface PayoutAccountView {
   verifiedAt: string | null;
   /** Payouts are blocked until this moment. */
   cooldownEndsAt: string;
+  /** Payouts are held until our team has checked the account (a name mismatch, the same PAN elsewhere). The reason stays internal. */
+  underReview: boolean;
   createdAt: string;
 }
 
@@ -68,6 +70,7 @@ export const toPayoutAccountView = (a: PayoutAccount): PayoutAccountView => ({
   failureReason: a.failureReason,
   verifiedAt: a.verifiedAt?.toISOString() ?? null,
   cooldownEndsAt: a.cooldownUntil.toISOString(),
+  underReview: a.reviewFlag !== null,
   createdAt: a.createdAt.toISOString(),
 });
 
