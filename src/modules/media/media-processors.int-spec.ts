@@ -168,6 +168,18 @@ describe("media processors (image, cleanup, failure mail)", () => {
       await expect(h.r2.completeMultipart("PRIVATE", "incoming/x-multi/source", uploadId, [{ partNumber: 1, etag: '"abc"' }])).rejects.toMatchObject({ name: "NoSuchUpload" });
     });
 
+    it("retries the multipart abort of an upload its owner cancelled when the first abort failed", async () => {
+      const key = "incoming/x-cancelled/source";
+      const uploadId = await h.r2.createMultipart("PRIVATE", key, "video/mp4");
+      const { row } = await h.createAsset({ purpose: "REEL", status: "FAILED", ageHours: 30, uploadId });
+      await h.prisma.mediaAsset.update({ where: { id: row.id }, data: { objectKey: key, failureReason: "ABORTED_BY_OWNER" } });
+
+      await h.cleanup.process(h.fakeJob({}));
+
+      expect(await h.prisma.mediaAsset.findUnique({ where: { id: row.id } })).toBeNull();
+      await expect(h.r2.completeMultipart("PRIVATE", key, uploadId, [{ partNumber: 1, etag: '"abc"' }])).rejects.toMatchObject({ name: "NoSuchUpload" });
+    });
+
     it("an asset attached while cleanup runs survives (the delete only matches unattached rows)", async () => {
       const { row } = await h.createAsset({ purpose: "THUMBNAIL", source: await jpeg(10, 10), mime: "image/jpeg", status: "READY", ageHours: 40 });
       await h.prisma.mediaAsset.update({ where: { id: row.id }, data: { attachedAt: new Date() } });

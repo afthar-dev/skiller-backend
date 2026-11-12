@@ -218,7 +218,7 @@ export class MediaService {
       try {
         await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
       } catch (err) {
-        // The asset is already off the caps; storage expires stray parts, and the purger retries the abort when it removes the asset.
+        // The asset is already off the caps; storage expires stray parts, and the purger aborts again when it removes the asset.
         this.logger.warn(`could not abort multipart upload of ${assetId}: ${(err as Error).message}`);
       }
     }

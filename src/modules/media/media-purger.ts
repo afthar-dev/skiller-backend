@@ -24,7 +24,9 @@ export class MediaPurger {
         if (!asset) return false;
         const removed = await tx.mediaAsset.deleteMany({ where: { id, attachedAt: null } });
         if (removed.count === 0) return false;
-        if (asset.status === "PENDING" && asset.uploadId) await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
+        // A cancelled upload (FAILED by its owner) may still hold parts if the abort at cancel time failed: abort again, a missing upload is fine.
+        const holdsParts = asset.status === "PENDING" || (asset.status === "FAILED" && asset.failureReason === "ABORTED_BY_OWNER");
+        if (holdsParts && asset.uploadId) await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
         await this.r2.deletePrefix(SOURCE_BUCKET, sourcePrefixOf(asset.id));
         await this.r2.deletePrefix(asset.bucket, `${assetPrefix(asset)}/`);
         return true;
