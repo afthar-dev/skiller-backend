@@ -67,6 +67,13 @@ describe("plans and entitlements", () => {
     await expect(ent.check({ ownerType: "USER", ownerId: randomUUID() }, "creator_coupons", 0)).rejects.toMatchObject({ code: "ENTITLEMENT_LIMIT_REACHED", status: 403, details: { key: "creator_coupons", limit: false } });
   });
 
+  let extraProVersionId: string | undefined;
+  afterEach(async () => {
+    if (!extraProVersionId) return;
+    await prisma.planVersion.deleteMany({ where: { id: extraProVersionId } });
+    extraProVersionId = undefined;
+  });
+
   it("a new plan version does not change an existing subscriber commission; new buyers get it", async () => {
     const me = await creator();
     await givePlan(prisma, "USER", me.userId, "pro");
@@ -79,6 +86,8 @@ describe("plans and entitlements", () => {
       .post(`/v1/admin/plans/${pro.id}/versions`)
       .set(auth(staff))
       .send({ pricePaise: "129900", interval: "MONTH", commissionBps: 600, limits: original.limits });
+    // The catalog is shared by every suite: the extra version is removed again (in finally) so later suites still see the seeded Pro.
+    extraProVersionId = res.body?.id;
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ pricePaise: "129900", commissionBps: 600 });
     await ent.invalidate({ ownerType: "USER", ownerId: me.userId });
