@@ -5,9 +5,9 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
-import { ApiJsonResponse } from "../../common/openapi/responses";
+import { ApiJsonResponse, ApiNoContent } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
-import { publicCurriculumSchema } from "./course-responses";
+import { publicCurriculumSchema, studioCurriculumSchema, studioLessonSchema, studioSectionSchema } from "./course-responses";
 import { CurriculumService } from "./curriculum.service";
 import { MAX_MARKDOWN_CHARS } from "./markdown";
 import { singleLine } from "./text-schemas";
@@ -58,6 +58,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Get("curriculum")
   @ApiOperation({ summary: "The full curriculum as the author sees it" })
+  @ApiJsonResponse(200, "Sections with their lessons, in order.", studioCurriculumSchema)
   view(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.curriculum.authorView(user, id);
   }
@@ -65,6 +66,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Put("order")
   @ApiOperation({ summary: "Reorder the whole curriculum in one call: every section and lesson exactly once, positions become dense 0..n" })
+  @ApiJsonResponse(200, "The curriculum in its new order.", studioCurriculumSchema)
   @ApiZodBody(orderSchema)
   order(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.curriculum.reorder(user, id, orderSchema.parse(body));
@@ -73,6 +75,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Post("sections")
   @ApiOperation({ summary: "Add a section at the end" })
+  @ApiJsonResponse(201, "The new, empty section.", studioSectionSchema)
   @ApiZodBody(sectionBody)
   createSection(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.curriculum.createSection(user, id, sectionBody.parse(body));
@@ -81,6 +84,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Patch("sections/:sectionId")
   @ApiOperation({ summary: "Rename a section" })
+  @ApiJsonResponse(200, "The section with its lessons.", studioSectionSchema)
   @ApiZodBody(sectionBody)
   updateSection(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("sectionId") sectionId: string, @Body() body: unknown) {
     return this.curriculum.updateSection(user, id, sectionId, sectionBody.parse(body));
@@ -90,6 +94,7 @@ export class StudioCurriculumController {
   @Delete("sections/:sectionId")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a section and its lessons" })
+  @ApiNoContent("Deleted.")
   async deleteSection(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("sectionId") sectionId: string) {
     await this.curriculum.deleteSection(user, id, sectionId);
   }
@@ -97,6 +102,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Post("lessons")
   @ApiOperation({ summary: "Add a lesson at the end of a section; video / resource lessons attach the caller's READY media" })
+  @ApiJsonResponse(201, "The new lesson.", studioLessonSchema)
   @ApiZodBody(createLessonSchema)
   createLesson(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.curriculum.createLesson(user, id, createLessonSchema.parse(body));
@@ -105,6 +111,7 @@ export class StudioCurriculumController {
   @AuthenticatedOnly()
   @Patch("lessons/:lessonId")
   @ApiOperation({ summary: "Edit a lesson (title, flags, article text, attached media)" })
+  @ApiJsonResponse(200, "The updated lesson.", studioLessonSchema)
   @ApiZodBody(updateLessonSchema)
   updateLesson(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("lessonId") lessonId: string, @Body() body: unknown) {
     return this.curriculum.updateLesson(user, id, lessonId, updateLessonSchema.parse(body));
@@ -114,6 +121,7 @@ export class StudioCurriculumController {
   @Delete("lessons/:lessonId")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a lesson and release its media" })
+  @ApiNoContent("Deleted.")
   async deleteLesson(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("lessonId") lessonId: string) {
     await this.curriculum.deleteLesson(user, id, lessonId);
   }

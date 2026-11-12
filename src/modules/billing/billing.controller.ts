@@ -60,6 +60,7 @@ export class SubscriptionsController {
   @AuthenticatedOnly()
   @Get("me")
   @ApiOperation({ summary: "My plan, status, period end, limits and usage" })
+  @ApiResult(200, "MySubscription")
   async me(@CurrentUser() user: AuthUser) {
     return this.subscriptions.me(await this.owner(user));
   }
@@ -68,6 +69,7 @@ export class SubscriptionsController {
   @Post("checkout")
   @HttpCode(201)
   @ApiOperation({ summary: "Start paying for a plan: creates the Razorpay subscription" })
+  @ApiResult(201, "SubscriptionCheckout")
   @ApiZodBody(planBody)
   async checkout(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return this.subscriptions.checkout(await this.owner(user), planBody.parse(body).planVersionId, user.id);
@@ -77,6 +79,7 @@ export class SubscriptionsController {
   @Post(":id/cancel")
   @HttpCode(200)
   @ApiOperation({ summary: "Cancel at the end of the paid period" })
+  @ApiResult(200, "MySubscription")
   async cancel(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.subscriptions.cancel(await this.owner(user), id);
   }
@@ -85,6 +88,7 @@ export class SubscriptionsController {
   @Post(":id/change")
   @HttpCode(200)
   @ApiOperation({ summary: "Upgrade now (pay for the new plan) or schedule a downgrade for the period end" })
+  @ApiResult(200, "SubscriptionChange")
   @ApiZodBody(planBody)
   async change(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.subscriptions.change(await this.owner(user), id, planBody.parse(body).planVersionId, user.id);
@@ -109,6 +113,7 @@ export class OrgSubscriptionsController {
   @Get()
   @RequirePermission("org.manage", { orgParam: "slug" })
   @ApiOperation({ summary: "The organization's plan, status, period end, limits and usage" })
+  @ApiResult(200, "MySubscription")
   async me(@Param("slug") slug: string) {
     return this.subscriptions.me(await this.owner(slug));
   }
@@ -117,6 +122,7 @@ export class OrgSubscriptionsController {
   @HttpCode(201)
   @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Start paying for an organization plan" })
+  @ApiResult(201, "SubscriptionCheckout")
   @ApiZodBody(planBody)
   async checkout(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown) {
     return this.subscriptions.checkout(await this.owner(slug), planBody.parse(body).planVersionId, user.id);
@@ -126,6 +132,7 @@ export class OrgSubscriptionsController {
   @HttpCode(200)
   @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Cancel at the end of the paid period" })
+  @ApiResult(200, "MySubscription")
   async cancel(@Param("slug") slug: string, @Param("id") id: string) {
     return this.subscriptions.cancel(await this.owner(slug), id);
   }
@@ -134,6 +141,7 @@ export class OrgSubscriptionsController {
   @HttpCode(200)
   @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @ApiOperation({ summary: "Upgrade now or schedule a downgrade for the period end" })
+  @ApiResult(200, "SubscriptionChange")
   @ApiZodBody(planBody)
   async change(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Param("id") id: string, @Body() body: unknown) {
     return this.subscriptions.change(await this.owner(slug), id, planBody.parse(body).planVersionId, user.id);

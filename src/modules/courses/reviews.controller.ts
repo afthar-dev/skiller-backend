@@ -12,7 +12,7 @@ import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequirePermission } from "../rbac";
 import { ContentModerationService } from "./content-moderation.service";
 import type { ActionMeta } from "./course-state";
-import { myReviewSchema, reviewListSchema } from "./course-responses";
+import { myReviewSchema, reviewListSchema, reviewViewSchema } from "./course-responses";
 import { REVIEW_BODY_MAX, ReviewsService } from "./reviews.service";
 
 const reviewSchema = z.object({ rating: z.number().int().min(1).max(5), body: z.string().max(REVIEW_BODY_MAX).nullable().optional() }).strict();
@@ -63,6 +63,7 @@ export class StudioReviewsController {
   @AuthenticatedOnly()
   @Put(":id/reply")
   @ApiOperation({ summary: "Reply to a review of a course I author; one reply per review, editable" })
+  @ApiJsonResponse(200, "The review with its reply.", reviewViewSchema)
   @ApiZodBody(replySchema)
   reply(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.reviews.reply(user, id, replySchema.parse(body).body);

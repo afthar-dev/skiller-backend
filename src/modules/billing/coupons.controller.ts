@@ -9,6 +9,7 @@ import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
 import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiNoContent } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequireStepUp } from "../identity";
 import { ProfilesService } from "../users";
@@ -90,6 +91,7 @@ export class AdminCouponsController {
   @RequirePermission("billing.coupons.manage")
   @RequireStepUp()
   @ApiOperation({ summary: "Delete a platform coupon that was never used (step-up required, audited). A used coupon is switched off instead." })
+  @ApiNoContent("Deleted.")
   @ApiErrorResponse(409, "COUPON_IN_USE")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     await this.coupons.deletePlatform(user.id, id, metaOf(req));
@@ -144,6 +146,7 @@ export class CreatorCouponsController {
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete one of my coupons that was never used (a used one is switched off instead)" })
+  @ApiNoContent("Deleted.")
   @ApiErrorResponse(409, "COUPON_IN_USE")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     await this.coupons.deleteMine(await this.creator(user), id);

@@ -146,7 +146,7 @@ describe("SessionService", () => {
     const userId = await newUser();
     const { session, refreshToken } = await sessions.create(userId, meta);
     const results = await Promise.allSettled(Array.from({ length: 6 }, () => sessions.rotate(refreshToken, meta)));
-    const ok = results.filter((r): r is PromiseFulfilledResult<{ refreshToken: string }> => r.status === "fulfilled");
+    const ok = results.filter((r) => r.status === "fulfilled") as Array<PromiseFulfilledResult<{ refreshToken: string }>>;
     expect(ok.length).toBeGreaterThanOrEqual(1);
     expect(new Set(ok.map((r) => r.value.refreshToken)).size).toBe(1);
     for (const r of results) if (r.status === "rejected") expect((r.reason as AppError).code).toBe("REFRESH_RACE");

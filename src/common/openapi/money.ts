@@ -129,6 +129,42 @@ export const moneyComponents: Record<string, unknown> = {
     startedAt: { type: "string", format: "date-time" },
     finishedAt: { type: "string", format: "date-time", nullable: true },
   }),
+  SubscriptionUsage: obj({ used: { type: "integer", nullable: true }, limit: { type: "integer", nullable: true, description: "Bytes for storage_gb, a count otherwise; null = unlimited." }, unit: { type: "string", enum: ["bytes", "count"] } }),
+  MySubscription: obj({
+    subscriptionId: nullableStr,
+    plan: obj({ key: str, versionId: str, commissionBps: int }),
+    status: { type: "string", enum: ["TRIALING", "ACTIVE", "PAST_DUE", "CANCELLED", "EXPIRED"] },
+    currentPeriodEnd: { type: "string", format: "date-time", nullable: true },
+    cancelAtPeriodEnd: { type: "boolean" },
+    graceEndsAt: { type: "string", format: "date-time", nullable: true },
+    scheduledPlanVersionId: nullableStr,
+    limits: planLimits,
+    usage: { type: "object", additionalProperties: ref("SubscriptionUsage"), description: "Per limit key: storage_gb, max_published_courses, reels_per_day, org_seats, max_active_gigs." },
+  }),
+  SubscriptionCheckout: obj({ subscriptionId: str, razorpaySubscriptionId: str, keyId: str }),
+  SubscriptionChange: {
+    description: "ON_PAYMENT (upgrade): open Razorpay checkout with the returned ids. AT_PERIOD_END (downgrade): booked for the period end.",
+    oneOf: [
+      obj({ effective: { type: "string", enum: ["ON_PAYMENT"] }, subscriptionId: str, razorpaySubscriptionId: str, keyId: str }),
+      obj({ effective: { type: "string", enum: ["AT_PERIOD_END"] }, subscriptionId: str, scheduledPlanVersionId: str, effectiveAt: { type: "string", format: "date-time", nullable: true } }),
+    ],
+  },
+  PayoutAccount: obj({
+    id: str,
+    type: { type: "string", enum: ["BANK", "UPI"] },
+    status: { type: "string", enum: ["PENDING", "VERIFIED", "FAILED", "INACTIVE"] },
+    holderName: str,
+    ifsc: nullableStr,
+    accountLast4: nullableStr,
+    vpaMasked: nullableStr,
+    panLast4: str,
+    panNameMatch: { type: "boolean", nullable: true },
+    failureReason: nullableStr,
+    verifiedAt: { type: "string", format: "date-time", nullable: true },
+    cooldownEndsAt: { type: "string", format: "date-time", description: "Payouts are blocked until this moment." },
+    createdAt: { type: "string", format: "date-time" },
+  }),
+  CurrentPayoutAccount: obj({ account: { allOf: [ref("PayoutAccount")], nullable: true } }),
 };
 
 const page = (name: string) => ({ type: "object", required: ["items", "nextCursor"], properties: { items: { type: "array", items: ref(name) }, nextCursor: { type: "string", nullable: true } } });

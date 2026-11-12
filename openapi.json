@@ -5826,6 +5826,16 @@
         "operationId": "Subscriptions_me",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscription"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5883,6 +5893,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionCheckout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5929,6 +5949,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscription"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5995,6 +6025,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionChange"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6041,6 +6081,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscription"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6117,6 +6167,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionCheckout"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6181,6 +6241,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MySubscription"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -6265,6 +6335,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionChange"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -8516,6 +8596,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -8870,6 +8953,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -8982,6 +9068,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutAccount"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -9037,6 +9133,16 @@
         "operationId": "Wallet_getAccount",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentPayoutAccount"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -9444,6 +9550,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayoutAccount"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -9498,6 +9614,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentPayoutAccount"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -10864,6 +10990,178 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Enrolments, revenue, completion and rating over the range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "courseId",
+                    "range",
+                    "enrolments",
+                    "activeEnrolments",
+                    "completedEnrolments",
+                    "completionRate",
+                    "rating",
+                    "revenue",
+                    "upgradeRequired"
+                  ],
+                  "properties": {
+                    "courseId": {
+                      "type": "string"
+                    },
+                    "range": {
+                      "type": "object",
+                      "required": [
+                        "from",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "enrolments": {
+                      "type": "object",
+                      "required": [
+                        "total",
+                        "byDay"
+                      ],
+                      "properties": {
+                        "total": {
+                          "type": "integer"
+                        },
+                        "byDay": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "date",
+                              "FREE",
+                              "PURCHASE",
+                              "ORG_SEAT",
+                              "total"
+                            ],
+                            "properties": {
+                              "date": {
+                                "type": "string"
+                              },
+                              "FREE": {
+                                "type": "integer"
+                              },
+                              "PURCHASE": {
+                                "type": "integer"
+                              },
+                              "ORG_SEAT": {
+                                "type": "integer"
+                              },
+                              "total": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "activeEnrolments": {
+                      "type": "integer"
+                    },
+                    "completedEnrolments": {
+                      "type": "integer"
+                    },
+                    "completionRate": {
+                      "type": "number"
+                    },
+                    "rating": {
+                      "type": "object",
+                      "required": [
+                        "avg",
+                        "count"
+                      ],
+                      "properties": {
+                        "avg": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "count": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "revenue": {
+                      "type": "object",
+                      "required": [
+                        "currency",
+                        "soldPaise",
+                        "refundedPaise",
+                        "netPaise"
+                      ],
+                      "properties": {
+                        "currency": {
+                          "type": "string",
+                          "enum": [
+                            "INR"
+                          ]
+                        },
+                        "soldPaise": {
+                          "type": "string"
+                        },
+                        "refundedPaise": {
+                          "type": "string"
+                        },
+                        "netPaise": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "upgradeRequired": {
+                      "type": "boolean",
+                      "description": "True when the plan has no per-lesson analytics; `lessons` is then absent."
+                    },
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "lessonId",
+                          "title",
+                          "type",
+                          "completedCount",
+                          "completionShare",
+                          "watchSeconds"
+                        ],
+                        "properties": {
+                          "lessonId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "completedCount": {
+                            "type": "integer"
+                          },
+                          "completionShare": {
+                            "type": "number"
+                          },
+                          "watchSeconds": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11000,6 +11298,163 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "The new draft course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11054,6 +11509,179 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of courses, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "ownerType",
+                          "ownerId",
+                          "slug",
+                          "slugLocked",
+                          "title",
+                          "subtitle",
+                          "description",
+                          "categoryId",
+                          "level",
+                          "language",
+                          "tags",
+                          "pricePaise",
+                          "thumbnailAssetId",
+                          "promoVideoAssetId",
+                          "status",
+                          "flaggedAt",
+                          "flagReason",
+                          "submittedAt",
+                          "rejectionReason",
+                          "publishedAt",
+                          "createdById",
+                          "createdAt",
+                          "updatedAt",
+                          "ratingAvg",
+                          "ratingCount",
+                          "enrolmentCount"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "ownerType": {
+                            "type": "string",
+                            "enum": [
+                              "USER",
+                              "ORG"
+                            ]
+                          },
+                          "ownerId": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "slugLocked": {
+                            "type": "boolean"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "subtitle": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "categoryId": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "BEGINNER",
+                              "INTERMEDIATE",
+                              "ADVANCED",
+                              "ALL"
+                            ]
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pricePaise": {
+                            "type": "string",
+                            "description": "Integer paise as a decimal string."
+                          },
+                          "thumbnailAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "promoVideoAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "IN_REVIEW",
+                              "PUBLISHED",
+                              "ARCHIVED"
+                            ]
+                          },
+                          "flaggedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "flagReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "submittedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "rejectionReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "createdById": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "ratingAvg": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Null until 3 learners rated."
+                          },
+                          "ratingCount": {
+                            "type": "integer"
+                          },
+                          "enrolmentCount": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11100,6 +11728,163 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11238,6 +12023,163 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The updated course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11282,6 +12224,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11328,6 +12273,163 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The course, now IN_REVIEW.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11374,6 +12476,163 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The course, back to DRAFT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11420,6 +12679,163 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The archived course.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11466,6 +12882,113 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Sections with their lessons, in order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sections"
+                  ],
+                  "properties": {
+                    "sections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "position",
+                          "lessons"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "lessons": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "sectionId",
+                                "title",
+                                "type",
+                                "position",
+                                "isFreePreview",
+                                "isRequired",
+                                "videoAssetId",
+                                "durationSec",
+                                "articleBody",
+                                "resourceAssetId",
+                                "quizId"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "sectionId": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "VIDEO",
+                                    "ARTICLE",
+                                    "QUIZ",
+                                    "RESOURCE"
+                                  ]
+                                },
+                                "position": {
+                                  "type": "integer"
+                                },
+                                "isFreePreview": {
+                                  "type": "boolean"
+                                },
+                                "isRequired": {
+                                  "type": "boolean"
+                                },
+                                "videoAssetId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "durationSec": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "articleBody": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "resourceAssetId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "quizId": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11554,6 +13077,113 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The curriculum in its new order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sections"
+                  ],
+                  "properties": {
+                    "sections": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "title",
+                          "position",
+                          "lessons"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "lessons": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "sectionId",
+                                "title",
+                                "type",
+                                "position",
+                                "isFreePreview",
+                                "isRequired",
+                                "videoAssetId",
+                                "durationSec",
+                                "articleBody",
+                                "resourceAssetId",
+                                "quizId"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "sectionId": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "VIDEO",
+                                    "ARTICLE",
+                                    "QUIZ",
+                                    "RESOURCE"
+                                  ]
+                                },
+                                "position": {
+                                  "type": "integer"
+                                },
+                                "isFreePreview": {
+                                  "type": "boolean"
+                                },
+                                "isRequired": {
+                                  "type": "boolean"
+                                },
+                                "videoAssetId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "durationSec": {
+                                  "type": "integer",
+                                  "nullable": true
+                                },
+                                "articleBody": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "resourceAssetId": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "quizId": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11621,6 +13251,102 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "The new, empty section.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "position",
+                    "lessons"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer"
+                    },
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "sectionId",
+                          "title",
+                          "type",
+                          "position",
+                          "isFreePreview",
+                          "isRequired",
+                          "videoAssetId",
+                          "durationSec",
+                          "articleBody",
+                          "resourceAssetId",
+                          "quizId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sectionId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "VIDEO",
+                              "ARTICLE",
+                              "QUIZ",
+                              "RESOURCE"
+                            ]
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "isFreePreview": {
+                            "type": "boolean"
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "videoAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "durationSec": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "articleBody": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "resourceAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "quizId": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11696,6 +13422,102 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The section with its lessons.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "position",
+                    "lessons"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer"
+                    },
+                    "lessons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "sectionId",
+                          "title",
+                          "type",
+                          "position",
+                          "isFreePreview",
+                          "isRequired",
+                          "videoAssetId",
+                          "durationSec",
+                          "articleBody",
+                          "resourceAssetId",
+                          "quizId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sectionId": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "VIDEO",
+                              "ARTICLE",
+                              "QUIZ",
+                              "RESOURCE"
+                            ]
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "isFreePreview": {
+                            "type": "boolean"
+                          },
+                          "isRequired": {
+                            "type": "boolean"
+                          },
+                          "videoAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "durationSec": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "articleBody": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "resourceAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "quizId": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11748,6 +13570,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11848,6 +13673,79 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "The new lesson.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "sectionId",
+                    "title",
+                    "type",
+                    "position",
+                    "isFreePreview",
+                    "isRequired",
+                    "videoAssetId",
+                    "durationSec",
+                    "articleBody",
+                    "resourceAssetId",
+                    "quizId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sectionId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "VIDEO",
+                        "ARTICLE",
+                        "QUIZ",
+                        "RESOURCE"
+                      ]
+                    },
+                    "position": {
+                      "type": "integer"
+                    },
+                    "isFreePreview": {
+                      "type": "boolean"
+                    },
+                    "isRequired": {
+                      "type": "boolean"
+                    },
+                    "videoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "durationSec": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "articleBody": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "resourceAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "quizId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11941,6 +13839,79 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The updated lesson.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "sectionId",
+                    "title",
+                    "type",
+                    "position",
+                    "isFreePreview",
+                    "isRequired",
+                    "videoAssetId",
+                    "durationSec",
+                    "articleBody",
+                    "resourceAssetId",
+                    "quizId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "sectionId": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "VIDEO",
+                        "ARTICLE",
+                        "QUIZ",
+                        "RESOURCE"
+                      ]
+                    },
+                    "position": {
+                      "type": "integer"
+                    },
+                    "isFreePreview": {
+                      "type": "boolean"
+                    },
+                    "isRequired": {
+                      "type": "boolean"
+                    },
+                    "videoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "durationSec": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "articleBody": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "resourceAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "quizId": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -11993,6 +13964,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -13929,6 +15903,86 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The quiz with its correct options marked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "lessonId",
+                    "passPct",
+                    "questions"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "lessonId": {
+                      "type": "string"
+                    },
+                    "passPct": {
+                      "type": "integer"
+                    },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "prompt",
+                          "kind",
+                          "position",
+                          "options"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "SINGLE",
+                              "MULTIPLE"
+                            ]
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "text",
+                                "isCorrect"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "isCorrect": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14062,6 +16116,86 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The saved quiz.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "lessonId",
+                    "passPct",
+                    "questions"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "lessonId": {
+                      "type": "string"
+                    },
+                    "passPct": {
+                      "type": "integer"
+                    },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "prompt",
+                          "kind",
+                          "position",
+                          "options"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "SINGLE",
+                              "MULTIPLE"
+                            ]
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "text",
+                                "isCorrect"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "isCorrect": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14114,6 +16248,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Removed."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -15233,6 +17370,76 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The review with its reply.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "rating",
+                    "body",
+                    "createdAt",
+                    "updatedAt",
+                    "reply",
+                    "repliedAt",
+                    "author"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "rating": {
+                      "type": "integer"
+                    },
+                    "body": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "reply": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "repliedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "author": {
+                      "type": "object",
+                      "required": [
+                        "handle",
+                        "displayName",
+                        "avatarAssetId"
+                      ],
+                      "properties": {
+                        "handle": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "avatarAssetId": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -21002,6 +23209,283 @@
           "finishedAt": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SubscriptionUsage": {
+        "type": "object",
+        "required": [
+          "used",
+          "limit",
+          "unit"
+        ],
+        "properties": {
+          "used": {
+            "type": "integer",
+            "nullable": true
+          },
+          "limit": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Bytes for storage_gb, a count otherwise; null = unlimited."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "bytes",
+              "count"
+            ]
+          }
+        }
+      },
+      "MySubscription": {
+        "type": "object",
+        "required": [
+          "subscriptionId",
+          "plan",
+          "status",
+          "currentPeriodEnd",
+          "cancelAtPeriodEnd",
+          "graceEndsAt",
+          "scheduledPlanVersionId",
+          "limits",
+          "usage"
+        ],
+        "properties": {
+          "subscriptionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "plan": {
+            "type": "object",
+            "required": [
+              "key",
+              "versionId",
+              "commissionBps"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "versionId": {
+                "type": "string"
+              },
+              "commissionBps": {
+                "type": "integer"
+              }
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "CANCELLED",
+              "EXPIRED"
+            ]
+          },
+          "currentPeriodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "graceEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "scheduledPlanVersionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "max_published_courses, storage_gb, reels_per_day, analytics_level, creator_coupons, org_seats, max_active_gigs (null = unlimited; max_active_gigs may be left out on write: the plan key's default applies)."
+          },
+          "usage": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SubscriptionUsage"
+            },
+            "description": "Per limit key: storage_gb, max_published_courses, reels_per_day, org_seats, max_active_gigs."
+          }
+        }
+      },
+      "SubscriptionCheckout": {
+        "type": "object",
+        "required": [
+          "subscriptionId",
+          "razorpaySubscriptionId",
+          "keyId"
+        ],
+        "properties": {
+          "subscriptionId": {
+            "type": "string"
+          },
+          "razorpaySubscriptionId": {
+            "type": "string"
+          },
+          "keyId": {
+            "type": "string"
+          }
+        }
+      },
+      "SubscriptionChange": {
+        "description": "ON_PAYMENT (upgrade): open Razorpay checkout with the returned ids. AT_PERIOD_END (downgrade): booked for the period end.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "effective",
+              "subscriptionId",
+              "razorpaySubscriptionId",
+              "keyId"
+            ],
+            "properties": {
+              "effective": {
+                "type": "string",
+                "enum": [
+                  "ON_PAYMENT"
+                ]
+              },
+              "subscriptionId": {
+                "type": "string"
+              },
+              "razorpaySubscriptionId": {
+                "type": "string"
+              },
+              "keyId": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "effective",
+              "subscriptionId",
+              "scheduledPlanVersionId",
+              "effectiveAt"
+            ],
+            "properties": {
+              "effective": {
+                "type": "string",
+                "enum": [
+                  "AT_PERIOD_END"
+                ]
+              },
+              "subscriptionId": {
+                "type": "string"
+              },
+              "scheduledPlanVersionId": {
+                "type": "string"
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "PayoutAccount": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "status",
+          "holderName",
+          "ifsc",
+          "accountLast4",
+          "vpaMasked",
+          "panLast4",
+          "panNameMatch",
+          "failureReason",
+          "verifiedAt",
+          "cooldownEndsAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BANK",
+              "UPI"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "VERIFIED",
+              "FAILED",
+              "INACTIVE"
+            ]
+          },
+          "holderName": {
+            "type": "string"
+          },
+          "ifsc": {
+            "type": "string",
+            "nullable": true
+          },
+          "accountLast4": {
+            "type": "string",
+            "nullable": true
+          },
+          "vpaMasked": {
+            "type": "string",
+            "nullable": true
+          },
+          "panLast4": {
+            "type": "string"
+          },
+          "panNameMatch": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cooldownEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Payouts are blocked until this moment."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CurrentPayoutAccount": {
+        "type": "object",
+        "required": [
+          "account"
+        ],
+        "properties": {
+          "account": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayoutAccount"
+              }
+            ],
             "nullable": true
           }
         }

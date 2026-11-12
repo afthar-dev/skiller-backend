@@ -68,6 +68,7 @@ export class WalletController {
   @Put("payout-account")
   @RequireStepUp()
   @ApiOperation({ summary: "Set the payout account (bank or UPI) and PAN. Replaces the current one: it is verified again and payouts pause for 24 hours (step-up required, audited)" })
+  @ApiResult(200, "PayoutAccount")
   @ApiZodBody(payoutAccountSchema)
   @ApiErrorResponse(422, "PAYOUT_ACCOUNT_REJECTED: the payout provider did not accept the details.")
   @ApiErrorResponse(502, "PAYOUT_GATEWAY_ERROR: the payout provider is unavailable.")
@@ -80,6 +81,7 @@ export class WalletController {
   @AuthenticatedOnly()
   @Get("payout-account")
   @ApiOperation({ summary: "My current payout account (masked), or null" })
+  @ApiResult(200, "CurrentPayoutAccount")
   async getAccount(@CurrentUser() user: AuthUser) {
     return { account: await this.accounts.current(await this.owner(user)) };
   }
@@ -148,6 +150,7 @@ export class OrgWalletController {
   @RequirePermission("org.wallet.manage", { orgParam: "slug", orgScopedOnly: true })
   @RequireStepUp()
   @ApiOperation({ summary: "Set the organization's payout account (step-up required, audited)" })
+  @ApiResult(200, "PayoutAccount")
   @ApiZodBody(payoutAccountSchema)
   async putAccount(@CurrentUser() user: AuthUser, @Param("slug") slug: string, @Body() body: unknown, @Req() req: Request) {
     const owner = await this.owner(slug);
@@ -158,6 +161,7 @@ export class OrgWalletController {
   @Get("payout-account")
   @RequirePermission("org.manage", { orgParam: "slug" })
   @ApiOperation({ summary: "The organization's current payout account (masked), or null" })
+  @ApiResult(200, "CurrentPayoutAccount")
   async getAccount(@Param("slug") slug: string) {
     return { account: await this.accounts.current(await this.owner(slug)) };
   }

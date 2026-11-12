@@ -77,11 +77,11 @@ export const publicCurriculumSchema: Schema = objectSchema({
 
 const reviewAuthor = objectSchema({ handle: nullableStr, displayName: str, avatarAssetId: nullableStr });
 
+/** A review as the course page shows it. */
+export const reviewViewSchema: Schema = objectSchema({ id: str, rating: int, body: nullableStr, createdAt: isoDate, updatedAt: isoDate, reply: nullableStr, repliedAt: nullableDate, author: reviewAuthor });
+
 export const reviewListSchema: Schema = objectSchema({
-  items: {
-    type: "array",
-    items: objectSchema({ id: str, rating: int, body: nullableStr, createdAt: isoDate, updatedAt: isoDate, reply: nullableStr, repliedAt: nullableDate, author: reviewAuthor }),
-  },
+  items: { type: "array", items: reviewViewSchema },
   nextCursor: nullableStr,
   summary: objectSchema({ ratingAvg, ratingCount: int }),
 });
@@ -236,3 +236,93 @@ export const questionViewSchema: Schema = objectSchema({ id: str, lessonId: str,
 export const questionPageSchema: Schema = pageSchema(questionViewSchema);
 export const answerViewSchema: Schema = objectSchema({ id: str, questionId: str, body: str, isInstructor: bool, createdAt: isoDate, author });
 export const answerPageSchema: Schema = pageSchema(answerViewSchema);
+
+// ---- Course studio (the author's views) ----
+
+/** A course as its author sees it: draft and moderation fields included. */
+export const studioCourseSchema: Schema = objectSchema({
+  id: str,
+  ownerType,
+  ownerId: str,
+  slug: str,
+  slugLocked: bool,
+  title: str,
+  subtitle: nullableStr,
+  description: str,
+  categoryId: str,
+  level,
+  language: str,
+  tags: strings,
+  pricePaise: { ...str, description: "Integer paise as a decimal string." },
+  thumbnailAssetId: nullableStr,
+  promoVideoAssetId: nullableStr,
+  status: courseStatus,
+  flaggedAt: nullableDate,
+  flagReason: nullableStr,
+  submittedAt: nullableDate,
+  rejectionReason: nullableStr,
+  publishedAt: nullableDate,
+  createdById: str,
+  createdAt: isoDate,
+  updatedAt: isoDate,
+  ratingAvg,
+  ratingCount: int,
+  enrolmentCount: int,
+});
+
+export const studioCoursePageSchema: Schema = pageSchema(studioCourseSchema);
+
+export const studioLessonSchema: Schema = objectSchema({
+  id: str,
+  sectionId: str,
+  title: str,
+  type: lessonType,
+  position: int,
+  isFreePreview: bool,
+  isRequired: bool,
+  videoAssetId: nullableStr,
+  durationSec: { ...int, nullable: true },
+  articleBody: nullableStr,
+  resourceAssetId: nullableStr,
+  quizId: nullableStr,
+});
+
+export const studioSectionSchema: Schema = objectSchema({ id: str, title: str, position: int, lessons: { type: "array", items: studioLessonSchema } });
+
+export const studioCurriculumSchema: Schema = objectSchema({ sections: { type: "array", items: studioSectionSchema } });
+
+export const studioQuizSchema: Schema = objectSchema({
+  id: str,
+  lessonId: str,
+  passPct: int,
+  questions: {
+    type: "array",
+    items: objectSchema({
+      id: str,
+      prompt: str,
+      kind: enumOf("SINGLE", "MULTIPLE"),
+      position: int,
+      options: { type: "array", items: objectSchema({ id: str, text: str, isCorrect: bool }) },
+    }),
+  },
+});
+
+const num: Schema = { type: "number" };
+export const studioCourseAnalyticsSchema: Schema = objectSchema(
+  {
+    courseId: str,
+    range: objectSchema({ from: str, to: str }),
+    enrolments: objectSchema({
+      total: int,
+      byDay: { type: "array", items: objectSchema({ date: str, FREE: int, PURCHASE: int, ORG_SEAT: int, total: int }) },
+    }),
+    activeEnrolments: int,
+    completedEnrolments: int,
+    completionRate: num,
+    rating: objectSchema({ avg: { ...num, nullable: true }, count: int }),
+    revenue: objectSchema({ currency: enumOf("INR"), soldPaise: str, refundedPaise: str, netPaise: str }),
+    upgradeRequired: { ...bool, description: "True when the plan has no per-lesson analytics; `lessons` is then absent." },
+    lessons: { type: "array", items: objectSchema({ lessonId: str, title: str, type: str, completedCount: int, completionShare: num, watchSeconds: int }) },
+  },
+  ["courseId", "range", "enrolments", "activeEnrolments", "completedEnrolments", "completionRate", "rating", "revenue", "upgradeRequired"],
+);

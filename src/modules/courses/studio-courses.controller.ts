@@ -6,7 +6,9 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiJsonResponse, ApiNoContent } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
+import { studioCoursePageSchema, studioCourseSchema } from "./course-responses";
 import { COURSE_LANGUAGES, COURSE_LEVELS, SLUG_PATTERN } from "./course-rules";
 import { CoursesService } from "./courses.service";
 import { singleLine } from "./text-schemas";
@@ -73,6 +75,7 @@ export class StudioCoursesController {
   @AuthenticatedOnly()
   @Post()
   @ApiOperation({ summary: "Create a draft course for yourself or for an organization you author for" })
+  @ApiJsonResponse(201, "The new draft course.", studioCourseSchema)
   @ApiZodBody(createSchema)
   create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return this.courses.create(user, createSchema.parse(body));
@@ -81,6 +84,7 @@ export class StudioCoursesController {
   @AuthenticatedOnly()
   @Get()
   @ApiOperation({ summary: "Your courses and those of the organizations you author for" })
+  @ApiJsonResponse(200, "A page of courses, newest first.", studioCoursePageSchema)
   @ApiPagination()
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     const { status } = listQuery.parse({ status: query.status || undefined });
@@ -90,6 +94,7 @@ export class StudioCoursesController {
   @AuthenticatedOnly()
   @Get(":id")
   @ApiOperation({ summary: "One of your courses" })
+  @ApiJsonResponse(200, "The course.", studioCourseSchema)
   get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.courses.get(user, id);
   }
@@ -97,6 +102,7 @@ export class StudioCoursesController {
   @AuthenticatedOnly()
   @Patch(":id")
   @ApiOperation({ summary: "Edit a course (including its thumbnail and promo video)" })
+  @ApiJsonResponse(200, "The updated course.", studioCourseSchema)
   @ApiZodBody(updateSchema)
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.courses.update(user, id, updateSchema.parse(body));
@@ -106,6 +112,7 @@ export class StudioCoursesController {
   @Post(":id/submit")
   @HttpCode(200)
   @ApiOperation({ summary: "Submit a complete draft for moderator review (COURSE_NOT_PUBLISHABLE lists what is missing)" })
+  @ApiJsonResponse(200, "The course, now IN_REVIEW.", studioCourseSchema)
   submit(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.publishing.submit(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
   }
@@ -114,6 +121,7 @@ export class StudioCoursesController {
   @Post(":id/withdraw")
   @HttpCode(200)
   @ApiOperation({ summary: "Take a course back from review to draft (content is locked while it is in review)" })
+  @ApiJsonResponse(200, "The course, back to DRAFT.", studioCourseSchema)
   withdraw(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.publishing.withdraw(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
   }
@@ -122,6 +130,7 @@ export class StudioCoursesController {
   @Post(":id/archive")
   @HttpCode(200)
   @ApiOperation({ summary: "Archive a published course: off the catalog and not for sale; enrolled learners keep access" })
+  @ApiJsonResponse(200, "The archived course.", studioCourseSchema)
   archive(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.publishing.archive(user, id, { ip: req.ip, requestId: (req as Request & { id?: string }).id });
   }
@@ -130,6 +139,7 @@ export class StudioCoursesController {
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a draft that was never published" })
+  @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     await this.courses.remove(user, id);
   }

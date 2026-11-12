@@ -4,9 +4,9 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
-import { ApiJsonResponse } from "../../common/openapi/responses";
+import { ApiJsonResponse, ApiNoContent } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
-import { quizAttemptSchema, quizViewSchema } from "./course-responses";
+import { quizAttemptSchema, quizViewSchema, studioQuizSchema } from "./course-responses";
 import { QuizAttemptsService } from "./quiz-attempts.service";
 import { MAX_QUIZ_QUESTIONS, QuizzesService } from "./quizzes.service";
 
@@ -46,6 +46,7 @@ export class StudioQuizzesController {
   @AuthenticatedOnly()
   @Get()
   @ApiOperation({ summary: "The quiz of a QUIZ lesson as the author sees it, correct options marked" })
+  @ApiJsonResponse(200, "The quiz with its correct options marked.", studioQuizSchema)
   get(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("lessonId") lessonId: string) {
     return this.quizzes.get(user, id, lessonId);
   }
@@ -53,6 +54,7 @@ export class StudioQuizzesController {
   @AuthenticatedOnly()
   @Put()
   @ApiOperation({ summary: "Create or replace the quiz of a QUIZ lesson. Ids sent back are kept; questions left out are removed. Blocked while the course is in review" })
+  @ApiJsonResponse(200, "The saved quiz.", studioQuizSchema)
   @ApiZodBody(quizSchema)
   put(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("lessonId") lessonId: string, @Body() body: unknown) {
     return this.quizzes.put(user, id, lessonId, quizSchema.parse(body));
@@ -62,6 +64,7 @@ export class StudioQuizzesController {
   @Delete()
   @HttpCode(204)
   @ApiOperation({ summary: "Remove the quiz from its lesson (learners who passed keep their completion)" })
+  @ApiNoContent("Removed.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("lessonId") lessonId: string) {
     await this.quizzes.remove(user, id, lessonId);
   }
