@@ -122,11 +122,12 @@ describe("SessionService", () => {
 
   it("remembers only the last 20 retired tokens per session", async () => {
     const userId = await newUser();
-    let { session, refreshToken } = await sessions.create(userId, meta);
+    const created = await sessions.create(userId, meta);
+    const session = created.session;
+    let refreshToken = created.refreshToken;
     for (let i = 0; i < 25; i++) refreshToken = (await sessions.rotate(refreshToken, meta)).refreshToken;
     const row = await prisma.session.findUniqueOrThrow({ where: { id: session.id } });
     expect(row.retiredHashes).toHaveLength(20);
-    void session;
   });
 
   it("family revocation covers every session of the family", async () => {
