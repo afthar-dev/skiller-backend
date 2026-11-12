@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post } from "@nestjs/common";
 import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
@@ -10,7 +10,7 @@ import { MediaService } from "./media.service";
 import { PlaybackService } from "./playback.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
-import { ApiJsonResponse, mediaAssetSchema, objectSchema, schemas } from "../../common/openapi/responses";
+import { ApiJsonResponse, ApiNoContent, mediaAssetSchema, objectSchema, schemas } from "../../common/openapi/responses";
 
 const createSchema = z
   .object({
@@ -76,6 +76,16 @@ export class MediaController {
   @ApiJsonResponse(200, "Asset state after completion.", mediaAssetSchema)
   complete(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.media.complete(user.id, idParam.parse(id), completeSchema.parse(body ?? {}).parts);
+  }
+
+  /** Gives up a pending upload: aborts the multipart upload and frees the slot of the 10 pending uploads cap. */
+  @Delete("uploads/:id")
+  @HttpCode(204)
+  @RequirePermission("media.upload")
+  @ApiOperation({ summary: "Abort my own PENDING upload (aborts the multipart upload; it no longer counts toward the 10 pending uploads). 404 for someone else's asset, 409 UPLOAD_NOT_PENDING once it is past PENDING" })
+  @ApiNoContent("Aborted.")
+  async abort(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    await this.media.abort(user.id, idParam.parse(id));
   }
 
   /** Signed HLS manifest URL (10-minute token) for a private lesson video. Access is decided by the registered playback policies. */

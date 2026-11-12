@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { SettingsService } from "../admin";
 import { Prisma, type MediaAsset } from "@prisma/client";
 import type { Queue } from "bullmq";
@@ -58,6 +58,8 @@ const ORG_UPLOAD_ROLES = ["org_owner", "org_instructor"];
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly r2: R2Client,
@@ -199,6 +201,25 @@ export class MediaService {
     // The worker may already be past this point (it moves the asset itself); the guard keeps this from going backwards.
     await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PROCESSING" } });
     return this.dto(await this.owned(userId, assetId));
+  }
+
+  /**
+   * The owner gives up a PENDING upload. The PENDING -> FAILED flip is conditional (so it cannot race a complete), FAILED assets count neither
+   * toward the pending cap nor the storage quota, and the cleanup job removes them later. The R2 multipart upload is aborted so no parts linger.
+   */
+  async abort(userId: string, assetId: string): Promise<void> {
+    const asset = await this.owned(userId, assetId);
+    if (asset.status !== "PENDING") throw new AppError("UPLOAD_NOT_PENDING", 409, "This upload is no longer waiting for parts");
+    const claimed = await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "PENDING" }, data: { status: "FAILED", failureReason: "ABORTED_BY_OWNER" } });
+    if (claimed.count === 0) throw new AppError("UPLOAD_NOT_PENDING", 409, "This upload is no longer waiting for parts");
+    if (asset.uploadId) {
+      try {
+        await this.r2.abortMultipart(SOURCE_BUCKET, asset.objectKey, asset.uploadId);
+      } catch (err) {
+        // The asset is already off the caps; storage expires stray parts, and the purger retries the abort when it removes the asset.
+        this.logger.warn(`could not abort multipart upload of ${assetId}: ${(err as Error).message}`);
+      }
+    }
   }
 
   /** Owner, or anyone with `media.manage_any`. Everyone else sees 404. */

@@ -3614,6 +3614,65 @@
         ]
       }
     },
+    "/v1/media/uploads/{id}": {
+      "delete": {
+        "operationId": "Media_abort",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Aborted."
+          },
+          "401": {
+            "description": "Missing, invalid or expired access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires permission `media.upload`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Abort my own PENDING upload (aborts the multipart upload; it no longer counts toward the 10 pending uploads). 404 for someone else's asset, 409 UPLOAD_NOT_PENDING once it is past PENDING",
+        "tags": [
+          "Media"
+        ]
+      }
+    },
     "/v1/media/{id}/playback": {
       "get": {
         "operationId": "Media_playbackGrant",

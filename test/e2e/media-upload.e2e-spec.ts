@@ -337,6 +337,62 @@ describe("media upload sessions (MinIO standing in for R2)", () => {
     });
   });
 
+  describe("abort", () => {
+    const parts = (s: Session, id: string, partNumbers: number[]) => http().post(`/v1/media/uploads/${id}/parts`).set(auth(s)).send({ partNumbers });
+    const videoUpload = async (s: Session) => {
+      const res = await create(s, { purpose: "reel", filename: "r.mp4", mime: "video/mp4", size: 10 * MB + 1 });
+      expect(res.status).toBe(201);
+      return res.body as { assetId: string };
+    };
+    const abort = (s: Session, id: string) => http().delete(`/v1/media/uploads/${id}`).set(auth(s));
+
+    it("DELETE aborts the caller's PENDING multipart upload: 204, FAILED, off the pending cap, parts can no longer be signed", async () => {
+      const s = await creator();
+      const { assetId } = await videoUpload(s);
+      const res = await abort(s, assetId);
+      expect(res.status).toBe(204);
+      const row = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } });
+      expect(row.status).toBe("FAILED");
+      expect(row.failureReason).toBe("ABORTED_BY_OWNER");
+      expect((await parts(s, assetId, [1])).body.error.code).toBe("UPLOAD_NOT_PENDING");
+      expect((await complete(s, assetId)).body.status).toBe("FAILED");
+    });
+
+    it("frees a slot of the 10 pending cap and aborts a single-PUT image too", async () => {
+      const s = await t.login();
+      const ids: string[] = [];
+      for (let i = 0; i < 10; i++) ids.push((await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 })).body.assetId);
+      expect((await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 })).status).toBe(429);
+      expect((await abort(s, ids[0])).status).toBe(204);
+      expect((await create(s, { purpose: "avatar", filename: "a.png", mime: "image/png", size: 100 })).status).toBe(201);
+    });
+
+    it("another user's or an unknown asset is 404 MEDIA_NOT_FOUND; a non-PENDING one is 409 UPLOAD_NOT_PENDING", async () => {
+      const owner = await creator();
+      const { assetId } = await videoUpload(owner);
+      const other = await creator();
+      const stranger = await abort(other, assetId);
+      expect(stranger.status).toBe(404);
+      expect(stranger.body.error.code).toBe("MEDIA_NOT_FOUND");
+      expect((await abort(owner, "00000000-0000-4000-8000-000000000000")).status).toBe(404);
+      expect((await prisma.mediaAsset.findUniqueOrThrow({ where: { id: assetId } })).status).toBe("PENDING");
+
+      const { assetId: done, parts: etags } = await upload(owner, "reel", "video/mp4", randomBytes(2 * MB));
+      expect((await complete(owner, done, etags)).status).toBe(200);
+      const late = await abort(owner, done);
+      expect(late.status).toBe(409);
+      expect(late.body.error.code).toBe("UPLOAD_NOT_PENDING");
+    });
+
+    it("requires authentication; aborting twice is 409", async () => {
+      expect((await http().delete("/v1/media/uploads/00000000-0000-4000-8000-000000000000")).status).toBe(401);
+      const s = await creator();
+      const { assetId } = await videoUpload(s);
+      expect((await abort(s, assetId)).status).toBe(204);
+      expect((await abort(s, assetId)).status).toBe(409);
+    });
+  });
+
   describe("abuse caps", () => {
     it("max 10 PENDING assets per user -> 429 UPLOAD_LIMIT_REACHED", async () => {
       const s = await t.login();
