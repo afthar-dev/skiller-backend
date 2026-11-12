@@ -8,6 +8,7 @@ import { NOTIFICATION_TYPE_KEYS } from "./notification-types";
 import { NotificationsService } from "./notifications.service";
 import { ApiOperation, ApiTags, ApiQuery } from "@nestjs/swagger";
 import { ApiZodBody, ApiPagination } from "../../common/openapi/zod-schema";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiJsonResponse, objectSchema } from "../../common/openapi/responses";
 
 const preferencesResponse = objectSchema({
@@ -39,6 +40,7 @@ export class NotificationsController {
 
   @Get("notifications")
   @ApiOperation({ summary: "List notifications" })
+  @ApiPageResult("Notification")
   @ApiPagination()
   @ApiQuery({ name: "unread", required: false, type: Boolean })
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -47,6 +49,7 @@ export class NotificationsController {
 
   @Get("notifications/unread-count")
   @ApiOperation({ summary: "Unread notification count" })
+  @ApiResult(200, "UnreadCount")
   unreadCount(@CurrentUser() user: AuthUser) {
     return this.notifications.unreadCount(user.id);
   }
@@ -54,6 +57,7 @@ export class NotificationsController {
   @Post("notifications/read-all")
   @HttpCode(200)
   @ApiOperation({ summary: "Mark all notifications read" })
+  @ApiResult(200, "NotificationsMarkedRead")
   readAll(@CurrentUser() user: AuthUser) {
     return this.notifications.markAllRead(user.id);
   }
@@ -61,6 +65,7 @@ export class NotificationsController {
   @Post("notifications/:id/read")
   @HttpCode(200)
   @ApiOperation({ summary: "Mark one notification read" })
+  @ApiResult(200, "Notification")
   read(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.notifications.markRead(user.id, id);
   }

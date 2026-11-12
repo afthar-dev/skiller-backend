@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
+import { ApiResult } from "../../common/openapi/money";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { ReelViewTracker } from "./reel-view-tracker";
@@ -36,6 +37,7 @@ export class ReelViewsController {
     summary:
       "Beacon: the viewer has watched `watchedSec` seconds of a published reel. Counts one view per viewer per reel per IST day once it reaches 3 s (the answer says whether it counted). Signed-in viewers are identified by their token, others by the `skiller_did` device cookie (issued here)",
   })
+  @ApiResult(202, "BeaconResult")
   @ApiZodBody(viewSchema)
   async view(@Param("id") id: string, @Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const { watchedSec } = viewSchema.parse(body);
@@ -50,6 +52,7 @@ export class ReelViewsController {
     summary:
       "Beacon: the viewer clicked the reel's \"View course\" card. Counts one click per viewer per reel per IST day, with the same viewer rules as views (the answer says whether it counted); a reel without a course link, and the creator's own clicks, never count",
   })
+  @ApiResult(202, "BeaconResult")
   @ApiZodBody(clickSchema)
   async linkClick(@Param("id") id: string, @Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     clickSchema.parse(body ?? {});

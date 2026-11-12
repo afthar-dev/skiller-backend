@@ -3949,6 +3949,26 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "This member had already reported the item; nothing changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportReceipt"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The report was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportReceipt"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4729,7 +4749,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notification"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -4769,7 +4812,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -4809,7 +4859,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsMarkedRead"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -4858,7 +4915,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Notification"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -18629,6 +18693,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatorReelAnalytics"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -18689,6 +18763,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingleReelAnalytics"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -18745,6 +18829,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Reel"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -18802,7 +18912,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of reels, plus whether the ranking was restarted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForYouFeed"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -18855,7 +18972,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Reel"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -18880,7 +19020,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendingHashtags"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -18944,7 +19091,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "The tag, how many published reels carry it, and a page of them.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HashtagReels"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19005,6 +19159,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "The reel: published, or processing / waiting for the daily limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reel"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19091,6 +19255,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The reel after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reel"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19135,6 +19309,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19180,7 +19357,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reel"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19213,6 +19397,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The reel, published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reel"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19278,7 +19472,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Reel"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19311,6 +19528,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelLikeState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19355,6 +19582,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelLikeState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19401,6 +19638,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelSaveState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19445,6 +19692,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelSaveState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19521,7 +19778,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelShareResult"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19534,7 +19798,7 @@
             }
           }
         },
-        "summary": "Record a share. Counted once per signed-in user per reel per IST day; anonymous shares are accepted but not counted. 30 a minute",
+        "summary": "Record a share. Counted once per signed-in user per reel per IST day; anonymous shares are accepted but are not counted. 30 a minute",
         "tags": [
           "Reel engagement"
         ]
@@ -19564,6 +19828,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Reel"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19629,7 +19919,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReelComment"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19684,6 +19997,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelComment"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19757,7 +20080,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReelComment"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19818,6 +20164,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReelComment"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19870,6 +20226,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -19938,7 +20297,14 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeaconResult"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -19984,7 +20350,14 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BeaconResult"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -23651,6 +24024,801 @@
               }
             ],
             "nullable": true
+          }
+        }
+      },
+      "ReelCreator": {
+        "type": "object",
+        "required": [
+          "id",
+          "handle",
+          "displayName",
+          "avatar"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatar": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Avatar image URLs by size; null when there is none."
+          }
+        }
+      },
+      "ReelCourse": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "pricePaise",
+          "thumbnail"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "pricePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "thumbnail": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Thumbnail URLs by size; null when there is none."
+          }
+        }
+      },
+      "ReelGig": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "startingPricePaise",
+          "cover"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "startingPricePaise": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "nullable": true,
+            "description": "Money: integer paise as a string; null when the gig has no package price."
+          },
+          "cover": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Cover image URLs by size; null when there is none."
+          }
+        }
+      },
+      "Reel": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "caption",
+          "hashtags",
+          "commentsEnabled",
+          "publishedAt",
+          "createdAt",
+          "creator",
+          "media",
+          "counts",
+          "course",
+          "gig"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PROCESSING",
+              "PUBLISHED",
+              "HIDDEN",
+              "REMOVED",
+              "DELETED",
+              "FAILED",
+              "LIMIT_REACHED"
+            ]
+          },
+          "caption": {
+            "type": "string"
+          },
+          "hashtags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "commentsEnabled": {
+            "type": "boolean"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only the creator is told why a reel failed or is waiting."
+          },
+          "creator": {
+            "$ref": "#/components/schemas/ReelCreator"
+          },
+          "media": {
+            "type": "object",
+            "nullable": true,
+            "required": [
+              "hls",
+              "poster"
+            ],
+            "properties": {
+              "hls": {
+                "type": "string"
+              },
+              "poster": {
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "description": "HLS playlist and poster once the video is ready; null before."
+          },
+          "counts": {
+            "type": "object",
+            "required": [
+              "likes",
+              "comments",
+              "saves",
+              "shares",
+              "views"
+            ],
+            "properties": {
+              "likes": {
+                "type": "integer"
+              },
+              "comments": {
+                "type": "integer"
+              },
+              "saves": {
+                "type": "integer"
+              },
+              "shares": {
+                "type": "integer"
+              },
+              "views": {
+                "type": "integer"
+              }
+            }
+          },
+          "course": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReelCourse"
+              }
+            ],
+            "nullable": true,
+            "description": "The linked course while it is still available; null otherwise."
+          },
+          "gig": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ReelGig"
+              }
+            ],
+            "nullable": true,
+            "description": "The linked gig while it is live; null otherwise."
+          },
+          "likedByMe": {
+            "type": "boolean",
+            "description": "Present for signed-in viewers."
+          },
+          "savedByMe": {
+            "type": "boolean",
+            "description": "Present for signed-in viewers."
+          }
+        }
+      },
+      "ForYouFeed": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor",
+          "refreshed"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reel"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "refreshed": {
+            "type": "boolean",
+            "description": "True when the session in the cursor had expired and this page starts a new ranking."
+          }
+        }
+      },
+      "HashtagReels": {
+        "type": "object",
+        "required": [
+          "tag",
+          "reelCount",
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "tag": {
+            "type": "string"
+          },
+          "reelCount": {
+            "type": "integer",
+            "description": "Published reels that carry the tag."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reel"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TrendingHashtags": {
+        "type": "object",
+        "required": [
+          "computedAt",
+          "items"
+        ],
+        "properties": {
+          "computedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tag",
+                "uses",
+                "previousUses"
+              ],
+              "properties": {
+                "tag": {
+                  "type": "string"
+                },
+                "uses": {
+                  "type": "integer",
+                  "description": "Reels that used the tag in the last 24 hours."
+                },
+                "previousUses": {
+                  "type": "integer",
+                  "description": "The same for the 24 hours before."
+                }
+              }
+            }
+          }
+        }
+      },
+      "ReelComment": {
+        "type": "object",
+        "required": [
+          "id",
+          "reelId",
+          "parentId",
+          "body",
+          "status",
+          "author",
+          "replyCount",
+          "createdAt",
+          "editedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reelId": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The top-level comment this replies to; null for a top-level comment."
+          },
+          "body": {
+            "type": "string",
+            "description": "\"[deleted]\" for a deleted comment that stays because it has replies."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "VISIBLE",
+              "DELETED"
+            ]
+          },
+          "author": {
+            "type": "object",
+            "nullable": true,
+            "required": [
+              "id",
+              "handle",
+              "displayName",
+              "avatar"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "handle": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "avatar": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Null for a deleted comment."
+          },
+          "replyCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "editedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "mine": {
+            "type": "boolean",
+            "description": "Present for signed-in viewers: the comment is theirs."
+          }
+        }
+      },
+      "ReelLikeState": {
+        "type": "object",
+        "required": [
+          "liked",
+          "likeCount"
+        ],
+        "properties": {
+          "liked": {
+            "type": "boolean"
+          },
+          "likeCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReelSaveState": {
+        "type": "object",
+        "required": [
+          "saved",
+          "saveCount"
+        ],
+        "properties": {
+          "saved": {
+            "type": "boolean"
+          },
+          "saveCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReelShareResult": {
+        "type": "object",
+        "required": [
+          "counted",
+          "shareCount"
+        ],
+        "properties": {
+          "counted": {
+            "type": "boolean"
+          },
+          "shareCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "BeaconResult": {
+        "type": "object",
+        "required": [
+          "counted"
+        ],
+        "properties": {
+          "counted": {
+            "type": "boolean",
+            "description": "Whether this beacon counted (once per viewer per reel per IST day)."
+          }
+        }
+      },
+      "ReelAnalyticsTotals": {
+        "type": "object",
+        "required": [
+          "views",
+          "uniqueViewers",
+          "watchSec",
+          "avgWatchPct",
+          "linkClicks",
+          "newFollowers"
+        ],
+        "properties": {
+          "views": {
+            "type": "integer"
+          },
+          "uniqueViewers": {
+            "type": "integer",
+            "description": "Approximate: summed per reel per day."
+          },
+          "watchSec": {
+            "type": "integer"
+          },
+          "avgWatchPct": {
+            "type": "number",
+            "description": "0..100, one decimal."
+          },
+          "linkClicks": {
+            "type": "integer"
+          },
+          "newFollowers": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReelAnalyticsDaily": {
+        "type": "object",
+        "required": [
+          "date",
+          "views",
+          "watchSec",
+          "linkClicks"
+        ],
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "views": {
+            "type": "integer"
+          },
+          "watchSec": {
+            "type": "integer"
+          },
+          "linkClicks": {
+            "type": "integer"
+          }
+        }
+      },
+      "CreatorReelAnalytics": {
+        "type": "object",
+        "required": [
+          "range",
+          "totals",
+          "live",
+          "upgradeRequired"
+        ],
+        "properties": {
+          "range": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "example": "2026-11-01"
+              },
+              "to": {
+                "type": "string",
+                "example": "2026-11-30"
+              }
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReelAnalyticsTotals"
+          },
+          "live": {
+            "type": "object",
+            "required": [
+              "likes",
+              "comments",
+              "saves",
+              "shares"
+            ],
+            "properties": {
+              "likes": {
+                "type": "integer"
+              },
+              "comments": {
+                "type": "integer"
+              },
+              "saves": {
+                "type": "integer"
+              },
+              "shares": {
+                "type": "integer"
+              }
+            },
+            "description": "Current counters of the published reels (not limited to the range)."
+          },
+          "upgradeRequired": {
+            "type": "boolean",
+            "description": "True on the basic plan, which gets totals only."
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReelAnalyticsDaily"
+            },
+            "description": "Standard and advanced plans only."
+          },
+          "topReels": {
+            "type": "array",
+            "description": "Standard and advanced plans only.",
+            "items": {
+              "type": "object",
+              "required": [
+                "reelId",
+                "caption",
+                "status",
+                "views",
+                "uniqueViewers",
+                "avgWatchPct",
+                "linkClicks",
+                "likes",
+                "comments",
+                "saves",
+                "shares"
+              ],
+              "properties": {
+                "reelId": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "views": {
+                  "type": "integer"
+                },
+                "uniqueViewers": {
+                  "type": "integer"
+                },
+                "avgWatchPct": {
+                  "type": "number"
+                },
+                "linkClicks": {
+                  "type": "integer"
+                },
+                "likes": {
+                  "type": "integer"
+                },
+                "comments": {
+                  "type": "integer"
+                },
+                "saves": {
+                  "type": "integer"
+                },
+                "shares": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SingleReelAnalytics": {
+        "type": "object",
+        "required": [
+          "reelId",
+          "range",
+          "totals",
+          "newFollowersScope",
+          "live",
+          "upgradeRequired"
+        ],
+        "properties": {
+          "reelId": {
+            "type": "string"
+          },
+          "range": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "example": "2026-11-01"
+              },
+              "to": {
+                "type": "string",
+                "example": "2026-11-30"
+              }
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ReelAnalyticsTotals"
+          },
+          "newFollowersScope": {
+            "type": "string",
+            "enum": [
+              "creator"
+            ],
+            "description": "`totals.newFollowers` is the creator's, not attributed to this reel."
+          },
+          "live": {
+            "type": "object",
+            "required": [
+              "likes",
+              "comments",
+              "saves",
+              "shares"
+            ],
+            "properties": {
+              "likes": {
+                "type": "integer"
+              },
+              "comments": {
+                "type": "integer"
+              },
+              "saves": {
+                "type": "integer"
+              },
+              "shares": {
+                "type": "integer"
+              }
+            }
+          },
+          "upgradeRequired": {
+            "type": "boolean"
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReelAnalyticsDaily"
+            },
+            "description": "Standard and advanced plans only."
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "title",
+          "body",
+          "link",
+          "data",
+          "readAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string",
+            "nullable": true
+          },
+          "data": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UnreadCount": {
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "NotificationsMarkedRead": {
+        "type": "object",
+        "required": [
+          "updated"
+        ],
+        "properties": {
+          "updated": {
+            "type": "integer"
+          }
+        }
+      },
+      "ReportReceipt": {
+        "type": "object",
+        "required": [
+          "id",
+          "reported"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reported": {
+            "type": "boolean"
           }
         }
       },

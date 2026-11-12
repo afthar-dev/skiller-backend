@@ -7,6 +7,8 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiNoContent } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { CommentsService, COMMENT_MAX } from "./comments.service";
 import { EngagementService, SHARE_CHANNELS } from "./engagement.service";
@@ -29,6 +31,7 @@ export class EngagementController {
   @Put("reels/:id/like")
   @HttpCode(200)
   @ApiOperation({ summary: "Like a reel (idempotent; 120 likes or unlikes a minute)" })
+  @ApiResult(200, "ReelLikeState")
   like(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.engagement.like(user.id, id);
   }
@@ -37,6 +40,7 @@ export class EngagementController {
   @Delete("reels/:id/like")
   @HttpCode(200)
   @ApiOperation({ summary: "Remove my like (idempotent)" })
+  @ApiResult(200, "ReelLikeState")
   unlike(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.engagement.unlike(user.id, id);
   }
@@ -45,6 +49,7 @@ export class EngagementController {
   @Put("reels/:id/save")
   @HttpCode(200)
   @ApiOperation({ summary: "Save a reel (idempotent; 120 saves or unsaves a minute)" })
+  @ApiResult(200, "ReelSaveState")
   save(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.engagement.save(user.id, id);
   }
@@ -53,6 +58,7 @@ export class EngagementController {
   @Delete("reels/:id/save")
   @HttpCode(200)
   @ApiOperation({ summary: "Remove my save (idempotent)" })
+  @ApiResult(200, "ReelSaveState")
   unsave(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.engagement.unsave(user.id, id);
   }
@@ -60,7 +66,8 @@ export class EngagementController {
   @Public()
   @Post("reels/:id/shares")
   @HttpCode(200)
-  @ApiOperation({ summary: "Record a share. Counted once per signed-in user per reel per IST day; anonymous shares are accepted but not counted. 30 a minute" })
+  @ApiOperation({ summary: "Record a share. Counted once per signed-in user per reel per IST day; anonymous shares are accepted but are not counted. 30 a minute" })
+  @ApiResult(200, "ReelShareResult")
   @ApiZodBody(shareSchema)
   async share(@Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     const { channel } = shareSchema.parse(body);
@@ -70,6 +77,7 @@ export class EngagementController {
   @AuthenticatedOnly()
   @Get("me/saved-reels")
   @ApiOperation({ summary: "My saved reels that are still public, most recently saved first" })
+  @ApiPageResult("Reel")
   @ApiPagination()
   savedReels(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     return this.engagement.savedReels(user.id, parsePage(query));
@@ -88,6 +96,7 @@ export class CommentsController {
   @reelReadLimit()
   @Get()
   @ApiOperation({ summary: "Top-level comments of a reel, newest first, with reply counts. A deleted comment that has replies shows as [deleted]" })
+  @ApiPageResult("ReelComment")
   @ApiPagination()
   async list(@Param("id") id: string, @Query() query: Record<string, unknown>, @Req() req: Request) {
     return this.comments.list(id, await this.viewer.viewerId(req), parsePage(query));
@@ -97,6 +106,7 @@ export class CommentsController {
   @reelReadLimit()
   @Get(":commentId/replies")
   @ApiOperation({ summary: "Replies to a top-level comment, oldest first" })
+  @ApiPageResult("ReelComment")
   @ApiPagination()
   async replies(@Param("id") id: string, @Param("commentId") commentId: string, @Query() query: Record<string, unknown>, @Req() req: Request) {
     return this.comments.replies(id, commentId, await this.viewer.viewerId(req), parsePage(query));
@@ -105,6 +115,7 @@ export class CommentsController {
   @AuthenticatedOnly()
   @Post()
   @ApiOperation({ summary: "Comment on a reel (plain text, 1000 characters) or reply to a comment (one level: a reply to a reply joins the same thread). 30 a minute; 403 COMMENTS_DISABLED when the creator turned comments off" })
+  @ApiResult(201, "ReelComment")
   @ApiZodBody(commentSchema)
   create(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.comments.create(user.id, id, commentSchema.parse(body));
@@ -113,6 +124,7 @@ export class CommentsController {
   @AuthenticatedOnly()
   @Patch(":commentId")
   @ApiOperation({ summary: "Edit my comment" })
+  @ApiResult(200, "ReelComment")
   @ApiZodBody(editSchema)
   edit(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("commentId") commentId: string, @Body() body: unknown) {
     return this.comments.edit(user.id, id, commentId, editSchema.parse(body).body);
@@ -122,6 +134,7 @@ export class CommentsController {
   @Delete(":commentId")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a comment: its author, or the creator of the reel" })
+  @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Param("commentId") commentId: string) {
     await this.comments.remove(user.id, id, commentId);
   }

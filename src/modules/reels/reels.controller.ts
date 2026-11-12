@@ -7,6 +7,8 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiResult, ApiPageResult } from "../../common/openapi/money";
+import { ApiNoContent } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { RequirePermission } from "../rbac";
@@ -36,6 +38,7 @@ export class ReelsController {
   @RequirePermission("reel.create")
   @Post("reels")
   @ApiOperation({ summary: "Post a reel from my REEL upload. A finished video is published at once (daily plan limit applies: LIMIT_REACHED waits for tomorrow); one still processing is published when ready" })
+  @ApiResult(201, "Reel", "The reel: published, or processing / waiting for the daily limit.")
   @ApiZodBody(createSchema)
   create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return this.reels.create(user.id, createSchema.parse(body));
@@ -44,6 +47,7 @@ export class ReelsController {
   @AuthenticatedOnly()
   @Patch("reels/:id")
   @ApiOperation({ summary: "Edit my reel: caption (hashtags follow), linked course or gig (one of them), comments on/off" })
+  @ApiResult(200, "Reel", "The reel after the edit.")
   @ApiZodBody(updateSchema)
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.reels.update(user.id, id, updateSchema.parse(body));
@@ -53,6 +57,7 @@ export class ReelsController {
   @Delete("reels/:id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete my reel (soft delete; the day's posting slot is not given back)" })
+  @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     await this.reels.remove(user.id, id);
   }
@@ -61,6 +66,7 @@ export class ReelsController {
   @Post("reels/:id/publish")
   @HttpCode(200)
   @ApiOperation({ summary: "Publish a reel that hit the daily limit (or whose video just finished): 403 ENTITLEMENT_LIMIT_REACHED while the day is still full" })
+  @ApiResult(200, "Reel", "The reel, published.")
   publish(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.reels.publish(user.id, id);
   }
@@ -69,6 +75,7 @@ export class ReelsController {
   @reelReadLimit()
   @Get("reels/:id")
   @ApiOperation({ summary: "A published reel (its creator also sees it while processing, failed or waiting for the daily limit)" })
+  @ApiResult(200, "Reel")
   async get(@Param("id") id: string, @Req() req: Request) {
     return this.reels.get(id, await this.viewer.viewerId(req));
   }
@@ -77,6 +84,7 @@ export class ReelsController {
   @reelReadLimit()
   @Get("profiles/:handle/reels")
   @ApiOperation({ summary: "A creator's published reels, newest first" })
+  @ApiPageResult("Reel")
   @ApiPagination()
   async byHandle(@Param("handle") handle: string, @Query() query: Record<string, unknown>, @Req() req: Request) {
     return this.reels.byHandle(handle, parsePage(query), await this.viewer.viewerId(req));

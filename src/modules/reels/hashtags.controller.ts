@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { HASHTAG_SORTS, HashtagReelsService } from "./hashtag-reels.service";
 import { HashtagTrending } from "./hashtag-trending";
@@ -26,6 +27,7 @@ export class HashtagsController {
   @reelReadLimit()
   @Get("trending")
   @ApiOperation({ summary: "The 20 hashtags whose use grew most in the last 24 hours compared with the 24 hours before (recomputed hourly)" })
+  @ApiResult(200, "TrendingHashtags")
   trendingTags() {
     return this.trending.current();
   }
@@ -34,6 +36,7 @@ export class HashtagsController {
   @reelReadLimit()
   @Get(":tag/reels")
   @ApiOperation({ summary: "Published reels with a hashtag: `sort=top` (engagement, default) or `sort=recent`. The tag may be written with or without #, in any case" })
+  @ApiResult(200, "HashtagReels", "The tag, how many published reels carry it, and a page of them.")
   @ApiQuery({ name: "sort", required: false, enum: HASHTAG_SORTS })
   @ApiPagination()
   async reels(@Param("tag") tag: string, @Query() query: Record<string, unknown>, @Req() req: Request) {
@@ -55,6 +58,7 @@ export class ReelSearchController {
   @reelReadLimit()
   @Get("search")
   @ApiOperation({ summary: "Search published reels by caption and hashtag (newest matches first). Falls back to fuzzy matching on the caption when no word matches. Empty text gives an empty page" })
+  @ApiPageResult("Reel")
   @ApiQuery({ name: "q", required: true, type: String, description: "Search text, up to 100 characters." })
   @ApiPagination()
   async find(@Query() query: Record<string, unknown>, @Req() req: Request) {

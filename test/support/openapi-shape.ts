@@ -20,7 +20,7 @@ function resolve(schema: Schema): Schema {
     if (!target) throw new Error(`unknown schema ${schema.$ref}`);
     return resolve(target);
   }
-  if (schema.allOf) return schema.allOf.map(resolve).reduce((a, b) => ({ ...a, ...b, required: [...(a.required ?? []), ...(b.required ?? [])], properties: { ...a.properties, ...b.properties } }), {} as Schema);
+  if (schema.allOf) return { ...schema.allOf.map(resolve).reduce((a, b) => ({ ...a, ...b, required: [...(a.required ?? []), ...(b.required ?? [])], properties: { ...a.properties, ...b.properties } }), {} as Schema), ...(schema.nullable ? { nullable: true } : {}) };
   return schema;
 }
 

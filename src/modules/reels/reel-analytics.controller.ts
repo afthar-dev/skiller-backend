@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
+import { ApiResult } from "../../common/openapi/money";
 import { ReelAnalyticsService } from "./reel-analytics.service";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD (IST calendar day)");
@@ -26,6 +27,7 @@ export class ReelAnalyticsController {
     summary:
       "My reels' totals over a range of IST days: views, approximate unique viewers, average watch %, link clicks to the linked course, new followers, live likes / comments / saves / shares. Standard and advanced plans also get a daily series and the top reels; on basic `upgradeRequired` is true",
   })
+  @ApiResult(200, "CreatorReelAnalytics")
   @ApiQuery(FROM)
   @ApiQuery(TO)
   account(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
@@ -38,6 +40,7 @@ export class ReelAnalyticsController {
     summary:
       "One of my reels over a range of IST days (owner only): views, approximate unique viewers, average watch %, link clicks, live likes / comments / saves / shares, and the creator's new followers (`newFollowers`, not attributed to the reel). Standard and advanced plans also get the daily series",
   })
+  @ApiResult(200, "SingleReelAnalytics")
   @ApiQuery(FROM)
   @ApiQuery(TO)
   one(@CurrentUser() user: AuthUser, @Param("id") id: string, @Query() query: Record<string, unknown>) {
