@@ -42,3 +42,7 @@ Final: fixed I1, M1, M2, M4, M9 (web 98b10de..253772e, backend b42f81e); 326 uni
 Final: open — learn.spec flow fails 4 of 5 full runs: course page Enrol button stuck "Loading" after sign-in and reload under load; passes alone. Possible real session-restore bug on the main conversion path
 Final: Ruling (controller): one capped investigation of the stuck Enrol button before merge, since it sits on the buying path — cost if wrong: one extra helper run
 Final: Ruling (user): finish Phase 2 now — merged and pushed while the stuck-Enrol investigation continues on phase-2-courses; its fix merges after
+Final: stuck Enrol fixed (web 141ed04): failed session restore left CourseCta and PreviewLesson on Loading forever; now error with retry. Test helper waited too little for refresh rotation
+Final: open — second sign-in for the same email sometimes gets no code (2 of 3 full e2e runs, one flow each); same issue as Phase 1, cause unproven
+Final: open — backend: a refresh rotation whose Set-Cookie is lost (navigation mid-request) answers 409 for 10 s, then token reuse revokes the whole session family; user is signed out. Review before launch
+Final: open — FollowButton has the same stuck-loading gap on failed restore
