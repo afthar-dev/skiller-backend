@@ -21535,6 +21535,15 @@
         "operationId": "Conversations_list",
         "parameters": [
           {
+            "name": "archived",
+            "required": false,
+            "in": "query",
+            "description": "true lists the archived conversations instead of the inbox.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "cursor",
             "required": false,
             "in": "query",
@@ -21715,6 +21724,15 @@
             "name": "id",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "description": "A message id: return the messages after it, oldest first (no cursor), up to `limit`.",
             "schema": {
               "type": "string"
             }

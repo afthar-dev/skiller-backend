@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, Res } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -51,6 +51,7 @@ export class ConversationsController {
   @ApiOperation({ summary: "My conversations, most recently active first, with unread counts. `archived=true` lists the archived ones" })
   @ApiPageResult("Conversation")
   @ApiPagination()
+  @ApiQuery({ name: "archived", required: false, type: Boolean, description: "true lists the archived conversations instead of the inbox." })
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     return this.messaging.list(user.id, { archived: query.archived === "true" }, parsePage(query));
   }
@@ -131,6 +132,7 @@ export class ConversationsController {
   @ApiOperation({ summary: "Messages of one of my conversations, newest first with a cursor. `after=<message id>` returns the messages since then, oldest first (polling). A hidden or removed message has no text. Anyone else's conversation is a 404" })
   @ApiPageResult("Message")
   @ApiPagination()
+  @ApiQuery({ name: "after", required: false, type: String, description: "A message id: return the messages after it, oldest first (no cursor), up to `limit`." })
   messages(@CurrentUser() user: AuthUser, @Param("id") id: string, @Query() query: Record<string, unknown>) {
     const after = typeof query.after === "string" && query.after.length > 0 ? query.after : undefined;
     return this.messaging.messages(user.id, id, parsePage(query), after);
