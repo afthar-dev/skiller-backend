@@ -5,5 +5,7 @@ export { MailHooks } from "./mail-hooks";
 export { ResendApiError } from "./resend.client";
 export type { MailOutcome, MailRef, ResendEventNotice } from "./mail-hooks";
 export { EmailSuppressions } from "./email-suppressions";
+export { renderMail } from "./templates";
+export type { RenderedMail } from "./templates";
 export type { MailCategory, MailData, MailTemplate } from "./mail.types";
 export { MailModule } from "./mail.module";

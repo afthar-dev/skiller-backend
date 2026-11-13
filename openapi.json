@@ -23839,7 +23839,7 @@
             "bearer": []
           }
         ],
-        "summary": "How many active members the segment matches right now, and whether sending needs a second admin (more than 10,000). Counts only",
+        "summary": "How many active members the segment matches right now, whether sending needs a second admin (more than 10,000), and the mail as members will get it (subject and HTML from the sender's own renderer). Counts and the mail only, no member data",
         "tags": [
           "Campaigns"
         ]
@@ -27909,7 +27909,9 @@
         "type": "object",
         "required": [
           "audience",
-          "requiresApproval"
+          "requiresApproval",
+          "subject",
+          "html"
         ],
         "properties": {
           "audience": {
@@ -27919,6 +27921,14 @@
           "requiresApproval": {
             "type": "boolean",
             "description": "True above 10,000 members: another admin must approve before sending."
+          },
+          "subject": {
+            "type": "string",
+            "description": "The subject members will see."
+          },
+          "html": {
+            "type": "string",
+            "description": "The full email as members will get it, from the same renderer the sender uses, with the asking admin's own unsubscribe link in the footer. Show it in a sandboxed iframe (srcdoc, no scripts); never insert it into the page."
           }
         }
       },

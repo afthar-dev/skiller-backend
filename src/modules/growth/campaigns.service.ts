@@ -7,7 +7,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
 import { assertSafeMarkdown } from "../courses";
 import { AccountService } from "../identity";
-import { MailService } from "../mail";
+import { MailService, renderMail } from "../mail";
 import { contentHash, isApproved, mayApprove } from "./campaign-approval";
 import { toCampaignView } from "./campaign-view";
 import { APPROVAL_THRESHOLD, SegmentEvaluator, segmentSchema, type Segment } from "./segment";
@@ -100,11 +100,15 @@ export class CampaignsService {
     return toCampaignView(row);
   }
 
-  /** How many members match right now: a number, and whether sending needs a second admin. Nothing else leaves this method. */
-  async preview(id: string) {
+  /**
+   * How many members match right now, whether sending needs a second admin, and the mail as members will get it: the subject and the HTML from
+   * the same renderer the sender uses (with the asking admin's own unsubscribe link). No member data leaves this method.
+   */
+  async preview(actorId: string, id: string) {
     const c = await this.find(id);
     const audience = await this.segments.count(this.segmentOf(c));
-    return { audience, requiresApproval: audience > APPROVAL_THRESHOLD };
+    const { subject, html } = await renderMail("promo_campaign", { subject: c.subject, bodyMarkdown: c.bodyMarkdown, unsubscribeUrl: this.tokens.urlFor(actorId) });
+    return { audience, requiresApproval: audience > APPROVAL_THRESHOLD, subject, html };
   }
 
   /** One mail, to the acting admin's own address, marked [Test]; nobody else can be named. */

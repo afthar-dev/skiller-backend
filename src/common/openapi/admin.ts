@@ -113,7 +113,10 @@ export const adminComponents: Record<string, unknown> = {
   CampaignDetail: {
     allOf: [ref("Campaign"), obj({ recipients: countMap("Recipients by state."), skipped: countMap("Skipped recipients by reason.") })],
   },
-  CampaignPreview: obj({ audience: { ...int, description: "Active members the segment matches right now. A count only." }, requiresApproval: { ...bool, description: "True above 10,000 members: another admin must approve before sending." } }),
+  CampaignPreview: obj({ audience: { ...int, description: "Active members the segment matches right now. A count only." }, requiresApproval: { ...bool, description: "True above 10,000 members: another admin must approve before sending." },
+    subject: { ...str, description: "The subject members will see." },
+    html: { ...str, description: "The full email as members will get it, from the same renderer the sender uses, with the asking admin's own unsubscribe link in the footer. Show it in a sandboxed iframe (srcdoc, no scripts); never insert it into the page." },
+  }),
   CampaignTestSent: obj({ sent: { ...bool, enum: [true] } }),
 
   AnalyticsMetric: obj({

@@ -320,7 +320,7 @@ describe("typed responses: admin", () => {
     expect(detail.body).toMatchObject({ recipients: { SKIPPED: 1 }, skipped: { unsubscribed: 1 } });
 
     declared(await http().patch(`/v1/admin/campaigns/${c.body.id}`).set(auth(admin)).send({ subject: "Bigger news", segment: { interests: [tag] } }), "PATCH /v1/admin/campaigns/{id}", 200);
-    expect(declared(await post(`/v1/admin/campaigns/${c.body.id}/preview`), "POST /v1/admin/campaigns/{id}/preview", 200).body).toEqual({ audience: 0, requiresApproval: false });
+    expect(declared(await post(`/v1/admin/campaigns/${c.body.id}/preview`), "POST /v1/admin/campaigns/{id}/preview", 200).body).toMatchObject({ audience: 0, requiresApproval: false, subject: "Bigger news", html: expect.stringContaining("Unsubscribe") });
     const before = t.mail.sent.length;
     expect(declared(await post(`/v1/admin/campaigns/${c.body.id}/test-send`), "POST /v1/admin/campaigns/{id}/test-send", 200).body).toEqual({ sent: true });
     expect(t.mail.sent.length).toBeGreaterThanOrEqual(before);

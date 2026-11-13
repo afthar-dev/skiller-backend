@@ -8,6 +8,7 @@ import { SettingsService } from "../../src/modules/admin";
 import { QueueWorkerRunner } from "../../src/common/queue/queue-worker.runner";
 import { QueueNames, queueToken } from "../../src/common/queue/queue.constants";
 import { PROMO_JOB_OPTIONS } from "../../src/common/queue/queue.options";
+import { renderMail } from "../../src/modules/mail";
 import { CampaignSender, PromoMailProcessor, UnsubscribeTokens } from "../../src/modules/growth";
 import { PromoPreferences } from "../../src/modules/notifications";
 import { RolesService } from "../../src/modules/rbac";
@@ -165,12 +166,28 @@ describe("promo email campaigns", () => {
       expect(await count({})).toBe(5);
     });
 
+    it("preview returns the mail as members get it: the sender's renderer, Markdown rendered, the unsubscribe footer in place", async () => {
+      const bodyMarkdown = "Hello **there** [site](https://example.com)";
+      const c = await made({ subject: "Rendered", bodyMarkdown });
+      const preview = await act(c.id, "preview");
+      expect(preview.status).toBe(200);
+      const { subject, html } = await renderMail("promo_campaign", { subject: "Rendered", bodyMarkdown, unsubscribeUrl: "https://unsubscribe.invalid/x" });
+      expect(preview.body.subject).toBe(subject);
+      // Same template as the sender: same output once the per-member unsubscribe link is taken out.
+      const strip = (h: string) => h.replace(/https?:\/\/[^"<\s]*unsubscribe[^"<\s]*/gi, "UNSUB");
+      expect(strip(preview.body.html)).toBe(strip(html));
+      expect(preview.body.html).toContain("<strong>there</strong>");
+      expect(preview.body.html).toContain("https://example.com");
+      expect(preview.body.html).toContain("Unsubscribe");
+    });
+
     it("preview returns counts only; the test send goes to the acting admin and nowhere else", async () => {
       const a = await audience(3);
       const c = await made({ segment: a.segment, subject: "Preview me" });
       const preview = await act(c.id, "preview");
-      expect(Object.keys(preview.body).sort()).toEqual(["audience", "requiresApproval"]);
-      expect(preview.body).toEqual({ audience: 3, requiresApproval: false });
+      expect(Object.keys(preview.body).sort()).toEqual(["audience", "html", "requiresApproval", "subject"]);
+      expect(preview.body).toMatchObject({ audience: 3, requiresApproval: false, subject: "Preview me" });
+      expect(typeof preview.body.html).toBe("string");
       for (const u of a.users) expect(JSON.stringify(preview.body)).not.toContain(u.email);
 
       const before = t.mail.sent.length;
@@ -625,7 +642,7 @@ describe("promo email campaigns", () => {
       const a = await big();
       const c = await made({ segment: a.segment });
       const preview = await act(c.id, "preview");
-      expect(preview.body).toEqual({ audience: 10_001, requiresApproval: true });
+      expect(preview.body).toMatchObject({ audience: 10_001, requiresApproval: true });
       const blocked = await act(c.id, "send");
       expect([blocked.status, blocked.body.error.code]).toEqual([409, "CAMPAIGN_APPROVAL_REQUIRED"]);
       const own = await act(c.id, "approve");
@@ -699,7 +716,7 @@ describe("promo email campaigns", () => {
       await prisma.user.createMany({ data: Array.from({ length: 10_001 }, (_, i) => ({ email: `${bulkEmailPrefix}-g${stamp}-${i}@example.com`, status: "ACTIVE" as const })) });
       const users = await prisma.user.findMany({ where: { email: { startsWith: `${bulkEmailPrefix}-g${stamp}-` } }, select: { id: true } });
       const c = await made({ segment: { interests: [`tag:${tag}`] } });
-      expect((await act(c.id, "preview")).body).toEqual({ audience: 0, requiresApproval: false });
+      expect((await act(c.id, "preview")).body).toMatchObject({ audience: 0, requiresApproval: false });
       expect((await act(c.id, "send")).status).toBe(200); // small at the time: no approval needed
       // the audience grows before the scheduler gets to it
       await prisma.userInterest.createMany({ data: users.map((u) => ({ userId: u.id, key: `tag:${tag}`, weight: 5, updatedAt: new Date() })) });

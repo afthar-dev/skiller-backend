@@ -74,10 +74,10 @@ export class CampaignsController {
   @Post(":id/preview")
   @HttpCode(200)
   @RequireStepUp()
-  @ApiOperation({ summary: "How many active members the segment matches right now, and whether sending needs a second admin (more than 10,000). Counts only" })
+  @ApiOperation({ summary: "How many active members the segment matches right now, whether sending needs a second admin (more than 10,000), and the mail as members will get it (subject and HTML from the sender's own renderer). Counts and the mail only, no member data" })
   @ApiResult(200, "CampaignPreview")
-  preview(@Param("id") id: string) {
-    return this.campaigns.preview(id);
+  preview(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    return this.campaigns.preview(user.id, id);
   }
 
   @Post(":id/test-send")
