@@ -1444,6 +1444,8 @@ model Reel {
 
   @@index([creatorId, publishedAt, id])
   @@index([creatorId, status, id])
+  /// GET /v1/studio/reels: the creator's own reels, newest created first, paged by (createdAt, id).
+  @@index([creatorId, createdAt(sort: Desc), id(sort: Desc)])
   /// The feed / hashtag-recent / candidate scans: PUBLISHED reels newest first.
   @@index([status, publishedAt(sort: Desc), id(sort: Desc)])
   @@index([hashtags], type: Gin)
