@@ -32,8 +32,11 @@ export interface ModerationTarget {
   afterUphold?(id: string): Promise<void>;
   /** True when `actorId` has a stake in the content beyond writing it (authors the course it sits in): they may not decide on it. */
   conflictsWith?(id: string, actorId: string): Promise<boolean>;
-  /** A short description for the moderator's queue. */
-  preview?(id: string): Promise<{ text: string; status: string } | null>;
+  /**
+   * A short description for the moderator's queue. `kind` tells apart things that share one target type (a course question and an answer
+   * are both COURSE_QA), because hiding them again takes a different call.
+   */
+  preview?(id: string): Promise<{ text: string; status: string; kind?: string } | null>;
 }
 
 @Injectable()

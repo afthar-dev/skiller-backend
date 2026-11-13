@@ -63,6 +63,7 @@ export const adminComponents: Record<string, unknown> = {
     lastReportedAt: date,
     autoHidden: { ...bool, description: "Held back automatically when the report threshold was reached." },
     preview: { allOf: [obj({ text: { ...str, description: "Plain text." }, status: str })], nullable: true, description: "A short description of the content; null when it is gone." },
+    targetKind: { type: "string", enum: ["QUESTION", "ANSWER"], nullable: true, description: "For COURSE_QA, whether the item is a question or an answer (they are hidden and shown again with different calls); null for every other target type or when the content is gone." },
   }),
   ModerationDecision: obj({
     targetType,

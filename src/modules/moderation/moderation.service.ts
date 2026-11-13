@@ -50,6 +50,8 @@ export interface QueueItem {
   /** Held back automatically when the report threshold was reached. */
   autoHidden: boolean;
   preview: { text: string; status: string } | null;
+  /** Which kind of content this is when the target type covers more than one (COURSE_QA: QUESTION or ANSWER); null otherwise. */
+  targetKind: string | null;
 }
 
 export interface DecisionView {
@@ -266,7 +268,8 @@ export class ModerationService {
       firstReportedAt: g.firstAt.toISOString(),
       lastReportedAt: g.lastAt.toISOString(),
       autoHidden: hold !== null,
-      preview,
+      preview: preview ? { text: preview.text, status: preview.status } : null,
+      targetKind: preview?.kind ?? null,
     };
   }
 

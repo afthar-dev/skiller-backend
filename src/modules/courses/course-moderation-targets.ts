@@ -63,7 +63,7 @@ export class CourseModerationTargets implements OnModuleInit {
       },
       preview: async (id) => {
         const item = await this.qa(this.prisma, id);
-        return item ? { text: item.body, status: item.hiddenAt ? "HIDDEN" : "VISIBLE" } : null;
+        return item ? { text: item.body, status: item.hiddenAt ? "HIDDEN" : "VISIBLE", kind: item.kind === "question" ? "QUESTION" : "ANSWER" } : null;
       },
     });
   }

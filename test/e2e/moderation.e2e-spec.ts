@@ -340,6 +340,12 @@ describe("moderation: reports, decisions, strikes", () => {
       expect((await prisma.question.findUniqueOrThrow({ where: { id: q } })).hiddenAt).not.toBeNull();
       await reportAll(await reporters(1), "COURSE_QA", a);
 
+      // The queue says which of the two each row is, so a moderator can hide or show it with the right call; other kinds of content carry none.
+      const rows = (await queue(moderator, "?type=course_qa&limit=100")).body.items as { targetId: string; targetKind: string | null }[];
+      expect(rows.find((r) => r.targetId === q)?.targetKind).toBe("QUESTION");
+      expect(rows.find((r) => r.targetId === a)?.targetKind).toBe("ANSWER");
+      expect((await queue(moderator, "?type=reel&limit=100")).body.items.every((i: { targetKind: unknown }) => i.targetKind === null)).toBe(true);
+
       for (const res of [await uphold(author, "COURSE_QA", q), await dismiss(author, "COURSE_QA", a)]) expect([res.status, res.body.error.code]).toEqual([403, "MODERATION_SELF"]);
       expect((await prisma.question.findUniqueOrThrow({ where: { id: q } })).hiddenAt).not.toBeNull();
 
