@@ -16,6 +16,7 @@ const doc = {
     "/placeholder": { get: { responses: { 200: json({ type: "object" }) } } },
     "/array": { get: { responses: { 200: json({ type: "array", items: { type: "string" } }) } } },
     "/no-content": { post: { responses: { 201: { description: "Created" } } } },
+    "/stream": { get: { responses: { 200: { content: { "text/event-stream": { schema: { type: "string" } } } } } } },
     "/gone": { delete: { responses: { 204: { description: "No content" } } } },
     "/error-only": { get: { responses: { 200: { description: "ok" }, 400: json({ type: "object", properties: { e: {} } }) } } },
   },

@@ -20610,6 +20610,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "The new draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gig"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -20674,6 +20684,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Gig"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -20730,6 +20766,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gig"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -20923,6 +20969,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The gig after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gig"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -20977,6 +21033,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -21033,6 +21092,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The gig, live.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gig"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -21089,6 +21158,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The gig, paused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Gig"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -21156,7 +21235,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GigCard"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -21190,7 +21292,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicGig"
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -21242,7 +21351,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GigCard"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "default": {
             "description": "Error response (see `error.code`).",
@@ -21297,8 +21429,25 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The conversation existed; the message was appended to it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStarted"
+                }
+              }
+            }
+          },
           "201": {
-            "description": ""
+            "description": "The conversation is new (200 when it existed) and holds the message just sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationStarted"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21355,7 +21504,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Conversation"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21395,7 +21567,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21435,7 +21614,15 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Server-sent events (`text/event-stream`). Read it with fetch and the `Authorization: Bearer` header; the browser EventSource cannot send it. Events: `message` (data: `MessageStreamEvent`, for both participants of a conversation, the sender's other devices too), `expired` (the access token ended) and `revoked` (the session was signed out or revoked); both end the stream with data `{}`, then reconnect with a fresh token. A comment line (`: ping`) is sent every 25 seconds to keep the stream alive. At most 5 streams per user: opening another closes the oldest.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Event stream. The data of a message event is a #/components/schemas/MessageStreamEvent."
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21502,7 +21689,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Message"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21570,7 +21780,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "The message sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -21619,7 +21836,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationRead"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -24901,6 +25125,496 @@
           },
           "reported": {
             "type": "boolean"
+          }
+        }
+      },
+      "GigPackage": {
+        "type": "object",
+        "required": [
+          "tier",
+          "name",
+          "description",
+          "pricePaise",
+          "deliveryDays",
+          "revisions",
+          "features"
+        ],
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": [
+              "BASIC",
+              "STANDARD",
+              "PREMIUM"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "pricePaise": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "deliveryDays": {
+            "type": "integer"
+          },
+          "revisions": {
+            "type": "integer"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "GigFaq": {
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        }
+      },
+      "GigSeller": {
+        "type": "object",
+        "required": [
+          "id",
+          "handle",
+          "displayName",
+          "headline",
+          "avatarAssetId",
+          "avatarUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "handle": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Gig": {
+        "type": "object",
+        "required": [
+          "id",
+          "sellerId",
+          "slug",
+          "title",
+          "description",
+          "categoryId",
+          "tags",
+          "status",
+          "coverAssetId",
+          "galleryAssetIds",
+          "packages",
+          "faqs",
+          "createdAt",
+          "updatedAt",
+          "publishedAt",
+          "paymentNotice"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sellerId": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "PAUSED",
+              "HIDDEN",
+              "REMOVED"
+            ],
+            "description": "The seller's view of a gig in any state; deleted gigs are never returned."
+          },
+          "coverAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "galleryAssetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GigPackage"
+            },
+            "description": "Ordered BASIC, STANDARD, PREMIUM."
+          },
+          "faqs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GigFaq"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paymentNotice": {
+            "type": "string",
+            "description": "Payments happen outside Skiller and are not protected. Show it as given next to the packages and on the inquiry screen."
+          }
+        }
+      },
+      "PublicGig": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "description",
+          "categoryId",
+          "tags",
+          "coverAssetId",
+          "galleryAssetIds",
+          "packages",
+          "faqs",
+          "seller",
+          "publishedAt",
+          "paymentNotice"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "galleryAssetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GigPackage"
+            },
+            "description": "Ordered BASIC, STANDARD, PREMIUM."
+          },
+          "faqs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GigFaq"
+            }
+          },
+          "seller": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GigSeller"
+              }
+            ],
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "paymentNotice": {
+            "type": "string",
+            "description": "Payments happen outside Skiller and are not protected. Show it as given next to the packages and on the inquiry screen."
+          }
+        }
+      },
+      "GigCard": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "categoryId",
+          "tags",
+          "coverAssetId",
+          "startingPricePaise",
+          "sellerId",
+          "publishedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "startingPricePaise": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "nullable": true,
+            "description": "Money: integer paise as a string. The lowest package price; null when the gig has no package."
+          },
+          "sellerId": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "required": [
+          "id",
+          "conversationId",
+          "senderId",
+          "body",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "conversationId": {
+            "type": "string"
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "nullable": true,
+            "description": "Plain text. Null while the message is hidden or removed: it keeps its place in the thread without its words, for both sides."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "VISIBLE",
+              "HIDDEN",
+              "REMOVED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ConversationGig": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "Conversation": {
+        "type": "object",
+        "required": [
+          "id",
+          "gigId",
+          "gig",
+          "paymentNotice",
+          "lastMessageAt",
+          "unreadCount",
+          "archived",
+          "counterpart",
+          "lastMessage"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gigId": {
+            "type": "string",
+            "nullable": true
+          },
+          "gig": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConversationGig"
+              }
+            ],
+            "nullable": true,
+            "description": "The gig the conversation is about while it is live and its seller may be seen by the viewer; otherwise null."
+          },
+          "paymentNotice": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set for gig conversations: Skiller does not take part in the deal."
+          },
+          "lastMessageAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "unreadCount": {
+            "type": "integer"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "counterpart": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GigSeller"
+              }
+            ],
+            "nullable": true
+          },
+          "lastMessage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "ConversationStarted": {
+        "type": "object",
+        "required": [
+          "conversation",
+          "message"
+        ],
+        "properties": {
+          "conversation": {
+            "$ref": "#/components/schemas/Conversation"
+          },
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          }
+        }
+      },
+      "ConversationRead": {
+        "type": "object",
+        "required": [
+          "conversationId",
+          "unreadCount"
+        ],
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          },
+          "unreadCount": {
+            "type": "integer",
+            "description": "Always 0 after this call."
+          }
+        }
+      },
+      "MessageStreamEvent": {
+        "type": "object",
+        "required": [
+          "conversationId",
+          "message"
+        ],
+        "properties": {
+          "conversationId": {
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/Message"
           }
         }
       },

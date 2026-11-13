@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { ViewerResolver } from "../identity";
@@ -41,6 +42,7 @@ export class GigsController {
     summary:
       "Search and browse live gigs. q is full-text over title, tags and description, with fuzzy title matching when nothing matches as written; category is a course category slug; minPrice / maxPrice filter the starting (lowest package) price in paise; sort relevance (newest without q), newest, price_asc or price_desc. Gigs of suspended sellers, blocked sellers and anything not live are never listed",
   })
+  @ApiPageResult("GigCard")
   @ApiPagination()
   async list(@Query() query: Record<string, unknown>, @Req() req: Request) {
     const filters = querySchema.parse(query);
@@ -52,6 +54,7 @@ export class GigsController {
   @gigReadLimit()
   @Get("gigs/:slug")
   @ApiOperation({ summary: "A live gig: seller, packages, gallery, FAQs and `paymentNotice` (payments happen outside Skiller and are not protected; show it as given). 404 for anything not live or not visible to you" })
+  @ApiResult(200, "PublicGig")
   async get(@Param("slug") slug: string, @Req() req: Request) {
     return this.gigs.page(slug, await this.viewer.viewerId(req));
   }
@@ -60,6 +63,7 @@ export class GigsController {
   @gigReadLimit()
   @Get("profiles/:handle/gigs")
   @ApiOperation({ summary: "A seller's live gigs, newest first" })
+  @ApiPageResult("GigCard")
   @ApiPagination()
   async byHandle(@Param("handle") handle: string, @Query() query: Record<string, unknown>, @Req() req: Request) {
     return this.gigs.byHandle(handle, parsePage(query), await this.viewer.viewerId(req));

@@ -1,7 +1,7 @@
 // Fails when an operation without a typed success response is missing from the allowlist, when an allowlisted
 // operation is now typed (or gone), or when the allowlist is longer than its committed ceiling. The ceiling only falls:
 // it must equal the list's length, so removing an entry lowers it in the same change and adding one shows up as a raise.
-// An operation is typed when a 2xx response is 204 or its application/json schema describes a shape (properties, items or a $ref):
+// An operation is typed when a 2xx response is 204, a text/event-stream with a described schema, or its application/json schema describes a shape (properties, items or a $ref):
 // an empty schema or a bare { type: "object" } placeholder is untyped.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,6 +17,7 @@ function isTyped(operation) {
   return Object.entries(operation.responses ?? {}).some(([status, response]) => {
     if (!/^2\d\d$/.test(status)) return false;
     if (status === "204") return true;
+    if (response?.content?.["text/event-stream"]?.schema?.type) return true; // a documented event stream
     const schema = response?.content?.["application/json"]?.schema;
     return !!schema && typeof schema === "object" && ("properties" in schema || "items" in schema || "$ref" in schema);
   });

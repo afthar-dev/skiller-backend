@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiNoContent } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { sanitizePlainText, sanitizeSingleLine } from "../courses";
 import { RequirePermission } from "../rbac";
@@ -109,6 +111,7 @@ export class StudioGigsController {
   @Post()
   @ApiOperation({ summary: "Create a draft gig: one to three packages (BASIC required, prices 99 to 10,00,000 rupees as paise strings), FAQs, tags, optional cover and gallery pictures" })
   @ApiZodBody(createSchema)
+  @ApiResult(201, "Gig", "The new draft.")
   create(@CurrentUser() user: AuthUser, @Body() body: unknown) {
     return this.gigs.create(user.id, createSchema.parse(body));
   }
@@ -116,6 +119,7 @@ export class StudioGigsController {
   @RequirePermission("gig.create")
   @Get()
   @ApiOperation({ summary: "Your gigs, newest first (deleted ones are left out)" })
+  @ApiPageResult("Gig")
   @ApiPagination()
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     const { status } = listQuery.parse({ status: query.status || undefined });
@@ -125,6 +129,7 @@ export class StudioGigsController {
   @RequirePermission("gig.create")
   @Get(":id")
   @ApiOperation({ summary: "One of your gigs, in any state" })
+  @ApiResult(200, "Gig")
   get(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.gigs.get(user.id, id);
   }
@@ -133,6 +138,7 @@ export class StudioGigsController {
   @Patch(":id")
   @ApiOperation({ summary: "Edit a gig (packages, FAQs and gallery are replaced as a whole). A live gig must stay complete. Not while it is hidden or removed by moderation" })
   @ApiZodBody(updateSchema)
+  @ApiResult(200, "Gig", "The gig after the edit.")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.gigs.update(user.id, id, updateSchema.parse(body));
   }
@@ -141,6 +147,7 @@ export class StudioGigsController {
   @Post(":id/activate")
   @HttpCode(200)
   @ApiOperation({ summary: "Put a draft or paused gig live (GIG_NOT_PUBLISHABLE lists what is missing; ENTITLEMENT_LIMIT_REACHED when the plan's max_active_gigs is full). Live already is a no-op" })
+  @ApiResult(200, "Gig", "The gig, live.")
   activate(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.gigs.activate(user.id, id, metaOf(req));
   }
@@ -149,6 +156,7 @@ export class StudioGigsController {
   @Post(":id/pause")
   @HttpCode(200)
   @ApiOperation({ summary: "Take a live gig off every public surface and free its plan slot. Paused already is a no-op" })
+  @ApiResult(200, "Gig", "The gig, paused.")
   pause(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.gigs.pause(user.id, id, metaOf(req));
   }
@@ -157,6 +165,7 @@ export class StudioGigsController {
   @Delete(":id")
   @HttpCode(204)
   @ApiOperation({ summary: "Delete a gig (soft delete: it disappears everywhere and its pictures are released)" })
+  @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     await this.gigs.remove(user.id, id, metaOf(req));
   }

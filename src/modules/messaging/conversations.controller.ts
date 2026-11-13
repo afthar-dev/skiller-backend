@@ -8,6 +8,9 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { CLOCK, type Clock } from "../../common/clock/clock";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiEventStream } from "../../common/openapi/responses";
+import { messageStreamDescription } from "../../common/openapi/gigs";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { sanitizePlainText } from "../courses";
 import { SessionService } from "../identity";
@@ -36,6 +39,8 @@ export class ConversationsController {
   @Post()
   @ApiOperation({ summary: "Message a person (get-or-create the conversation of the pair and append the message). 201 when the conversation is new, 200 when it existed. From a gig: send gigId (a live gig of that person). MESSAGING_NOT_ALLOWED never says why (block, the person's setting or their account); 20 new people a day and 60 messages an hour" })
   @ApiZodBody(startSchema)
+  @ApiResult(201, "ConversationStarted", "The conversation is new (200 when it existed) and holds the message just sent.")
+  @ApiResult(200, "ConversationStarted", "The conversation existed; the message was appended to it.")
   async start(@CurrentUser() user: AuthUser, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const { created, conversation, message } = await this.messaging.start(user.id, startSchema.parse(body));
     res.status(created ? 201 : 200);
@@ -44,6 +49,7 @@ export class ConversationsController {
 
   @Get()
   @ApiOperation({ summary: "My conversations, most recently active first, with unread counts. `archived=true` lists the archived ones" })
+  @ApiPageResult("Conversation")
   @ApiPagination()
   list(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
     return this.messaging.list(user.id, { archived: query.archived === "true" }, parsePage(query));
@@ -51,6 +57,7 @@ export class ConversationsController {
 
   @Get("unread-count")
   @ApiOperation({ summary: "How many messages from others I have not read, over all my conversations" })
+  @ApiResult(200, "UnreadCount")
   unread(@CurrentUser() user: AuthUser) {
     return this.messaging.unreadTotal(user.id);
   }
@@ -60,6 +67,7 @@ export class ConversationsController {
     summary:
       "Server-sent events: `message` events for my conversations as they happen (text/event-stream). A comment line every 25 s keeps it alive; the stream ends with an `expired` or `revoked` event when the access token or session ends, then reconnect with a fresh token. Send the Authorization header (fetch-based SSE clients; the browser EventSource cannot). Everything here is also available by polling GET /conversations/:id/messages?after=",
   })
+  @ApiEventStream(messageStreamDescription, "MessageStreamEvent")
   async stream(@CurrentUser() user: AuthUser, @Req() req: Request, @Res() res: Response): Promise<void> {
     const token = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "")?.[1] ?? "";
     const exp = (jwt.decode(token) as { exp?: number } | null)?.exp;
@@ -121,6 +129,7 @@ export class ConversationsController {
 
   @Get(":id/messages")
   @ApiOperation({ summary: "Messages of one of my conversations, newest first with a cursor. `after=<message id>` returns the messages since then, oldest first (polling). A hidden or removed message has no text. Anyone else's conversation is a 404" })
+  @ApiPageResult("Message")
   @ApiPagination()
   messages(@CurrentUser() user: AuthUser, @Param("id") id: string, @Query() query: Record<string, unknown>) {
     const after = typeof query.after === "string" && query.after.length > 0 ? query.after : undefined;
@@ -130,6 +139,7 @@ export class ConversationsController {
   @Post(":id/messages")
   @ApiOperation({ summary: "Send a plain-text message (at most 4000 characters) in one of my conversations. 60 messages an hour" })
   @ApiZodBody(sendSchema)
+  @ApiResult(201, "Message", "The message sent.")
   send(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
     return this.messaging.send(user.id, id, sendSchema.parse(body).body);
   }
@@ -137,6 +147,7 @@ export class ConversationsController {
   @Post(":id/read")
   @HttpCode(200)
   @ApiOperation({ summary: "Mark everything in the conversation read" })
+  @ApiResult(200, "ConversationRead")
   read(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.messaging.markRead(user.id, id);
   }

@@ -72,6 +72,16 @@ export const ApiJsonResponse = (status: number, description: string, schema: Sch
 export const objectSchema = (properties: Record<string, Schema>, required: string[] = Object.keys(properties)): Schema => ({ type: "object", required, properties });
 export const schemas = { str, isoDate, nullableStr };
 
+/** Documents a `text/event-stream` success response; `eventSchema` names the component that describes the data of the `message` event. */
+export const ApiEventStream = (description: string, eventSchema: string) =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      description,
+      content: { "text/event-stream": { schema: { type: "string", description: "Event stream. The data of a message event is a #/components/schemas/" + eventSchema + "." } } },
+    } as never),
+  );
+
 /** Documents a 204 response (no body). */
 export const ApiNoContent = (description: string) => applyDecorators(ApiResponse({ status: 204, description }));
 
