@@ -45,6 +45,7 @@ export class LearnService {
         slug: course.slug,
         title: course.title,
         status: course.status,
+        flagged: course.flaggedAt !== null,
         progressPct: enrolment?.progressPct ?? 0,
         completedAt: enrolment?.completedAt?.toISOString() ?? null,
         thumbnailUrl,

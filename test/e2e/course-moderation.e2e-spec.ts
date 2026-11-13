@@ -284,6 +284,9 @@ describe("course moderation and publishing", () => {
       expect(flagged.body).toMatchObject({ status: "PUBLISHED", flagReason: "Copyright complaint" });
       expect(flagged.body.flaggedAt).not.toBeNull();
       expect((await publicView(course.slug)).status).toBe(404);
+      // A reviewer's view of the course says whether it is flagged, so the admin app offers Flag or Unflag, not both.
+      const reviewerView = async () => (await http().get(`/v1/learn/courses/${course.slug}`).set(auth(moderator))).body.course;
+      expect(await reviewerView()).toMatchObject({ status: "PUBLISHED", flagged: true });
       expect((await flag(course.id, "again")).status).toBe(409);
       expect(await prisma.auditLog.count({ where: { action: "course.flag", targetId: course.id } })).toBe(1);
       expect((await prisma.notification.findFirst({ where: { userId: c.userId, type: "course.flagged" } }))?.body).toContain("Copyright complaint");
@@ -295,6 +298,7 @@ describe("course moderation and publishing", () => {
       const back = await unflag(course.id, "Cleared after review");
       expect(back.status).toBe(200);
       expect(back.body).toMatchObject({ flaggedAt: null, flagReason: null });
+      expect(await reviewerView()).toMatchObject({ status: "PUBLISHED", flagged: false });
       expect((await publicView(course.slug)).status).toBe(200);
       expect((await unflag(course.id, "again")).status).toBe(409);
       expect(await prisma.auditLog.count({ where: { action: "course.unflag", targetId: course.id } })).toBe(1);

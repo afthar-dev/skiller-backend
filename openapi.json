@@ -16740,6 +16740,7 @@
                         "slug",
                         "title",
                         "status",
+                        "flagged",
                         "progressPct",
                         "completedAt",
                         "thumbnailUrl"
@@ -16762,6 +16763,10 @@
                             "PUBLISHED",
                             "ARCHIVED"
                           ]
+                        },
+                        "flagged": {
+                          "type": "boolean",
+                          "description": "A moderator hid the course from the catalog. A reviewer offers Unflag for it and Flag for one that is not."
                         },
                         "progressPct": {
                           "type": "integer"

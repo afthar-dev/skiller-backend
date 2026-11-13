@@ -120,7 +120,7 @@ const access = enumOf("ENROLLED", "AUTHOR", "PREVIEW", "REVIEW");
 
 /** The player's curriculum with the learner's progress. */
 export const learnCourseSchema: Schema = objectSchema({
-  course: objectSchema({ id: str, slug: str, title: str, status: courseStatus, progressPct: int, completedAt: nullableDate, thumbnailUrl }),
+  course: objectSchema({ id: str, slug: str, title: str, status: courseStatus, flagged: { ...bool, description: "A moderator hid the course from the catalog. A reviewer offers Unflag for it and Flag for one that is not." }, progressPct: int, completedAt: nullableDate, thumbnailUrl }),
   access,
   sections: {
     type: "array",
