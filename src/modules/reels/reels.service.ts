@@ -34,6 +34,7 @@ export interface UpdateReelInput {
 }
 
 const PROFILE_REELS_CURSOR = "profile-reels";
+const MY_REELS_CURSOR = "my-reels";
 const TX_OPTIONS = { timeout: 15_000, maxWait: 15_000 } as const;
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
@@ -186,6 +187,30 @@ export class ReelsService {
     const last = items[items.length - 1];
     const nextCursor = rows.length > page.limit && last?.publishedAt ? this.cursors.sign(PROFILE_REELS_CURSOR, { t: last.publishedAt.toISOString(), id: last.id }) : null;
     return { items: await this.views.build(items, viewerId), nextCursor };
+  }
+
+  /** The caller's own reels in every state but deleted, newest first (by creation time, which every state has). */
+  async mine(userId: string, page: PageQuery): Promise<{ items: ReelView[]; nextCursor: string | null }> {
+    let after: { t: Date; id: string } | undefined;
+    if (page.cursor) {
+      const c = this.cursors.verify(MY_REELS_CURSOR, page.cursor);
+      const t = typeof c.t === "string" ? new Date(c.t) : new Date(NaN);
+      if (typeof c.id !== "string" || Number.isNaN(t.getTime())) throw badCursor();
+      after = { t, id: c.id };
+    }
+    const rows = await this.prisma.reel.findMany({
+      where: {
+        creatorId: userId,
+        status: { not: "DELETED" },
+        ...(after ? { OR: [{ createdAt: { lt: after.t } }, { createdAt: after.t, id: { lt: after.id } }] } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: page.limit + 1,
+    });
+    const items = rows.slice(0, page.limit);
+    const last = items[items.length - 1];
+    const nextCursor = rows.length > page.limit && last ? this.cursors.sign(MY_REELS_CURSOR, { t: last.createdAt.toISOString(), id: last.id }) : null;
+    return { items: await this.views.build(items, userId), nextCursor };
   }
 
   /** The creator's own reel (404 for anyone else's, and for a deleted one unless `includeDeleted`). */

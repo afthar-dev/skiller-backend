@@ -4,8 +4,11 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorator";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
-import { ApiResult } from "../../common/openapi/money";
+import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
+import { ApiPagination } from "../../common/openapi/zod-schema";
 import { ReelAnalyticsService } from "./reel-analytics.service";
+import { ReelsService } from "./reels.service";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD (IST calendar day)");
 const querySchema = z.object({ from: date.optional(), to: date.optional() }).strict();
@@ -18,7 +21,20 @@ const TO = { name: "to", required: false, description: "Last IST day, inclusive,
 @ApiTags("Reel studio")
 @Controller("studio/reels")
 export class ReelAnalyticsController {
-  constructor(private readonly analytics: ReelAnalyticsService) {}
+  constructor(
+    private readonly analytics: ReelAnalyticsService,
+    private readonly reels: ReelsService,
+  ) {}
+
+  // AuthenticatedOnly: always the caller's own reels.
+  @AuthenticatedOnly()
+  @Get()
+  @ApiOperation({ summary: "My reels in every state except deleted (processing, published, waiting for the daily limit, failed, hidden, removed), newest first" })
+  @ApiPageResult("Reel")
+  @ApiPagination()
+  mine(@CurrentUser() user: AuthUser, @Query() query: Record<string, unknown>) {
+    return this.reels.mine(user.id, parsePage(query));
+  }
 
   // AuthenticatedOnly: the numbers are always the caller's own reels.
   @AuthenticatedOnly()

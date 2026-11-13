@@ -191,6 +191,8 @@ describe("typed responses: reels, feeds, hashtags, analytics, reports and notifi
     const today = istDateOf(t.clock.now());
     await prisma.reelViewDaily.create({ data: { reelId: paidReel.id, day: today, views: 4, watchSec: 60, uniqueViewers: 3, linkClicks: 1 } });
 
+    const mineList = declared(await get("/v1/studio/reels", free), "GET /v1/studio/reels", 200);
+    expect(mineList.body.items.map((r: { id: string }) => r.id)).toEqual([freeReel.id]);
     const basic = declared(await get("/v1/studio/reels/analytics", free), "GET /v1/studio/reels/analytics", 200);
     expect(basic.body.upgradeRequired).toBe(true);
     expect(basic.body).not.toHaveProperty("daily");
