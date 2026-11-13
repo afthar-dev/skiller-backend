@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { istWindow } from "../../common/clock/ist";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { toPage, type PageQuery } from "../../common/http/pagination";
 
@@ -18,6 +19,11 @@ export interface AuditFilter {
   targetType?: string;
   targetId?: string;
   actorId?: string;
+  /** Exact action name, such as "user.suspend". */
+  action?: string;
+  /** Inclusive IST days, YYYY-MM-DD. */
+  from?: string;
+  to?: string;
 }
 
 const json = (value: unknown) => (value === undefined || value === null ? Prisma.DbNull : (value as Prisma.InputJsonValue));
@@ -49,6 +55,8 @@ export class AuditService {
         targetType: filter.targetType,
         targetId: filter.targetId,
         actorId: filter.actorId,
+        action: filter.action,
+        ...(filter.from || filter.to ? { createdAt: istWindow(filter.from, filter.to) } : {}),
         ...(page.cursor ? { id: { lt: page.cursor } } : {}),
       },
       orderBy: { id: "desc" },

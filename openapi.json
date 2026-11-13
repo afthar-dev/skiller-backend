@@ -707,6 +707,34 @@
               "minLength": 1,
               "maxLength": 200
             }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
           }
         ],
         "responses": {
@@ -772,7 +800,7 @@
             "bearer": []
           }
         ],
-        "summary": "Audit log, newest first",
+        "summary": "Audit log, newest first. Filter by actor, target, exact action, and an inclusive range of IST days (`from`, `to`, YYYY-MM-DD)",
         "tags": [
           "Admin"
         ]

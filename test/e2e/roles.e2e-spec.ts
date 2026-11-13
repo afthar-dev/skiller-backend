@@ -1,4 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
+import { addDays, istDateOf } from "../../src/common/clock/ist";
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
 import request from "supertest";
@@ -354,6 +355,25 @@ describe("roles and audit", () => {
     const filtered = await http().get("/v1/admin/audit").query({ targetType: "user_role" }).set(auth(admin));
     expect(filtered.body.items.every((i: { targetType: string }) => i.targetType === "user_role")).toBe(true);
     expect(filtered.body.items[0]).toEqual(expect.objectContaining({ action: expect.any(String), targetId: expect.any(String), createdAt: expect.any(String) }));
+
+    // By action (exact), and by IST day range (inclusive), alone or together with the other filters.
+    const action: string = filtered.body.items[0].action;
+    const byAction = await http().get("/v1/admin/audit").query({ action }).set(auth(admin));
+    expect(byAction.status).toBe(200);
+    expect(byAction.body.items.length).toBeGreaterThan(0);
+    expect(byAction.body.items.every((i: { action: string }) => i.action === action)).toBe(true);
+    expect((await http().get("/v1/admin/audit").query({ action: "no.such.action" }).set(auth(admin))).body.items).toEqual([]);
+
+    const today = istDateOf(new Date());
+    const window = (q: Record<string, string>) => http().get("/v1/admin/audit").query({ actorId: admin.userId, limit: 100, ...q }).set(auth(admin));
+    const within = await window({ from: addDays(today, -1), to: addDays(today, 1) });
+    expect(within.status).toBe(200);
+    expect(within.body.items.length).toBeGreaterThanOrEqual(3);
+    expect((await window({ from: addDays(today, 1) })).body.items).toEqual([]); // nothing after today
+    expect((await window({ to: addDays(today, -1) })).body.items).toEqual([]); // nothing before today
+    const both = await window({ action, from: today, to: addDays(today, 1) });
+    expect(both.body.items.every((i: { action: string }) => i.action === action)).toBe(true);
+    for (const bad of [{ from: "yesterday" }, { to: "2026-02-30" }, { from: "2026-01-02", to: "2026-01-01" }] as Record<string, string>[]) expect([bad, (await window(bad)).status]).toEqual([bad, 400]);
   });
 
   it("unauthenticated admin routes are 401", async () => {
