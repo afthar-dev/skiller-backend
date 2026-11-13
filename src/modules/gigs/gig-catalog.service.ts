@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { badCursor, SignedCursor } from "../../common/http/signed-cursor";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { CourseCategories } from "../courses";
+import { ProfilesService } from "../users";
+import { GigImages } from "./gig-images";
 import { toGigCard } from "./gig-view";
 import { GigVisibility } from "./gig-visibility";
 
@@ -73,6 +75,8 @@ export class GigCatalogService {
     private readonly cursors: SignedCursor,
     private readonly categories: CourseCategories,
     private readonly visibility: GigVisibility,
+    private readonly images: GigImages,
+    private readonly profiles: ProfilesService,
   ) {}
 
   async search(query: GigCatalogQuery, viewerId: string | null) {
@@ -101,7 +105,9 @@ export class GigCatalogService {
     const last = kept.length === query.limit ? kept[kept.length - 1] : scanned;
     const nextCursor = more && last ? this.cursors.sign(CURSOR_CONTEXT, { s: plan.sort, m: plan.mode, h: plan.hash, k0: last.k, id: last.id }) : null;
     const byId = new Map((await this.prisma.gig.findMany({ where: { id: { in: kept.map((r) => r.id) }, status: "ACTIVE" }, include: { packages: true } })).map((g) => [g.id, g]));
-    return { items: kept.flatMap((r) => (byId.has(r.id) ? [toGigCard(byId.get(r.id)!)] : [])), nextCursor };
+    const gigs = kept.flatMap((r) => (byId.has(r.id) ? [byId.get(r.id)!] : []));
+    const [urls, sellers] = await Promise.all([this.images.urls(gigs.map((g) => g.coverAssetId)), this.profiles.summaries([...new Set(gigs.map((g) => g.sellerId))])]);
+    return { items: gigs.map((g) => toGigCard(g, g.coverAssetId ? (urls.get(g.coverAssetId) ?? null) : null, sellers.get(g.sellerId) ?? null)), nextCursor };
   }
 
   /** Decides the matching mode and the filters; null when the query can match nothing (an unknown category). */

@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query, Req } from "@nestjs/common";
-import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { z } from "zod";
 import { Public } from "../../common/auth/public.decorator";
@@ -44,6 +44,11 @@ export class GigsController {
   })
   @ApiPageResult("GigCard")
   @ApiPagination()
+  @ApiQuery({ name: "q", required: false, type: String, description: "Search words, up to 100 characters." })
+  @ApiQuery({ name: "category", required: false, type: String, description: "A category slug." })
+  @ApiQuery({ name: "minPrice", required: false, type: String, description: "Lowest starting price, integer paise as a string." })
+  @ApiQuery({ name: "maxPrice", required: false, type: String, description: "Highest starting price, integer paise as a string." })
+  @ApiQuery({ name: "sort", required: false, enum: GIG_SORTS, description: "Default relevance (newest without q)." })
   async list(@Query() query: Record<string, unknown>, @Req() req: Request) {
     const filters = querySchema.parse(query);
     const page = parsePage(query);

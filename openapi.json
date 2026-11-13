@@ -21215,6 +21215,57 @@
         "operationId": "Gigs_list",
         "parameters": [
           {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Default relevance (newest without q).",
+            "schema": {
+              "enum": [
+                "relevance",
+                "newest",
+                "price_asc",
+                "price_desc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "required": false,
+            "in": "query",
+            "description": "Highest starting price, integer paise as a string.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minPrice",
+            "required": false,
+            "in": "query",
+            "description": "Lowest starting price, integer paise as a string.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "description": "A category slug.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Search words, up to 100 characters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "required": false,
             "in": "query",
@@ -25328,7 +25379,9 @@
           "categoryId",
           "tags",
           "coverAssetId",
+          "coverUrl",
           "galleryAssetIds",
+          "galleryUrls",
           "packages",
           "faqs",
           "seller",
@@ -25361,11 +25414,23 @@
             "type": "string",
             "nullable": true
           },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Public URL of the cover (1024 px wide rendition); null when there is no cover or it is not ready."
+          },
           "galleryAssetIds": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "galleryUrls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Public URLs of the gallery pictures that are ready, in gallery order."
           },
           "packages": {
             "type": "array",
@@ -25408,8 +25473,10 @@
           "categoryId",
           "tags",
           "coverAssetId",
+          "coverUrl",
           "startingPricePaise",
           "sellerId",
+          "seller",
           "publishedAt"
         ],
         "properties": {
@@ -25435,6 +25502,11 @@
             "type": "string",
             "nullable": true
           },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Public URL of the cover (1024 px wide rendition); null when there is no cover or it is not ready."
+          },
           "startingPricePaise": {
             "type": "string",
             "pattern": "^-?[0-9]+$",
@@ -25443,6 +25515,14 @@
           },
           "sellerId": {
             "type": "string"
+          },
+          "seller": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GigSeller"
+              }
+            ],
+            "nullable": true
           },
           "publishedAt": {
             "type": "string",

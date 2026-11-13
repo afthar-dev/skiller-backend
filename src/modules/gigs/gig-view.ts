@@ -41,7 +41,7 @@ export const toGigView = (g: GigRow) => ({
 });
 
 /** What anyone sees of a live gig. `paymentNotice` is a stable field: clients show it as given next to the packages and on the inquiry screen. */
-export const toPublicGigView = (g: GigRow, seller: ProfileSummary | null) => ({
+export const toPublicGigView = (g: GigRow, seller: ProfileSummary | null, images: { coverUrl: string | null; galleryUrls: string[] }) => ({
   id: g.id,
   slug: g.slug,
   title: g.title,
@@ -49,7 +49,9 @@ export const toPublicGigView = (g: GigRow, seller: ProfileSummary | null) => ({
   categoryId: g.categoryId,
   tags: g.tags,
   coverAssetId: g.coverAssetId,
+  coverUrl: images.coverUrl,
   galleryAssetIds: galleryOf(g),
+  galleryUrls: images.galleryUrls,
   packages: packagesOf(g),
   faqs: faqsOf(g),
   seller,
@@ -58,7 +60,7 @@ export const toPublicGigView = (g: GigRow, seller: ProfileSummary | null) => ({
 });
 
 /** A gig in a list: no description, FAQs or gallery; the lowest package price stands in for "from". */
-export const toGigCard = (g: Gig & { packages: GigPackage[] }) => {
+export const toGigCard = (g: Gig & { packages: GigPackage[] }, coverUrl: string | null, seller: ProfileSummary | null) => {
   const prices = g.packages.map((p) => p.pricePaise);
   const lowest = prices.length > 0 ? prices.reduce((a, b) => (a < b ? a : b)) : null;
   return {
@@ -68,8 +70,10 @@ export const toGigCard = (g: Gig & { packages: GigPackage[] }) => {
     categoryId: g.categoryId,
     tags: g.tags,
     coverAssetId: g.coverAssetId,
+    coverUrl,
     startingPricePaise: lowest === null ? null : lowest.toString(),
     sellerId: g.sellerId,
+    seller,
     publishedAt: g.publishedAt?.toISOString() ?? null,
   };
 };

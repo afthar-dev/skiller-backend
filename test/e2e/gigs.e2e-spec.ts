@@ -288,6 +288,32 @@ describe("gig listings", () => {
       expect((await get("/v1/gigs/does-not-exist")).status).toBe(404);
     });
 
+    it("pictures come as public URLs (cover, gallery in order) and cards carry the cover and the seller; unready pictures have none", async () => {
+      const c = await creator();
+      const renditions = (key: string) => ({ renditions: { "256": `images/${key}/256.webp`, "1024": `images/${key}/1024.webp` } });
+      const cover = await asset(c.userId, "THUMBNAIL", renditions("cover"));
+      const g1 = await asset(c.userId, "GIG_GALLERY", renditions("g1"));
+      const g2 = await asset(c.userId, "GIG_GALLERY", renditions("g2"));
+      const res = await create(c, { coverAssetId: cover.id, galleryAssetIds: [g2.id, g1.id] });
+      expect(res.status).toBe(201);
+      await activate(c, res.body.id);
+      const page = await get(`/v1/gigs/${res.body.slug}`);
+      expect(page.body.coverUrl).toMatch(/images.cover.1024[.]webp$/);
+      expect(page.body.galleryUrls).toHaveLength(2);
+      expect(page.body.galleryUrls[0]).toMatch(/images.g2.1024[.]webp$/);
+      expect(page.body.galleryUrls[1]).toMatch(/images.g1.1024[.]webp$/);
+      const handle = (await prisma.profile.findUniqueOrThrow({ where: { userId: c.userId } })).handle;
+      const mine = await get(`/v1/profiles/${handle}/gigs`);
+      expect(mine.body.items[0]).toMatchObject({ id: res.body.id, seller: { id: c.userId, handle } });
+      expect(mine.body.items[0].coverUrl).toMatch(/images.cover.1024[.]webp$/);
+      const found = await get(`/v1/gigs?q=${encodeURIComponent(res.body.title)}`);
+      expect(found.body.items[0]).toMatchObject({ id: res.body.id, seller: { id: c.userId, handle } });
+      expect(found.body.items[0].coverUrl).toMatch(/1024[.]webp$/);
+      const plain = await readyGig(c); // the cover has no renditions yet
+      await activate(c, plain.id);
+      expect((await get(`/v1/gigs/${plain.slug}`)).body.coverUrl).toBeNull();
+    });
+
     it("hidden gigs never show: paused, deleted, moderated, and ones of a suspended or deleted seller", async () => {
       const c = await creator();
       const mk = async () => {

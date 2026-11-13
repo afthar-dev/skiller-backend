@@ -9,6 +9,7 @@ import { MediaModule } from "../media";
 import { ModerationModule } from "../moderation";
 import { UsersModule } from "../users";
 import { GigCatalogService } from "./gig-catalog.service";
+import { GigImages } from "./gig-images";
 import { GigLookup } from "./gig-lookup";
 import { GigModerationTargets } from "./gig-moderation-targets";
 import { GigVisibility } from "./gig-visibility";
@@ -25,6 +26,7 @@ import { StudioGigsController } from "./studio-gigs.controller";
     GigsService,
     GigsPublicService,
     GigCatalogService,
+    GigImages,
     GigModerationTargets,
     GigVisibility,
     GigLookup,
