@@ -16794,7 +16794,7 @@
                         },
                         "flagged": {
                           "type": "boolean",
-                          "description": "A moderator hid the course from the catalog. A reviewer offers Unflag for it and Flag for one that is not."
+                          "description": "A moderator hid the course from the catalog. Only the author, a course.manage_any holder and a reviewer see the real value (a reviewer offers Unflag for it and Flag for one that is not); an enrolled learner always gets false."
                         },
                         "progressPct": {
                           "type": "integer"

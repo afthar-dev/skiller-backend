@@ -287,6 +287,12 @@ describe("course moderation and publishing", () => {
       // A reviewer's view of the course says whether it is flagged, so the admin app offers Flag or Unflag, not both.
       const reviewerView = async () => (await http().get(`/v1/learn/courses/${course.slug}`).set(auth(moderator))).body.course;
       expect(await reviewerView()).toMatchObject({ status: "PUBLISHED", flagged: true });
+      // Moderation state is not for learners: an enrolled learner of a flagged course still reads false, the owner reads the truth.
+      const learner = await t.login();
+      await prisma.enrolment.create({ data: { courseId: course.id, userId: learner.userId, source: "FREE" } });
+      const learnerView = (await http().get(`/v1/learn/courses/${course.slug}`).set(auth(learner))).body;
+      expect(learnerView).toMatchObject({ access: "ENROLLED", course: { flagged: false } });
+      expect((await http().get(`/v1/learn/courses/${course.slug}`).set(auth(c))).body).toMatchObject({ access: "AUTHOR", course: { flagged: true } });
       expect((await flag(course.id, "again")).status).toBe(409);
       expect(await prisma.auditLog.count({ where: { action: "course.flag", targetId: course.id } })).toBe(1);
       expect((await prisma.notification.findFirst({ where: { userId: c.userId, type: "course.flagged" } }))?.body).toContain("Copyright complaint");

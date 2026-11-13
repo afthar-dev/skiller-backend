@@ -45,7 +45,8 @@ export class LearnService {
         slug: course.slug,
         title: course.title,
         status: course.status,
-        flagged: course.flaggedAt !== null,
+        // Moderation state is for staff and the author; an enrolled learner always reads false.
+        flagged: access.via !== "ENROLLED" && course.flaggedAt !== null,
         progressPct: enrolment?.progressPct ?? 0,
         completedAt: enrolment?.completedAt?.toISOString() ?? null,
         thumbnailUrl,
