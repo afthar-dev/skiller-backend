@@ -21,8 +21,10 @@ import { MESSAGE_MAX } from "./messaging-rules";
 /** Plain text, cleaned the same way as other user text, at least one character left and at most MESSAGE_MAX. */
 const messageText = z.preprocess((v) => (typeof v === "string" ? sanitizePlainText(v, MESSAGE_MAX * 4) : v), z.string().min(1).max(MESSAGE_MAX));
 
-const startSchema = z.object({ recipientHandle: z.string().trim().min(1).max(60), gigId: z.string().uuid().optional(), message: messageText }).strict();
-const sendSchema = z.object({ body: messageText }).strict();
+/** The sender's own key for one send attempt: repeating a request with the same key returns the first result instead of sending again. */
+const clientMessageId = z.string().uuid().optional();
+const startSchema = z.object({ recipientHandle: z.string().trim().min(1).max(60), gigId: z.string().uuid().optional(), message: messageText, clientMessageId }).strict();
+const sendSchema = z.object({ body: messageText, clientMessageId }).strict();
 
 @ApiTags("Messaging")
 @AuthenticatedOnly()
@@ -37,7 +39,7 @@ export class ConversationsController {
   ) {}
 
   @Post()
-  @ApiOperation({ summary: "Message a person (get-or-create the conversation of the pair and append the message). 201 when the conversation is new, 200 when it existed. From a gig: send gigId (a live gig of that person). MESSAGING_NOT_ALLOWED never says why (block, the person's setting or their account); 20 new people a day and 60 messages an hour" })
+  @ApiOperation({ summary: "Message a person (get-or-create the conversation of the pair and append the message). 201 when the conversation is new, 200 when it existed. Optional clientMessageId (uuid, unique per sender): a repeat returns the first message and its conversation with 200 and sends nothing again. From a gig: send gigId (a live gig of that person). MESSAGING_NOT_ALLOWED never says why (block, the person's setting or their account); 20 new people a day and 60 messages an hour" })
   @ApiZodBody(startSchema)
   @ApiResult(201, "ConversationStarted", "The conversation is new (200 when it existed) and holds the message just sent.")
   @ApiResult(200, "ConversationStarted", "The conversation existed; the message was appended to it.")
@@ -66,7 +68,7 @@ export class ConversationsController {
   @Get("stream")
   @ApiOperation({
     summary:
-      "Server-sent events: `message` events for my conversations as they happen (text/event-stream). A comment line every 25 s keeps it alive; the stream ends with an `expired` or `revoked` event when the access token or session ends, then reconnect with a fresh token. Send the Authorization header (fetch-based SSE clients; the browser EventSource cannot). Everything here is also available by polling GET /conversations/:id/messages?after=",
+      "Server-sent events: `message` events for my conversations as they happen (text/event-stream). A comment line every 25 s keeps it alive; the stream ends with an `expired` or `revoked` event when the access token or session ends, then reconnect with a fresh token. A stream closed because the member opened a sixth one ends with a `replaced` event: do not reconnect from that tab on a timer. Send the Authorization header (fetch-based SSE clients; the browser EventSource cannot). Everything here is also available by polling GET /conversations/:id/messages?after=",
   })
   @ApiEventStream(messageStreamDescription, "MessageStreamEvent")
   async stream(@CurrentUser() user: AuthUser, @Req() req: Request, @Res() res: Response): Promise<void> {
@@ -77,7 +79,7 @@ export class ConversationsController {
     let ended = false;
     // Filled in as the stream comes up; end() releases whatever exists by then.
     const held: { tick?: NodeJS.Timeout; expiry?: NodeJS.Timeout; unsubscribe?: () => void; untrack?: () => void } = {};
-    const end = (reason?: "expired" | "revoked") => {
+    const end = (reason?: "expired" | "revoked" | "replaced") => {
       if (ended) return;
       ended = true;
       if (held.tick) clearInterval(held.tick);
@@ -100,7 +102,7 @@ export class ConversationsController {
       held.unsubscribe();
       return;
     }
-    held.untrack = this.hub.track(user.id, () => end());
+    held.untrack = this.hub.track(user.id, () => end("replaced"));
 
     res.status(200);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
@@ -139,11 +141,15 @@ export class ConversationsController {
   }
 
   @Post(":id/messages")
-  @ApiOperation({ summary: "Send a plain-text message (at most 4000 characters) in one of my conversations. 60 messages an hour" })
+  @ApiOperation({ summary: "Send a plain-text message (at most 4000 characters) in one of my conversations. 60 messages an hour. Optional clientMessageId (uuid, unique per sender): a repeat returns the first message with 200 and sends nothing again" })
   @ApiZodBody(sendSchema)
   @ApiResult(201, "Message", "The message sent.")
-  send(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown) {
-    return this.messaging.send(user.id, id, sendSchema.parse(body).body);
+  @ApiResult(200, "Message", "The same clientMessageId was sent before: the first message; nothing new was sent.")
+  async send(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const input = sendSchema.parse(body);
+    const { replayed, message } = await this.messaging.send(user.id, id, input.body, input.clientMessageId);
+    res.status(replayed ? 200 : 201);
+    return message;
   }
 
   @Post(":id/read")

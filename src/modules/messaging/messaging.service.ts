@@ -19,6 +19,9 @@ import { conversationNotFound, messagingNotAllowed, messagingSelf, MESSAGES_PER_
 
 const TX_OPTIONS = { timeout: 15_000, maxWait: 15_000 } as const;
 const LIST_CURSOR = "conversations";
+/** A unique-key clash on (senderId, clientMessageId): the same key arrived twice at once. */
+const isClientMessageIdConflict = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002" && JSON.stringify(err.meta?.target ?? "").includes("clientMessageId");
 const messagesCursor = (conversationId: string) => `messages:${conversationId}`;
 
 interface ListRow {
@@ -55,8 +58,18 @@ export class MessagingService {
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
-  /** Get-or-create the conversation with `recipientHandle` and append the first message. */
-  async start(senderId: string, input: { recipientHandle: string; gigId?: string; message: string }): Promise<{ created: boolean; conversation: ConversationView; message: MessageView }> {
+  /**
+   * Get-or-create the conversation with `recipientHandle` and append the first message. With a `clientMessageId` that this sender used before, nothing is
+   * added: the earlier message and its conversation come back (`replayed`), before any permission check or cap, so a retry never costs a slot.
+   */
+  async start(
+    senderId: string,
+    input: { recipientHandle: string; gigId?: string; message: string; clientMessageId?: string },
+  ): Promise<{ created: boolean; replayed: boolean; conversation: ConversationView; message: MessageView }> {
+    if (input.clientMessageId) {
+      const prior = await this.priorMessage(senderId, input.clientMessageId);
+      if (prior) return this.replayOfStart(senderId, prior);
+    }
     const recipient = await this.profiles.getByHandleAnyStatus(input.recipientHandle);
     const recipientId = recipient.userId;
     if (recipientId === senderId) throw messagingSelf();
@@ -73,26 +86,46 @@ export class MessagingService {
     await this.cap(`msg:hour:${senderId}`, MESSAGES_PER_HOUR, 3600, "messages_per_hour");
 
     const now = this.clock.now();
-    const { conversationId, created, message } = await this.prisma.$transaction(async (tx) => {
-      const made = await tx.conversation.createMany({ data: [{ pairKey, gigId: input.gigId ?? null, createdAt: now, lastMessageAt: now }], skipDuplicates: true });
-      const row = await tx.conversation.findUniqueOrThrow({ where: { pairKey }, select: { id: true } });
-      await tx.conversationParticipant.createMany({ data: [senderId, recipientId].map((userId) => ({ conversationId: row.id, userId })), skipDuplicates: true });
-      if (input.gigId && made.count === 0) await tx.conversation.update({ where: { id: row.id }, data: { gigId: input.gigId } });
-      return { conversationId: row.id, created: made.count === 1, message: await this.append(tx, row.id, senderId, input.message, now) };
-    }, TX_OPTIONS);
+    let done: { conversationId: string; created: boolean; message: Message };
+    try {
+      done = await this.prisma.$transaction(async (tx) => {
+        const made = await tx.conversation.createMany({ data: [{ pairKey, gigId: input.gigId ?? null, createdAt: now, lastMessageAt: now }], skipDuplicates: true });
+        const row = await tx.conversation.findUniqueOrThrow({ where: { pairKey }, select: { id: true } });
+        await tx.conversationParticipant.createMany({ data: [senderId, recipientId].map((userId) => ({ conversationId: row.id, userId })), skipDuplicates: true });
+        if (input.gigId && made.count === 0) await tx.conversation.update({ where: { id: row.id }, data: { gigId: input.gigId } });
+        return { conversationId: row.id, created: made.count === 1, message: await this.append(tx, row.id, senderId, input.message, now, input.clientMessageId) };
+      }, TX_OPTIONS);
+    } catch (err) {
+      // A parallel request with the same key won: its message is the answer.
+      const prior = input.clientMessageId && isClientMessageIdConflict(err) ? await this.priorMessage(senderId, input.clientMessageId) : null;
+      if (!prior) throw err;
+      return this.replayOfStart(senderId, prior);
+    }
 
-    await this.afterSend(message, recipientId);
-    const [conversation] = await this.views(senderId, [conversationId]);
-    return { created, conversation, message: toMessageView(message) };
+    await this.afterSend(done.message, recipientId);
+    const [conversation] = await this.views(senderId, [done.conversationId]);
+    return { created: done.created, replayed: false, conversation, message: toMessageView(done.message) };
   }
 
-  async send(senderId: string, conversationId: string, body: string): Promise<MessageView> {
+  /** Sends a message. A `clientMessageId` this sender used before returns the earlier message (`replayed`) and sends nothing more. */
+  async send(senderId: string, conversationId: string, body: string, clientMessageId?: string): Promise<{ replayed: boolean; message: MessageView }> {
     const { otherId } = await this.participation(senderId, conversationId);
+    if (clientMessageId) {
+      const prior = await this.priorMessage(senderId, clientMessageId);
+      if (prior) return this.replayOfSend(prior, conversationId);
+    }
     await this.assertReachable(senderId, otherId);
     await this.cap(`msg:hour:${senderId}`, MESSAGES_PER_HOUR, 3600, "messages_per_hour");
-    const message = await this.prisma.$transaction((tx) => this.append(tx, conversationId, senderId, body, this.clock.now()), TX_OPTIONS);
+    let message: Message;
+    try {
+      message = await this.prisma.$transaction((tx) => this.append(tx, conversationId, senderId, body, this.clock.now(), clientMessageId), TX_OPTIONS);
+    } catch (err) {
+      const prior = clientMessageId && isClientMessageIdConflict(err) ? await this.priorMessage(senderId, clientMessageId) : null;
+      if (!prior) throw err;
+      return this.replayOfSend(prior, conversationId);
+    }
     await this.afterSend(message, otherId);
-    return toMessageView(message);
+    return { replayed: false, message: toMessageView(message) };
   }
 
   /** My conversations, most recently active first. Archived ones only with `archived`. */
@@ -202,16 +235,32 @@ export class MessagingService {
    * Adds a message under the conversation's row lock. Times in a conversation strictly increase (a message is never stamped at or before the previous
    * one), so "created after lastReadAt" means exactly "unread" even for two messages in the same millisecond.
    */
-  private async append(tx: Prisma.TransactionClient, conversationId: string, senderId: string, body: string, now: Date): Promise<Message> {
+  private async append(tx: Prisma.TransactionClient, conversationId: string, senderId: string, body: string, now: Date, clientMessageId?: string): Promise<Message> {
     const rows = await tx.$queryRaw<{ lastMessageAt: Date }[]>`SELECT "lastMessageAt" FROM "conversations" WHERE "id" = ${conversationId} FOR UPDATE`;
     const previous = rows[0]?.lastMessageAt;
     if (!previous) throw conversationNotFound();
     const createdAt = new Date(Math.max(now.getTime(), previous.getTime() + 1));
-    const message = await tx.message.create({ data: { conversationId, senderId, body, createdAt } });
+    const message = await tx.message.create({ data: { conversationId, senderId, body, createdAt, clientMessageId: clientMessageId ?? null } });
     await tx.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: createdAt } });
     // A new message brings the conversation back into both inboxes.
     await tx.conversationParticipant.updateMany({ where: { conversationId, archivedAt: { not: null } }, data: { archivedAt: null } });
     return message;
+  }
+
+  /** The message this sender already sent with this key, if any. */
+  private priorMessage(senderId: string, clientMessageId: string): Promise<Message | null> {
+    return this.prisma.message.findUnique({ where: { senderId_clientMessageId: { senderId, clientMessageId } } });
+  }
+
+  private async replayOfStart(senderId: string, prior: Message) {
+    const [conversation] = await this.views(senderId, [prior.conversationId]);
+    if (!conversation) throw conversationNotFound();
+    return { created: false, replayed: true, conversation, message: toMessageView(prior) };
+  }
+
+  private replayOfSend(prior: Message, conversationId: string): { replayed: true; message: MessageView } {
+    if (prior.conversationId !== conversationId) throw new AppError("CLIENT_MESSAGE_ID_REUSED", 409, "That clientMessageId was used for another conversation");
+    return { replayed: true, message: toMessageView(prior) };
   }
 
   /** After the commit, best effort: push to both sides' live streams (the sender's other devices too) and tell the recipient. */

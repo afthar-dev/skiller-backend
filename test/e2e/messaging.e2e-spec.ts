@@ -443,6 +443,48 @@ describe("messaging", () => {
     });
   });
 
+  describe("idempotent sends (clientMessageId)", () => {
+    it("starting twice with the same clientMessageId returns the first message and conversation (200), with no second message", async () => {
+      const a = await person();
+      const b = await person();
+      const clientMessageId = randomUUID();
+      const first = await start(a, b, "once only", { clientMessageId });
+      expect(first.status).toBe(201);
+      const again = await start(a, b, "once only", { clientMessageId });
+      expect(again.status).toBe(200);
+      expect(again.body.message.id).toBe(first.body.message.id);
+      expect(again.body.conversation.id).toBe(first.body.conversation.id);
+      expect(await prisma.message.count({ where: { conversationId: first.body.conversation.id } })).toBe(1);
+      const third = await start(a, b, "a new one", { clientMessageId: randomUUID() });
+      expect(third.body.message.id).not.toBe(first.body.message.id);
+      expect(await prisma.message.count({ where: { conversationId: first.body.conversation.id } })).toBe(2);
+    });
+
+    it("sending twice with the same clientMessageId returns the existing message (200); the key is per sender; a malformed key is refused", async () => {
+      const { a, b, id } = await pair();
+      const clientMessageId = randomUUID();
+      const post = (as: Session, extra: Record<string, unknown>) => api().post(`/v1/conversations/${id}/messages`).set(auth(as)).send({ body: "hello", ...extra });
+      const first = await post(a, { clientMessageId });
+      expect(first.status).toBe(201);
+      const again = await post(a, { clientMessageId });
+      expect([again.status, again.body.id]).toEqual([200, first.body.id]);
+      const other = await post(b, { clientMessageId }); // another sender may use the same value
+      expect(other.status).toBe(201);
+      expect(other.body.id).not.toBe(first.body.id);
+      expect(await prisma.message.count({ where: { conversationId: id } })).toBe(3); // "first" + two
+      expect((await post(a, { clientMessageId: "not-a-uuid" })).status).toBe(400);
+    });
+
+    it("parallel repeats make one message", async () => {
+      const { a, id } = await pair();
+      const clientMessageId = randomUUID();
+      const results = await Promise.all([1, 2, 3].map(() => api().post(`/v1/conversations/${id}/messages`).set(auth(a)).send({ body: "race", clientMessageId })));
+      expect(results.every((r) => r.status === 200 || r.status === 201)).toBe(true);
+      expect(new Set(results.map((r) => r.body.id)).size).toBe(1);
+      expect(await prisma.message.count({ where: { conversationId: id, clientMessageId } })).toBe(1);
+    });
+  });
+
   describe("live stream (SSE)", () => {
     let base: string;
     beforeAll(async () => {
@@ -511,6 +553,16 @@ describe("messaging", () => {
       gone.close();
       await send(a, id, "after the client left"); // must not throw on the server
       expect((await messages(a, id)).status).toBe(200);
+    });
+
+    it("tells the oldest of six streams it was replaced before ending it", async () => {
+      const { a } = await pair();
+      const streams: Awaited<ReturnType<typeof open>>[] = [];
+      for (let i = 0; i < 6; i++) streams.push(await open(a));
+      await until(() => streams[0].closed());
+      expect(streams[0].text()).toMatch(/event: replaced/);
+      expect(streams[1].closed()).toBe(false);
+      for (const s of streams) s.close();
     });
 
     it("closes when the access token expires", async () => {

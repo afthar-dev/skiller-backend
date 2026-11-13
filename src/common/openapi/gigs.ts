@@ -105,6 +105,6 @@ export const gigComponents: Record<string, unknown> = {
 /** The body of a `GET /conversations/stream` response: documented, not validated (it is a stream, not JSON). */
 export const messageStreamDescription = [
   "Server-sent events (`text/event-stream`). Read it with fetch and the `Authorization: Bearer` header; the browser EventSource cannot send it.",
-  "Events: `message` (data: `MessageStreamEvent`, for both participants of a conversation, the sender's other devices too), `expired` (the access token ended) and `revoked` (the session was signed out or revoked); both end the stream with data `{}`, then reconnect with a fresh token.",
+  "Events: `message` (data: `MessageStreamEvent`, for both participants of a conversation, the sender's other devices too), `expired` (the access token ended) and `revoked` (the session was signed out or revoked); both end the stream with data `{}`, then reconnect with a fresh token. `replaced` (data `{}`) is sent before the oldest stream is closed because the user opened more than 5: the client should not reconnect on its own.",
   "A comment line (`: ping`) is sent every 25 seconds to keep the stream alive. At most 5 streams per user: opening another closes the oldest.",
 ].join(" ");

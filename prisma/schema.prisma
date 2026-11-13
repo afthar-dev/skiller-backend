@@ -1935,16 +1935,19 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String        @id @default(uuid(7))
-  conversationId String
-  senderId       String
+  id              String        @id @default(uuid(7))
+  conversationId  String
+  senderId        String
   /// Plain text, at most 4000 characters. Shown only while status is VISIBLE.
-  body           String
-  status         MessageStatus @default(VISIBLE)
-  createdAt      DateTime      @default(now())
+  body            String
+  status          MessageStatus @default(VISIBLE)
+  createdAt       DateTime      @default(now())
+  /// Optional idempotency key chosen by the sender (a UUID): a repeat with the same key returns this message instead of adding another.
+  clientMessageId String?
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  @@unique([senderId, clientMessageId])
   @@index([conversationId, id])
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
