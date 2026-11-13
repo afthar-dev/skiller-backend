@@ -7,6 +7,7 @@ import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { sanitizeSingleLine } from "../courses";
+import { ApiResult, ApiPageResult } from "../../common/openapi/money";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
 import { CampaignsService, type ActionMeta } from "./campaigns.service";
@@ -41,6 +42,7 @@ export class CampaignsController {
   @RequireStepUp()
   @ApiOperation({ summary: "Create a draft promo campaign: subject (plain text, 150), Markdown body, segment (roles, plan, interests, lastActive, hasPurchased). The unsubscribe footer is added to every mail and cannot be removed" })
   @ApiZodBody(createSchema)
+  @ApiResult(201, "Campaign", "The new draft.")
   create(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     return this.campaigns.create(user.id, createSchema.parse(body), metaOf(req));
   }
@@ -48,12 +50,14 @@ export class CampaignsController {
   @Get()
   @ApiOperation({ summary: "List campaigns, newest first" })
   @ApiPagination()
+  @ApiPageResult("Campaign")
   list(@Query() query: Record<string, unknown>) {
     return this.campaigns.list(parsePage(query), statusSchema.parse(query.status || undefined));
   }
 
   @Get(":id")
   @ApiOperation({ summary: "A campaign with its stats (delivered, opened, clicked, bounced, complained) and recipient counts by state; no member data" })
+  @ApiResult(200, "CampaignDetail")
   get(@Param("id") id: string) {
     return this.campaigns.get(id);
   }
@@ -62,6 +66,7 @@ export class CampaignsController {
   @RequireStepUp()
   @ApiOperation({ summary: "Edit a draft campaign (an edit withdraws any approval)" })
   @ApiZodBody(updateSchema)
+  @ApiResult(200, "Campaign")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.campaigns.update(user.id, id, updateSchema.parse(body), metaOf(req));
   }
@@ -70,6 +75,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "How many active members the segment matches right now, and whether sending needs a second admin (more than 10,000). Counts only" })
+  @ApiResult(200, "CampaignPreview")
   preview(@Param("id") id: string) {
     return this.campaigns.preview(id);
   }
@@ -78,6 +84,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "Send this campaign, marked [Test], to your own address only (no recipient can be named)" })
+  @ApiResult(200, "CampaignTestSent")
   testSend(@CurrentUser() user: AuthUser, @Param("id") id: string) {
     return this.campaigns.testSend(user.id, id);
   }
@@ -86,6 +93,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "Approve a draft campaign that reaches more than 10,000 members. Not the creator" })
+  @ApiResult(200, "Campaign")
   approve(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.campaigns.approve(user.id, id, metaOf(req));
   }
@@ -95,6 +103,7 @@ export class CampaignsController {
   @RequireStepUp()
   @ApiOperation({ summary: "Send now, or at scheduledAt. Above 10,000 members it must be approved by another admin first (409 CAMPAIGN_APPROVAL_REQUIRED)" })
   @ApiZodBody(sendSchema)
+  @ApiResult(200, "Campaign")
   send(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     const { scheduledAt } = sendSchema.parse(body ?? {});
     return this.campaigns.send(user.id, id, scheduledAt ? new Date(scheduledAt) : undefined, metaOf(req));
@@ -104,6 +113,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "Pause a campaign that is sending (it stops after the current batch)" })
+  @ApiResult(200, "Campaign")
   pause(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.campaigns.pause(user.id, id, metaOf(req));
   }
@@ -112,6 +122,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "Resume a paused campaign" })
+  @ApiResult(200, "Campaign")
   resume(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.campaigns.resume(user.id, id, metaOf(req));
   }
@@ -120,6 +131,7 @@ export class CampaignsController {
   @HttpCode(200)
   @RequireStepUp()
   @ApiOperation({ summary: "Cancel a campaign that has not finished; members it did not reach are skipped" })
+  @ApiResult(200, "Campaign")
   cancel(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.campaigns.cancel(user.id, id, metaOf(req));
   }

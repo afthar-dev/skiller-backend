@@ -129,3 +129,14 @@ export const publicProfileSchema: Schema = {
 
 /** One row of GET /me/blocks and /me/mutes. */
 export const relationItemSchema: Schema = objectSchema({ id: str, handle: str, displayName: str, avatarUrl: nullableStr, since: isoDate });
+
+/** Documents a `text/csv` success response (a file download): the body is CSV text, not JSON. */
+export const ApiCsv = (description: string, example?: string) =>
+  applyDecorators(
+    ApiResponse({
+      status: 200,
+      description,
+      headers: { "Content-Disposition": { description: "attachment; filename=...", schema: { type: "string" } } },
+      content: { "text/csv": { schema: { type: "string", ...(example ? { example } : {}) } } },
+    } as never),
+  );

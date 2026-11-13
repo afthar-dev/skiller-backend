@@ -6,8 +6,11 @@ import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { ApiErrorResponse } from "../../common/openapi/error-response";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiResult } from "../../common/openapi/money";
+import { ApiCsv } from "../../common/openapi/responses";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
+import { analyticsCsvDescription } from "../../common/openapi/admin";
 import { AnalyticsService } from "./analytics.service";
 import { RebuildService, type ActionMeta } from "./rebuild.service";
 
@@ -37,6 +40,7 @@ export class AnalyticsController {
   @ApiQuery(FROM)
   @ApiQuery(TO)
   @ApiErrorResponse(400, "ANALYTICS_RANGE_INVALID: bad dates, from after to, or more than 2 years.")
+  @ApiResult(200, "AnalyticsOverview")
   overview(@Query() query: Record<string, unknown>) {
     return this.analytics.overview(this.analytics.range(str(query.from), str(query.to)));
   }
@@ -47,6 +51,7 @@ export class AnalyticsController {
   @ApiQuery(FROM)
   @ApiQuery(TO)
   @ApiErrorResponse(400, "ANALYTICS_RANGE_INVALID, ANALYTICS_UNKNOWN_METRIC")
+  @ApiResult(200, "AnalyticsSeries")
   series(@Query() query: Record<string, unknown>) {
     return this.analytics.series(this.analytics.keys(str(query.keys)), this.analytics.range(str(query.from), str(query.to)));
   }
@@ -55,6 +60,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: "Signup, creator, first published course or gig, first sale: absolute counts for the range from the rollup. Not a cohort and no member data" })
   @ApiQuery(FROM)
   @ApiQuery(TO)
+  @ApiResult(200, "AnalyticsFunnel")
   funnel(@Query() query: Record<string, unknown>) {
     return this.analytics.funnel(this.analytics.range(str(query.from), str(query.to)));
   }
@@ -64,6 +70,7 @@ export class AnalyticsController {
   @ApiQuery(KEYS)
   @ApiQuery(FROM)
   @ApiQuery(TO)
+  @ApiCsv(analyticsCsvDescription)
   async export(@Query() query: Record<string, unknown>, @Res({ passthrough: true }) res: Response): Promise<string> {
     const { filename, body } = await this.analytics.csv(this.analytics.keys(str(query.keys)), this.analytics.range(str(query.from), str(query.to)));
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -79,6 +86,7 @@ export class AnalyticsController {
   @ApiOperation({ summary: "Rebuild the rollup for past IST days (at most 31, up to yesterday) as a background job; rerunning a day overwrites it, never doubles it. Step-up required, audited" })
   @ApiZodBody(rebuildBody)
   @ApiErrorResponse(400, "ANALYTICS_RANGE_INVALID: bad dates, from after to, today or later, or more than 31 days.")
+  @ApiResult(202, "AnalyticsRebuildAccepted", "The rebuild was queued.")
   rebuild(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     const { from, to } = rebuildBody.parse(body);
     return this.rebuilds.request(user.id, this.analytics.rebuildRange(from, to), metaOf(req));

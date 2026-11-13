@@ -53,6 +53,7 @@ export class AdminBillingController {
   @RequireStepUp()
   @ApiOperation({ summary: "Create a plan with its first version (step-up required)" })
   @ApiZodBody(createPlanSchema)
+  @ApiResult(201, "Plan")
   create(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     return this.plans.createPlan(user.id, createPlanSchema.parse(body), metaOf(req));
   }
@@ -62,6 +63,7 @@ export class AdminBillingController {
   @RequireStepUp()
   @ApiOperation({ summary: "Add a plan version. Existing versions never change; subscribers stay on theirs (step-up required)" })
   @ApiZodBody(versionSchema)
+  @ApiResult(201, "PlanVersion")
   createVersion(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.plans.createVersion(user.id, id, versionSchema.parse(body), metaOf(req));
   }

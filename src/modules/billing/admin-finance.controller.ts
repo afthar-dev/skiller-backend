@@ -128,6 +128,7 @@ export class AdminOrdersController {
   @ApiOperation({ summary: "Every subscription, newest first, filtered by status, owner, plan or IST day range" })
   @ApiZodQuery(subscriptionsQuery)
   @ApiPagination()
+  @ApiPageResult("AdminSubscription")
   listSubscriptions(@Query() query: Record<string, unknown>) {
     const { from, to, ...filter } = subscriptionsQuery.parse(filtersOf(query));
     return this.finance.listSubscriptions({ ...filter, createdAt: window(from, to) }, parsePage(query));

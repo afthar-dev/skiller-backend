@@ -34,6 +34,7 @@ export class AdminWalletController {
   @RequirePermission("wallet.view_any")
   @ApiOperation({ summary: "Payout accounts (masked), newest first. `flagged=true` lists those held for review, e.g. one PAN on two owners" })
   @ApiPagination()
+  @ApiPageResult("AdminPayoutAccount")
   listAccounts(@Query() query: Record<string, unknown>) {
     const status = ["PENDING", "VERIFIED", "FAILED", "INACTIVE"].includes(query.status as string) ? (query.status as "PENDING" | "VERIFIED" | "FAILED" | "INACTIVE") : undefined;
     return this.accounts.listForReview({ flagged: query.flagged === "true", status }, parsePage(query));
@@ -47,6 +48,7 @@ export class AdminWalletController {
   @ApiZodBody(clearFlagSchema)
   @ApiErrorResponse(404, "PAYOUT_ACCOUNT_NOT_FOUND")
   @ApiErrorResponse(409, "PAYOUT_ACCOUNT_FLAG_NOT_SET: the account does not carry that flag.")
+  @ApiResult(200, "AdminPayoutAccount")
   clearFlag(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     const { flag, note } = clearFlagSchema.parse(body);
     return this.accounts.clearFlag(user.id, id, flag, note, metaOf(req));

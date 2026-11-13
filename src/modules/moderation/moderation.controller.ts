@@ -7,7 +7,7 @@ import { AuthenticatedOnly } from "../../common/auth/authenticated-only.decorato
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { AppError } from "../../common/errors/app-error";
 import { parsePage } from "../../common/http/pagination";
-import { ApiResult } from "../../common/openapi/money";
+import { ApiPageResult, ApiResult } from "../../common/openapi/money";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
 import { RequirePermission } from "../rbac";
 import { DECISION_NOTE_MAX, ModerationService, NOTE_MAX, REPORT_REASONS, REPORT_TARGET_TYPES, type ActionMeta } from "./moderation.service";
@@ -54,6 +54,7 @@ export class AdminModerationController {
   @Get("reports")
   @ApiOperation({ summary: "Open reports grouped by content, longest waiting first" })
   @ApiPagination()
+  @ApiPageResult("ModerationQueueItem")
   queue(@Query() query: Record<string, unknown>) {
     const type = typeof query.type === "string" && query.type ? parseType(query.type) : undefined;
     return this.moderation.queue({ type }, parsePage(query));
@@ -64,6 +65,7 @@ export class AdminModerationController {
   @HttpCode(200)
   @ApiOperation({ summary: "Uphold the reports: the content is removed, the author gets one strike (three active strikes bar posting for 7 days). Not for your own content or courses" })
   @ApiZodBody(decisionSchema)
+  @ApiResult(200, "ModerationDecision")
   uphold(@CurrentUser() user: AuthUser, @Param("type") type: string, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.uphold(metaOf(user, req), parseType(type), id, decisionSchema.parse(body).note);
   }
@@ -73,6 +75,7 @@ export class AdminModerationController {
   @HttpCode(200)
   @ApiOperation({ summary: "Dismiss the reports: content the threshold hid comes back, no strike" })
   @ApiZodBody(decisionSchema)
+  @ApiResult(200, "ModerationDecision")
   dismiss(@CurrentUser() user: AuthUser, @Param("type") type: string, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.dismiss(metaOf(user, req), parseType(type), id, decisionSchema.parse(body).note);
   }

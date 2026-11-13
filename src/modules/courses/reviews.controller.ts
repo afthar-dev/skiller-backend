@@ -9,6 +9,7 @@ import { Public } from "../../common/auth/public.decorator";
 import { parsePage } from "../../common/http/pagination";
 import { ApiJsonResponse } from "../../common/openapi/responses";
 import { ApiPagination, ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiResult } from "../../common/openapi/money";
 import { RequirePermission } from "../rbac";
 import { ContentModerationService } from "./content-moderation.service";
 import type { ActionMeta } from "./course-state";
@@ -80,6 +81,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Hide a review (out of the list and the course rating), with a reason" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   hideReview(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.hideReview(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }
@@ -89,6 +91,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Show a hidden review again" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   unhideReview(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.unhideReview(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }
@@ -98,6 +101,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Hide a lesson question, with a reason" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   hideQuestion(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.hideQuestion(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }
@@ -107,6 +111,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Show a hidden question again" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   unhideQuestion(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.unhideQuestion(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }
@@ -116,6 +121,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Hide an answer, with a reason" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   hideAnswer(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.hideAnswer(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }
@@ -125,6 +131,7 @@ export class AdminContentController {
   @RequirePermission("course.review")
   @ApiOperation({ summary: "Show a hidden answer again" })
   @ApiZodBody(reasonSchema)
+  @ApiResult(200, "HiddenState")
   unhideAnswer(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.moderation.unhideAnswer(id, reasonSchema.parse(body).reason, metaOf(user, req));
   }

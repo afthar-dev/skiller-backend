@@ -710,6 +710,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditEntry"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -776,6 +802,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OutboxDeadEvent"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -823,6 +875,16 @@
         "operationId": "Roles_list",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -912,6 +974,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -959,6 +1031,16 @@
         "operationId": "Roles_permissions",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -1042,6 +1124,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The role after the edit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Role"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -1096,6 +1188,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -1182,6 +1277,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRoleGrant"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -1246,6 +1351,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Revoked."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4025,6 +4133,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ModerationQueueItem"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4110,6 +4244,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationDecision"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -4195,6 +4339,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationDecision"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5351,6 +5505,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminUserRow"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5407,6 +5587,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDetail"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5484,6 +5674,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The user, suspended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusChange"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5540,6 +5740,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The user, active again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusChange"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5596,6 +5806,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsRevoked"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5643,6 +5863,16 @@
         "operationId": "Admin_listSettings",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5725,6 +5955,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingSaved"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5772,6 +6012,16 @@
         "operationId": "Admin_listFlags",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureFlagList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -5862,6 +6112,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureFlag"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -7373,6 +7633,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -7519,6 +7789,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanVersion"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -8388,6 +8668,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminSubscription"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -10219,6 +10525,32 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminPayoutAccount"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -10303,6 +10635,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPayoutAccount"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14421,6 +14763,16 @@
         "operationId": "AdminCategories_list",
         "parameters": [],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategoryList"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14495,6 +14847,16 @@
           }
         },
         "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategory"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14577,6 +14939,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminCategory"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14631,6 +15003,9 @@
           }
         ],
         "responses": {
+          "204": {
+            "description": "Deleted."
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14697,6 +15072,179 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Courses in review, longest waiting first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "ownerType",
+                          "ownerId",
+                          "slug",
+                          "slugLocked",
+                          "title",
+                          "subtitle",
+                          "description",
+                          "categoryId",
+                          "level",
+                          "language",
+                          "tags",
+                          "pricePaise",
+                          "thumbnailAssetId",
+                          "promoVideoAssetId",
+                          "status",
+                          "flaggedAt",
+                          "flagReason",
+                          "submittedAt",
+                          "rejectionReason",
+                          "publishedAt",
+                          "createdById",
+                          "createdAt",
+                          "updatedAt",
+                          "ratingAvg",
+                          "ratingCount",
+                          "enrolmentCount"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "ownerType": {
+                            "type": "string",
+                            "enum": [
+                              "USER",
+                              "ORG"
+                            ]
+                          },
+                          "ownerId": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "slugLocked": {
+                            "type": "boolean"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "subtitle": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "categoryId": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "BEGINNER",
+                              "INTERMEDIATE",
+                              "ADVANCED",
+                              "ALL"
+                            ]
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pricePaise": {
+                            "type": "string",
+                            "description": "Integer paise as a decimal string."
+                          },
+                          "thumbnailAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "promoVideoAssetId": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "IN_REVIEW",
+                              "PUBLISHED",
+                              "ARCHIVED"
+                            ]
+                          },
+                          "flaggedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "flagReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "submittedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "rejectionReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "publishedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "createdById": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "ratingAvg": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Null until 3 learners rated."
+                          },
+                          "ratingCount": {
+                            "type": "integer"
+                          },
+                          "enrolmentCount": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14753,6 +15301,163 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "The course, now PUBLISHED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14830,6 +15535,163 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The course, back to DRAFT with the reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14907,6 +15769,163 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The course, flagged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -14984,6 +16003,163 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The course, back on the catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "ownerType",
+                    "ownerId",
+                    "slug",
+                    "slugLocked",
+                    "title",
+                    "subtitle",
+                    "description",
+                    "categoryId",
+                    "level",
+                    "language",
+                    "tags",
+                    "pricePaise",
+                    "thumbnailAssetId",
+                    "promoVideoAssetId",
+                    "status",
+                    "flaggedAt",
+                    "flagReason",
+                    "submittedAt",
+                    "rejectionReason",
+                    "publishedAt",
+                    "createdById",
+                    "createdAt",
+                    "updatedAt",
+                    "ratingAvg",
+                    "ratingCount",
+                    "enrolmentCount"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "ownerType": {
+                      "type": "string",
+                      "enum": [
+                        "USER",
+                        "ORG"
+                      ]
+                    },
+                    "ownerId": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "slugLocked": {
+                      "type": "boolean"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "subtitle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "categoryId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "BEGINNER",
+                        "INTERMEDIATE",
+                        "ADVANCED",
+                        "ALL"
+                      ]
+                    },
+                    "language": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pricePaise": {
+                      "type": "string",
+                      "description": "Integer paise as a decimal string."
+                    },
+                    "thumbnailAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "promoVideoAssetId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "IN_REVIEW",
+                        "PUBLISHED",
+                        "ARCHIVED"
+                      ]
+                    },
+                    "flaggedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "flagReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "rejectionReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "createdById": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "ratingAvg": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Null until 3 learners rated."
+                    },
+                    "ratingCount": {
+                      "type": "integer"
+                    },
+                    "enrolmentCount": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -17710,6 +18886,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -17787,6 +18973,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -17864,6 +19060,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -17941,6 +19147,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -18018,6 +19234,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -18095,6 +19321,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenState"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired access token.",
             "content": {
@@ -22173,7 +23409,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "The new draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22240,7 +23483,30 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "A page of results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Campaign"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22299,7 +23565,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignDetail"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22455,7 +23728,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22514,7 +23794,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignPreview"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22573,7 +23860,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignTestSent"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22632,7 +23926,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22708,7 +24009,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22767,7 +24075,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22826,7 +24141,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -22885,7 +24207,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Campaign"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -23012,6 +24341,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsOverview"
+                }
+              }
+            }
+          },
           "400": {
             "description": "ANALYTICS_RANGE_INVALID: bad dates, from after to, or more than 2 years.",
             "content": {
@@ -23091,6 +24430,16 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSeries"
+                }
+              }
+            }
+          },
           "400": {
             "description": "ANALYTICS_RANGE_INVALID, ANALYTICS_UNKNOWN_METRIC",
             "content": {
@@ -23164,7 +24513,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsFunnel"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -23236,7 +24592,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "The daily series as CSV, one row per IST day, one column per metric key after `day`. Money columns are paise. Text cells are protected against spreadsheet formulas. Sent as an attachment: the file name is in `Content-Disposition`.",
+            "headers": {
+              "Content-Disposition": {
+                "description": "attachment; filename=...",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing, invalid or expired access token.",
@@ -23308,6 +24679,16 @@
           }
         },
         "responses": {
+          "202": {
+            "description": "The rebuild was queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsRebuildAccepted"
+                }
+              }
+            }
+          },
           "400": {
             "description": "ANALYTICS_RANGE_INVALID: bad dates, from after to, today or later, or more than 31 days.",
             "content": {
@@ -25731,6 +27112,1388 @@
           },
           "message": {
             "$ref": "#/components/schemas/Message"
+          }
+        }
+      },
+      "AdminUserRow": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "status",
+          "handle",
+          "displayName",
+          "roles",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "DELETED"
+            ]
+          },
+          "handle": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keys of the active platform-wide roles."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserRoleGrant": {
+        "type": "object",
+        "required": [
+          "id",
+          "userId",
+          "roleKey",
+          "orgId",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "roleKey": {
+            "type": "string"
+          },
+          "orgId": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AuditEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "actorId",
+          "action",
+          "targetType",
+          "targetId",
+          "before",
+          "after",
+          "ip",
+          "requestId",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true
+          },
+          "action": {
+            "type": "string"
+          },
+          "targetType": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "before": {
+            "nullable": true,
+            "description": "The state before the change, as recorded; null when there was none."
+          },
+          "after": {
+            "nullable": true,
+            "description": "The state after the change, as recorded; null when there was none."
+          },
+          "ip": {
+            "type": "string",
+            "nullable": true
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminUserDetail": {
+        "type": "object",
+        "required": [
+          "user",
+          "profile",
+          "roles",
+          "activeSessions",
+          "recentAudit"
+        ],
+        "properties": {
+          "user": {
+            "type": "object",
+            "required": [
+              "id",
+              "email",
+              "status",
+              "emailVerifiedAt",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "SUSPENDED",
+                  "DELETED"
+                ]
+              },
+              "emailVerifiedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "profile": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "handle",
+                  "displayName",
+                  "headline",
+                  "avatarAssetId",
+                  "avatarUrl"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "handle": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "headline": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "avatarAssetId": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "avatarUrl": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            ],
+            "nullable": true
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRoleGrant"
+            },
+            "description": "Every grant, platform and organization, expired ones included."
+          },
+          "activeSessions": {
+            "type": "integer"
+          },
+          "recentAudit": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            },
+            "description": "The 20 newest audit rows about this user."
+          }
+        }
+      },
+      "UserStatusChange": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "changed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "False when the user already had that status (nothing was audited)."
+          }
+        }
+      },
+      "SessionsRevoked": {
+        "type": "object",
+        "required": [
+          "id",
+          "revoked"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revoked": {
+            "type": "integer",
+            "description": "How many sessions were active before."
+          }
+        }
+      },
+      "Role": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "scope",
+          "isSystem",
+          "permissionKeys",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "PLATFORM",
+              "ORG"
+            ]
+          },
+          "isSystem": {
+            "type": "boolean"
+          },
+          "permissionKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RoleList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            }
+          }
+        }
+      },
+      "Permission": {
+        "type": "object",
+        "required": [
+          "key",
+          "description",
+          "module",
+          "orphan"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "orphan": {
+            "type": "boolean",
+            "description": "True when the key is no longer declared in code."
+          }
+        }
+      },
+      "PermissionList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
+          }
+        }
+      },
+      "HiddenState": {
+        "type": "object",
+        "required": [
+          "id",
+          "hidden"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean",
+            "description": "Whether the content is hidden after the call (a review hidden by the system alone stays hidden after an unhide)."
+          }
+        }
+      },
+      "ModerationQueueItem": {
+        "type": "object",
+        "required": [
+          "targetType",
+          "targetId",
+          "ownerId",
+          "reportCount",
+          "reasons",
+          "firstReportedAt",
+          "lastReportedAt",
+          "autoHidden",
+          "preview"
+        ],
+        "properties": {
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "REEL",
+              "REEL_COMMENT",
+              "COURSE_REVIEW",
+              "COURSE_QA",
+              "GIG_MESSAGE",
+              "GIG"
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string",
+            "nullable": true
+          },
+          "reportCount": {
+            "type": "integer"
+          },
+          "reasons": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Open reports by reason (SPAM, HARASSMENT, HATE, SEXUAL, VIOLENCE, MISINFORMATION, COPYRIGHT, OTHER)."
+          },
+          "firstReportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastReportedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "autoHidden": {
+            "type": "boolean",
+            "description": "Held back automatically when the report threshold was reached."
+          },
+          "preview": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [
+                  "text",
+                  "status"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "Plain text."
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                }
+              }
+            ],
+            "nullable": true,
+            "description": "A short description of the content; null when it is gone."
+          }
+        }
+      },
+      "ModerationDecision": {
+        "type": "object",
+        "required": [
+          "targetType",
+          "targetId",
+          "decision",
+          "reports",
+          "strike",
+          "restrictedUntil",
+          "restored"
+        ],
+        "properties": {
+          "targetType": {
+            "type": "string",
+            "enum": [
+              "REEL",
+              "REEL_COMMENT",
+              "COURSE_REVIEW",
+              "COURSE_QA",
+              "GIG_MESSAGE",
+              "GIG"
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "UPHELD",
+              "DISMISSED"
+            ]
+          },
+          "reports": {
+            "type": "integer"
+          },
+          "strike": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "expiresAt"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            ],
+            "nullable": true,
+            "description": "Upheld: the strike the author received."
+          },
+          "restrictedUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Upheld: the author is barred from posting until then (three active strikes)."
+          },
+          "restored": {
+            "type": "boolean",
+            "description": "Dismissed: held-back content came back."
+          }
+        }
+      },
+      "AdminCategory": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "position",
+          "isActive"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AdminCategoryList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminCategory"
+            }
+          }
+        }
+      },
+      "CampaignSegment": {
+        "type": "object",
+        "description": "Who a campaign goes to. Every criterion is optional and the ones present must all hold; `{}` is every active member.",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plan": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastActive": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "withinDays"
+                ],
+                "properties": {
+                  "withinDays": {
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "inactiveDays"
+                ],
+                "properties": {
+                  "inactiveDays": {
+                    "type": "integer"
+                  }
+                }
+              }
+            ],
+            "description": "Members active within the last `withinDays` days, or not active for `inactiveDays` days."
+          },
+          "hasPurchased": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Campaign": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "subject",
+          "bodyMarkdown",
+          "segment",
+          "status",
+          "scheduledAt",
+          "startedAt",
+          "finishedAt",
+          "audienceSize",
+          "createdById",
+          "lastEditedById",
+          "approvedById",
+          "approvedAt",
+          "stats",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "bodyMarkdown": {
+            "type": "string"
+          },
+          "segment": {
+            "$ref": "#/components/schemas/CampaignSegment"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "SCHEDULED",
+              "SENDING",
+              "PAUSED",
+              "SENT",
+              "CANCELLED"
+            ]
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "audienceSize": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Fixed when sending starts; null before."
+          },
+          "createdById": {
+            "type": "string"
+          },
+          "lastEditedById": {
+            "type": "string"
+          },
+          "approvedById": {
+            "type": "string",
+            "nullable": true
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "stats": {
+            "type": "object",
+            "required": [
+              "delivered",
+              "opened",
+              "clicked",
+              "bounced",
+              "complained",
+              "failed",
+              "unknown"
+            ],
+            "properties": {
+              "delivered": {
+                "type": "integer"
+              },
+              "opened": {
+                "type": "integer"
+              },
+              "clicked": {
+                "type": "integer"
+              },
+              "bounced": {
+                "type": "integer"
+              },
+              "complained": {
+                "type": "integer"
+              },
+              "failed": {
+                "type": "integer"
+              },
+              "unknown": {
+                "type": "integer"
+              }
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CampaignDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Campaign"
+          },
+          {
+            "type": "object",
+            "required": [
+              "recipients",
+              "skipped"
+            ],
+            "properties": {
+              "recipients": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "description": "Recipients by state."
+              },
+              "skipped": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "description": "Skipped recipients by reason."
+              }
+            }
+          }
+        ]
+      },
+      "CampaignPreview": {
+        "type": "object",
+        "required": [
+          "audience",
+          "requiresApproval"
+        ],
+        "properties": {
+          "audience": {
+            "type": "integer",
+            "description": "Active members the segment matches right now. A count only."
+          },
+          "requiresApproval": {
+            "type": "boolean",
+            "description": "True above 10,000 members: another admin must approve before sending."
+          }
+        }
+      },
+      "CampaignTestSent": {
+        "type": "object",
+        "required": [
+          "sent"
+        ],
+        "properties": {
+          "sent": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        }
+      },
+      "AnalyticsMetric": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "group",
+          "unit",
+          "aggregation",
+          "approximate",
+          "value",
+          "asOf"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "users",
+              "sales",
+              "learning",
+              "reels",
+              "gigs",
+              "campaigns",
+              "moderation"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "count",
+              "paise"
+            ]
+          },
+          "aggregation": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "latest"
+            ],
+            "description": "`sum`: the range total adds the days up. `latest`: the last day's value (a level or a distinct count)."
+          },
+          "approximate": {
+            "type": "boolean",
+            "description": "True for estimates (HyperLogLog)."
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "pattern": "^-?[0-9]+$"
+              }
+            ],
+            "description": "A count is a JSON number; a money metric (unit `paise`) is paise as a decimal string."
+          },
+          "asOf": {
+            "type": "string",
+            "nullable": true,
+            "description": "The IST day a `latest` value is from; null for sums and when nothing was rolled up."
+          }
+        }
+      },
+      "AnalyticsOverview": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "days",
+          "dataThrough",
+          "metrics"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "dataThrough": {
+            "type": "string",
+            "nullable": true,
+            "description": "The newest rolled-up IST day in the range."
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsMetric"
+            }
+          }
+        }
+      },
+      "AnalyticsSeries": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "keys",
+          "dataThrough",
+          "points"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "label",
+                "unit",
+                "approximate"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "count",
+                    "paise"
+                  ]
+                },
+                "approximate": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "dataThrough": {
+            "type": "string",
+            "nullable": true
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "day",
+                "values"
+              ],
+              "properties": {
+                "day": {
+                  "type": "string"
+                },
+                "values": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^-?[0-9]+$"
+                      }
+                    ],
+                    "description": "A count is a JSON number; a money metric (unit `paise`) is paise as a decimal string."
+                  },
+                  "description": "By metric key."
+                }
+              }
+            }
+          }
+        }
+      },
+      "AnalyticsFunnel": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "dataThrough",
+          "note",
+          "stages"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "dataThrough": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "label",
+                "count"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AnalyticsRebuildAccepted": {
+        "type": "object",
+        "required": [
+          "jobId",
+          "from",
+          "to"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        }
+      },
+      "Setting": {
+        "type": "object",
+        "required": [
+          "key",
+          "value",
+          "default",
+          "updatedAt"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "description": "The stored value, or the default when none is stored. Its type is the type of `default`."
+          },
+          "default": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SettingList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Setting"
+            }
+          }
+        }
+      },
+      "SettingSaved": {
+        "type": "object",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      },
+      "FeatureFlag": {
+        "type": "object",
+        "required": [
+          "key",
+          "enabled",
+          "rules",
+          "updatedAt"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "rules": {
+            "allOf": [
+              {
+                "type": "object",
+                "required": [],
+                "properties": {
+                  "allowUserIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "percent": {
+                    "type": "integer",
+                    "description": "0 to 100."
+                  }
+                }
+              }
+            ],
+            "nullable": true,
+            "description": "Null: on for everyone while enabled. With rules the user must be in `allowUserIds` or fall in the first `percent` buckets."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FeatureFlagList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeatureFlag"
+            }
+          }
+        }
+      },
+      "OutboxDeadEvent": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "payload",
+          "attempts",
+          "lastError",
+          "createdAt",
+          "deadAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The event as it was enqueued."
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminPayoutAccount": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PayoutAccount"
+          },
+          {
+            "type": "object",
+            "required": [
+              "ownerType",
+              "ownerId",
+              "reviewFlag"
+            ],
+            "properties": {
+              "ownerType": {
+                "type": "string",
+                "enum": [
+                  "USER",
+                  "ORG"
+                ]
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "reviewFlag": {
+                "type": "string",
+                "nullable": true,
+                "description": "DUPLICATE_PAN or NAME_MISMATCH while the account is held for review."
+              }
+            }
+          }
+        ]
+      },
+      "AdminSubscription": {
+        "type": "object",
+        "required": [
+          "id",
+          "ownerType",
+          "ownerId",
+          "status",
+          "plan",
+          "currentPeriodEnd",
+          "cancelAtPeriodEnd",
+          "graceEndsAt",
+          "razorpaySubscriptionId",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ownerType": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ORG"
+            ]
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INCOMPLETE",
+              "TRIALING",
+              "ACTIVE",
+              "PAST_DUE",
+              "CANCELLED",
+              "EXPIRED"
+            ]
+          },
+          "plan": {
+            "type": "object",
+            "required": [
+              "key",
+              "name",
+              "versionId",
+              "interval",
+              "pricePaise",
+              "commissionBps"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "versionId": {
+                "type": "string"
+              },
+              "interval": {
+                "type": "string",
+                "enum": [
+                  "MONTH",
+                  "YEAR"
+                ]
+              },
+              "pricePaise": {
+                "$ref": "#/components/schemas/Money"
+              },
+              "commissionBps": {
+                "type": "integer"
+              }
+            }
+          },
+          "currentPeriodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
+          },
+          "graceEndsAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "razorpaySubscriptionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

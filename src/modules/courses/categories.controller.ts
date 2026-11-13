@@ -5,8 +5,9 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { Public } from "../../common/auth/public.decorator";
-import { ApiJsonResponse } from "../../common/openapi/responses";
+import { ApiJsonResponse, ApiNoContent } from "../../common/openapi/responses";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
+import { ApiResult } from "../../common/openapi/money";
 import { RequirePermission } from "../rbac";
 import { CategoriesService, type CategoryMeta } from "./categories.service";
 import { categoryListSchema } from "./course-responses";
@@ -39,6 +40,7 @@ export class AdminCategoriesController {
   @Get()
   @RequirePermission("course.categories.manage")
   @ApiOperation({ summary: "All course categories, including inactive ones" })
+  @ApiResult(200, "AdminCategoryList")
   list() {
     return this.categories.listAll();
   }
@@ -47,6 +49,7 @@ export class AdminCategoriesController {
   @RequirePermission("course.categories.manage")
   @ApiOperation({ summary: "Create a category" })
   @ApiZodBody(createSchema)
+  @ApiResult(201, "AdminCategory")
   create(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
     return this.categories.create(createSchema.parse(body), metaOf(user, req));
   }
@@ -55,6 +58,7 @@ export class AdminCategoriesController {
   @RequirePermission("course.categories.manage")
   @ApiOperation({ summary: "Rename, reorder, activate or deactivate a category" })
   @ApiZodBody(updateSchema)
+  @ApiResult(200, "AdminCategory")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.categories.update(id, updateSchema.parse(body), metaOf(user, req));
   }
@@ -63,6 +67,7 @@ export class AdminCategoriesController {
   @HttpCode(204)
   @RequirePermission("course.categories.manage")
   @ApiOperation({ summary: "Delete a category no course uses" })
+  @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     await this.categories.remove(id, metaOf(user, req));
   }

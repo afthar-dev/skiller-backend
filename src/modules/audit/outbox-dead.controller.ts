@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { parsePage } from "../../common/http/pagination";
 import { ApiPagination } from "../../common/openapi/zod-schema";
 import { OutboxService } from "../../common/outbox/outbox.service";
+import { ApiPageResult } from "../../common/openapi/money";
 import { RequirePermission } from "../rbac";
 
 @ApiTags("Admin")
@@ -15,6 +16,7 @@ export class OutboxDeadController {
   @RequirePermission("audit.view")
   @ApiOperation({ summary: "Outbox events that exhausted all delivery attempts, newest first" })
   @ApiPagination()
+  @ApiPageResult("OutboxDeadEvent")
   dead(@Query() query: Record<string, unknown>) {
     return this.outbox.listDead(parsePage(query));
   }

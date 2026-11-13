@@ -17,6 +17,7 @@ const doc = {
     "/array": { get: { responses: { 200: json({ type: "array", items: { type: "string" } }) } } },
     "/no-content": { post: { responses: { 201: { description: "Created" } } } },
     "/stream": { get: { responses: { 200: { content: { "text/event-stream": { schema: { type: "string" } } } } } } },
+    "/csv": { get: { responses: { 200: { content: { "text/csv": { schema: { type: "string" } } } } } } },
     "/gone": { delete: { responses: { 204: { description: "No content" } } } },
     "/error-only": { get: { responses: { 200: { description: "ok" }, 400: json({ type: "object", properties: { e: {} } }) } } },
   },
@@ -95,4 +96,11 @@ test("the CLI still checks when started through a symlink", (t) => {
   const res = spawnSync(process.execPath, [link, "--openapi", spec, "--allowlist", list, "--ceiling", ceiling], { encoding: "utf8" });
   assert.equal(res.status, 1);
   assert.match(res.stderr, /GET [/]placeholder/);
+});
+
+test("a text/csv response with a described schema counts as typed; one without does not", () => {
+  assert.deepEqual(checkResponses(doc, ["GET /empty-schema", "GET /placeholder", "POST /no-content", "GET /error-only"]), []);
+  assert.match(checkResponses(doc, ["GET /empty-schema", "GET /placeholder", "POST /no-content", "GET /error-only", "GET /csv"]).join(" "), /allowlist entry is now typed.*GET \/csv/);
+  const bare = { paths: { "/csv": { get: { responses: { 200: { content: { "text/csv": {} } } } } } } };
+  assert.match(checkResponses(bare, []).join(" "), /untyped operation not in the allowlist: GET \/csv/);
 });

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AuthUser } from "../../common/auth/auth-user";
 import { CurrentUser } from "../../common/auth/current-user.decorator";
 import { parsePage } from "../../common/http/pagination";
+import { ApiResult, ApiPageResult } from "../../common/openapi/money";
 import { RequireStepUp } from "../identity";
 import { RequirePermission } from "../rbac";
 import type { MutationMeta } from "../rbac";
@@ -41,6 +42,7 @@ export class AdminController {
   @ApiOperation({ summary: "Search users" })
   @ApiZodQuery(searchSchema)
   @ApiPagination()
+  @ApiPageResult("AdminUserRow")
   searchUsers(@Query() query: Record<string, unknown>) {
     return this.users.search(searchSchema.parse({ q: query.q || undefined, status: query.status || undefined, role: query.role || undefined }), parsePage(query));
   }
@@ -48,6 +50,7 @@ export class AdminController {
   @Get("users/:id")
   @RequirePermission("user.view")
   @ApiOperation({ summary: "User detail" })
+  @ApiResult(200, "AdminUserDetail")
   user(@Param("id") id: string) {
     return this.users.detail(id);
   }
@@ -58,6 +61,7 @@ export class AdminController {
   @RequireStepUp()
   @ApiOperation({ summary: "Suspend a user (step-up required)" })
   @ApiZodBody(suspendSchema)
+  @ApiResult(200, "UserStatusChange", "The user, suspended.")
   suspend(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
     return this.users.suspend(actor.id, id, suspendSchema.parse(body).reason, metaOf(req));
   }
@@ -67,6 +71,7 @@ export class AdminController {
   @RequirePermission("user.suspend")
   @RequireStepUp()
   @ApiOperation({ summary: "Lift a suspension (step-up required)" })
+  @ApiResult(200, "UserStatusChange", "The user, active again.")
   unsuspend(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.users.unsuspend(actor.id, id, metaOf(req));
   }
@@ -75,6 +80,7 @@ export class AdminController {
   @HttpCode(200)
   @RequirePermission("user.revoke_sessions")
   @ApiOperation({ summary: "Revoke all of a user's sessions" })
+  @ApiResult(200, "SessionsRevoked")
   revokeSessions(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.users.revokeSessions(actor.id, id, metaOf(req));
   }
@@ -82,6 +88,7 @@ export class AdminController {
   @Get("settings")
   @RequirePermission("settings.manage")
   @ApiOperation({ summary: "List platform settings" })
+  @ApiResult(200, "SettingList")
   listSettings() {
     return this.settings.list();
   }
@@ -91,6 +98,7 @@ export class AdminController {
   @RequireStepUp()
   @ApiOperation({ summary: "Set a platform setting (step-up required)" })
   @ApiZodBody(settingBody)
+  @ApiResult(200, "SettingSaved")
   putSetting(@CurrentUser() actor: AuthUser, @Body() body: unknown, @Req() req: Request) {
     const { key, value } = settingBody.parse(body);
     return this.settings.set(actor.id, key, value, metaOf(req));
@@ -99,6 +107,7 @@ export class AdminController {
   @Get("flags")
   @RequirePermission("flags.manage")
   @ApiOperation({ summary: "List feature flags" })
+  @ApiResult(200, "FeatureFlagList")
   listFlags() {
     return this.flags.list();
   }
@@ -107,6 +116,7 @@ export class AdminController {
   @RequirePermission("flags.manage")
   @ApiOperation({ summary: "Create or update a feature flag" })
   @ApiZodBody(flagBody)
+  @ApiResult(200, "FeatureFlag")
   putFlag(@CurrentUser() actor: AuthUser, @Body() body: unknown, @Req() req: Request) {
     const { key, enabled, rules } = flagBody.parse(body);
     return this.flags.set(actor.id, key, { enabled, rules }, metaOf(req));

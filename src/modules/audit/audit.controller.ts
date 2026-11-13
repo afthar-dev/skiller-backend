@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { z } from "zod";
 import { parsePage } from "../../common/http/pagination";
+import { ApiPageResult } from "../../common/openapi/money";
 import { RequirePermission } from "../rbac";
 import { AuditService } from "./audit.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -22,6 +23,7 @@ export class AuditController {
   @ApiOperation({ summary: "Audit log, newest first" })
   @ApiZodQuery(filterSchema)
   @ApiPagination()
+  @ApiPageResult("AuditEntry")
   list(@Query() query: Record<string, unknown>) {
     return this.audit.list(filterSchema.parse(query), parsePage(query));
   }
