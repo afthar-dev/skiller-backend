@@ -455,6 +455,9 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
       expect(res.headers["content-type"]).toMatch(/^text\/csv/);
       expect(res.headers["content-disposition"]).toBe(`attachment; filename="skiller-analytics-${day}_${addDays(day, 1)}.csv"`);
       expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      // The web app is another origin: it can read the file name only when the API exposes the header.
+      const cross = await http().get(`/v1/admin/analytics/export?keys=signups&from=${day}&to=${day}`).set(auth(admin)).set("Origin", "http://localhost:5173");
+      expect(cross.headers["access-control-expose-headers"]).toMatch(/Content-Disposition/i);
       const lines = res.text.trim().split("\r\n");
       expect(lines).toEqual(["day,signups,gmv_paise", `${day},4,254900`, `${addDays(day, 1)},1,0`]);
       // Keys are checked against the catalog, so nothing a caller types can reach a cell.

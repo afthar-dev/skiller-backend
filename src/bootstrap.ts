@@ -14,7 +14,8 @@ export function configureApp<T extends INestApplication>(app: T): T {
   app.use(helmet());
   app.use(captureRawBody(["/v1/webhooks/razorpay", "/v1/webhooks/razorpayx"]));
   app.use(cookieParser());
-  app.enableCors({ origin: config.corsOrigins, credentials: true });
+  // Content-Disposition: the web app reads the file name of a CSV export from it (another origin sees only exposed headers).
+  app.enableCors({ origin: config.corsOrigins, credentials: true, exposedHeaders: ["Content-Disposition"] });
   app.enableShutdownHooks();
   return app;
 }
