@@ -24773,6 +24773,92 @@
           "Admin analytics"
         ]
       }
+    },
+    "/v1/public/sitemap/{kind}": {
+      "get": {
+        "operationId": "PublicSitemap_page",
+        "parameters": [
+          {
+            "name": "kind",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "courses",
+                "gigs",
+                "profiles",
+                "categories",
+                "hashtags"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "`nextCursor` from the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of slugs with their last update; nextCursor is null on the last page. A profile's slug is its handle, a hashtag's its tag (without #).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "slug",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "slug": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error response (see `error.code`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Public pages of one kind for the web sitemap, ordered by slug, 1,000 per page. Only what is public right now: published course, live gig of an active seller, active profile with something to show, active category with a public course, hashtag on a published reel",
+        "tags": [
+          "Public sitemap"
+        ]
+      }
     }
   },
   "info": {
