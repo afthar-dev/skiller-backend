@@ -1,0 +1,7 @@
+- Task 1 done: backend c30a46f feat: public sitemap feed (GET /v1/public/sitemap/:kind), web d07a73c chore: api types for sitemap feed; gates green; see task-1-report.md
+- Task 3 done: web 6379acb feat: csp, security headers and env validation; unit/lint/typecheck/build/api:check green; see task-3-5-report.md
+- Task 4 done: web 305da8a feat: sentry with scrubbing; gates green; see task-3-5-report.md
+- Task 5 done: web 8fd5046 feat: legal pages and footer (+ a9dc44f fix: nonce on the theme script and no eval probe from zod, found by e2e); gates green; e2e 180 passed with CSP enforced; see task-3-5-report.md
+- Task 2 done: web 8be0417 feat: sitemap, robots and metadata pass; typecheck/lint/unit/build/api:check green; e2e seo+legal+security 33 passed; see task-2-6-report.md
+- Task 6 done: web 58b088c feat: lighthouse budget, old app redirects and deploy runbook; gates green; e2e redirects 8 passed, smoke 9 passed, pnpm lhci once: landing 97/100/96/100, course 99/100/96/100 (perf/a11y/bp/seo); see task-2-6-report.md
+- Task 7 done: web 1aeb7e2, backend 4cf7cf4 + 57e0d34 (test isolation fixes); backend full suite 144 suites/1480 tests green; e2e x3 212 passed each; lhci passed (landing 98/100/96/100, course 99/100/96/100); see task-7-report.md
