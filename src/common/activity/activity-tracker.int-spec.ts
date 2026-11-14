@@ -8,8 +8,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("ActivityTracker (Redis HyperLogLog per IST day)", () => {
   let redis: Redis;
-  /** A far-away random year: nothing else writes these keys, and a re-run on the same Redis does not meet old data. */
-  const base = `${randomInt(2001, 2090)}-0${randomInt(1, 10)}-1${randomInt(0, 9)}`;
+  /** A far-away random year (never the current one, whose days real traffic and other specs fill): nothing else writes these keys, and a re-run on the same Redis does not meet old data. */
+  const base = `${randomInt(2040, 2090)}-0${randomInt(1, 10)}-1${randomInt(0, 9)}`;
   const touched = new Set<string>();
   const keyOf = (day: string) => {
     touched.add(activityKey(day));
