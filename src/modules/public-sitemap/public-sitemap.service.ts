@@ -67,6 +67,8 @@ export class PublicSitemapService {
         return this.prisma.$queryRaw<Row[]>`
           SELECT p."handle" AS "slug", p."updatedAt" FROM "profiles" p
           JOIN "users" u ON u."id" = p."userId" AND u."status" = 'ACTIVE'
+          -- The first line mirrors ProfilesService.defaultDisplayName in SQL: BTRIM / LEFT(.., 80) against JS trim() / slice(0, 80). They differ only for exotic
+          -- whitespace and for emoji (UTF-16 units vs characters), which an e-mail local part does not contain. Change both together.
           WHERE (
             p."displayName" <> LEFT(COALESCE(NULLIF(BTRIM(SPLIT_PART(u."email", '@', 1)), ''), 'Skiller user'), 80)
             OR EXISTS (SELECT 1 FROM "courses" c WHERE c."ownerType" = 'USER' AND c."ownerId" = p."userId" AND c."status" = 'PUBLISHED' AND c."flaggedAt" IS NULL AND c."publishedAt" IS NOT NULL)
