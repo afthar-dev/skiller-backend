@@ -310,11 +310,16 @@ describe("admin shell", () => {
       expect((await http().put("/v1/admin/settings").set(auth(admin)).send({ key: "nope", value: 1 })).body.error.code).toBe("VALIDATION_FAILED");
       expect((await http().put("/v1/admin/settings").set(auth(admin)).send({ key: "hold_days", value: "3" })).status).toBe(400);
 
+      // Other specs share this database and also change hold_days: an older audit row for the key must not count as this write's.
+      await prisma.auditLog.create({
+        data: { action: "setting.update", actorId: admin.userId, targetType: "platform_setting", targetId: "hold_days", before: { value: 7 }, after: { value: 7 }, createdAt: new Date(Date.now() - 60_000) },
+      });
+      const writeStartedAt = new Date();
       const ok = await http().put("/v1/admin/settings").set(auth(admin)).send({ key: "hold_days", value: 14 });
       expect(ok.status).toBe(200);
       expect(ok.body).toEqual({ key: "hold_days", value: 14 });
       expect(await settings.get("hold_days")).toBe(14); // the 60 s cache held 7 and was busted
-      const rows = await audit("setting.update", "hold_days");
+      const rows = (await audit("setting.update", "hold_days")).filter((r) => r.createdAt >= writeStartedAt);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ actorId: admin.userId, after: { value: 14 } });
     });
