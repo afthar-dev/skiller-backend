@@ -25567,10 +25567,20 @@
             "type": "integer"
           },
           "platformRevenuePaise": {
-            "$ref": "#/components/schemas/Money"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "description": "Net movement of PLATFORM_REVENUE in the window. SIGNED: can be negative when platform-funded discounts or refund reversals exceed fees; clients must render a leading minus."
           },
           "taxPayablePaise": {
-            "$ref": "#/components/schemas/Money"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              }
+            ],
+            "description": "Net movement of TAX_PAYABLE in the window. SIGNED: can be negative when reversals of earlier sales exceed the tax booked in the window; clients must render a leading minus."
           },
           "refundsProcessedPaise": {
             "$ref": "#/components/schemas/Money"
