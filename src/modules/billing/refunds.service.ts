@@ -99,20 +99,34 @@ export class RefundsService {
   }
 
   /**
-   * Starts an APPROVED refund at Razorpay. The call is made outside any database transaction, with the refund id as the idempotency key,
-   * and its result is stored afterwards (PROCESSING + razorpayRefundId); repeating it can never refund twice. A definitive refusal
-   * (4xx) fails the refund; an outage (5xx, timeout) throws REFUND_GATEWAY_ERROR and leaves it APPROVED to be retried.
+   * Starts an APPROVED refund at Razorpay, with the refund id as the idempotency key; stores PROCESSING + razorpayRefundId. Repeating it
+   * can never refund twice. A definitive refusal (4xx) fails the refund; an outage (5xx, timeout, 409 "idempotency key in progress")
+   * throws REFUND_GATEWAY_ERROR and leaves it APPROVED to be retried.
+   *
+   * MON-3: runs under the refund row lock, gateway call included, so approve, `resumeStuck` and `refundUndelivered` cannot all be at Razorpay
+   * for one refund; the second waits, then sees PROCESSING. Without it the loser got a 409, found no refund yet, and FAILED a refund that
+   * was in fact created, telling finance to refund by hand.
    */
   async start(refundId: string): Promise<Refund> {
-    const refund = await this.prisma.refund.findUniqueOrThrow({ where: { id: refundId }, include: { order: { select: { razorpayPaymentId: true, id: true } } } });
-    if (refund.status !== "APPROVED" || refund.razorpayRefundId) return refund;
+    const first = await this.prisma.refund.findUniqueOrThrow({ where: { id: refundId } });
+    if (first.status !== "APPROVED" || first.razorpayRefundId) return first; // cheap exit without taking the lock
+    const { refund, failed } = await this.prisma.$transaction((tx) => this.startLocked(tx, refundId), { maxWait: 30_000, timeout: 60_000 });
+    if (failed) await this.alertFailed(refund.id, failed);
+    return refund;
+  }
+
+  private async startLocked(tx: Prisma.TransactionClient, refundId: string): Promise<{ refund: Refund; failed: string | null }> {
+    await tx.$queryRaw`SELECT "id" FROM "refunds" WHERE "id" = ${refundId} FOR UPDATE`;
+    const refund = await tx.refund.findUniqueOrThrow({ where: { id: refundId }, include: { order: { select: { razorpayPaymentId: true, id: true } } } });
+    if (refund.status !== "APPROVED" || refund.razorpayRefundId) return { refund, failed: null };
     const paymentId = refund.order.razorpayPaymentId;
     if (!paymentId) throw new AppError("REFUND_NO_PAYMENT", 500, "The order has no payment to refund", { refundId });
+    const store = async (razorpayRefundId: string) => tx.refund.update({ where: { id: refund.id }, data: { status: "PROCESSING", razorpayRefundId } });
     try {
       const made = await this.razorpay.createRefund(paymentId, { amountPaise: refund.amountPaise, notes: { refundId: refund.id, orderId: refund.orderId }, idempotencyKey: refund.id });
-      await this.prisma.refund.updateMany({ where: { id: refund.id, status: "APPROVED", razorpayRefundId: null }, data: { status: "PROCESSING", razorpayRefundId: made.id } });
+      return { refund: await store(made.id), failed: null };
     } catch (err) {
-      if (err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+      if (err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 409 && err.status !== 429) {
         // A 4xx can also mean "this refund already exists" (a retry after a crash, an idempotency key not honoured). Ask Razorpay what it
         // has for this payment before declaring failure; if even that lookup fails, treat it as an outage and retry later.
         let existing: Awaited<ReturnType<RazorpayClient["listRefunds"]>>[number] | undefined;
@@ -124,16 +138,14 @@ export class RefundsService {
         }
         if (existing) {
           this.logger.warn(`refund ${refund.id}: adopting Razorpay refund ${existing.id} that already exists for it`);
-          await this.prisma.refund.updateMany({ where: { id: refund.id, status: "APPROVED", razorpayRefundId: null }, data: { status: "PROCESSING", razorpayRefundId: existing.id } });
-        } else {
-          await this.failUnstarted(refund.id, err.message);
+          return { refund: await store(existing.id), failed: null };
         }
-      } else {
-        this.logger.error(`refund ${refund.id}: Razorpay is unavailable (${(err as Error).message}); it stays APPROVED for a retry`);
-        throw new AppError("REFUND_GATEWAY_ERROR", 502, "The payment gateway is unavailable; the refund will be retried");
+        const failedRow = await tx.refund.update({ where: { id: refund.id }, data: { status: "FAILED", failureReason: err.message.slice(0, 500) } });
+        return { refund: failedRow, failed: err.message };
       }
+      this.logger.error(`refund ${refund.id}: Razorpay is unavailable (${(err as Error).message}); it stays APPROVED for a retry`);
+      throw new AppError("REFUND_GATEWAY_ERROR", 502, "The payment gateway is unavailable; the refund will be retried");
     }
-    return this.prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
   }
 
   /** Retries refunds that were approved but never started. Returns how many were started. */
@@ -150,15 +162,6 @@ export class RefundsService {
       }
     }
     return started;
-  }
-
-  /**
-   * The call path: Razorpay refused the refund for good. Only a refund that is still APPROVED and has no Razorpay id can fail here; a
-   * refund that is already PROCESSING is in flight and only the refund.failed webhook may fail it.
-   */
-  private async failUnstarted(refundId: string, why: string): Promise<void> {
-    const failed = await this.prisma.refund.updateMany({ where: { id: refundId, status: "APPROVED", razorpayRefundId: null }, data: { status: "FAILED", failureReason: why.slice(0, 500) } });
-    if (failed.count > 0) await this.alertFailed(refundId, why);
   }
 
   /** The refund.failed webhook: Razorpay reports that a refund it accepted did not go through. */
