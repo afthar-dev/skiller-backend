@@ -111,9 +111,7 @@ export class AdminUsersService {
   async suspend(actorId: string, targetId: string, reason: string, meta: MutationMeta = {}) {
     if (actorId === targetId) throw new AppError("ADMIN_SELF_ACTION", 403, "You cannot suspend your own account");
     if (!(await this.accounts.find(targetId))) throw this.notFound();
-    if ((await this.roles.platformRoleKeys(targetId)).includes(SUPER_ADMIN_ROLE_KEY) && !(await this.roles.platformRoleKeys(actorId)).includes(SUPER_ADMIN_ROLE_KEY)) {
-      throw new AppError("ROLE_ESCALATION_DENIED", 403, "Only a super admin can suspend a super admin");
-    }
+    await this.assertMayActOnSuperAdmin(actorId, targetId, "suspend");
 
     const previous = await this.prisma.$transaction(async (tx) => {
       const from = await this.accounts.changeStatus(tx, targetId, "SUSPENDED");
@@ -130,9 +128,7 @@ export class AdminUsersService {
 
   async unsuspend(actorId: string, targetId: string, meta: MutationMeta = {}) {
     if (actorId === targetId) throw new AppError("ADMIN_SELF_ACTION", 403, "You cannot change your own account status");
-    if ((await this.roles.platformRoleKeys(targetId)).includes(SUPER_ADMIN_ROLE_KEY) && !(await this.roles.platformRoleKeys(actorId)).includes(SUPER_ADMIN_ROLE_KEY)) {
-      throw new AppError("ROLE_ESCALATION_DENIED", 403, "Only a super admin can unsuspend a super admin");
-    }
+    await this.assertMayActOnSuperAdmin(actorId, targetId, "unsuspend");
     const previous = await this.prisma.$transaction(async (tx) => {
       // changeStatus locks the row and throws USER_DELETED for a deleted account (the throw rolls back), so no unlocked pre-read.
       const from = await this.accounts.changeStatus(tx, targetId, "ACTIVE");
@@ -148,6 +144,7 @@ export class AdminUsersService {
 
   async revokeSessions(actorId: string, targetId: string, meta: MutationMeta = {}) {
     if (!(await this.accounts.find(targetId))) throw this.notFound();
+    await this.assertMayActOnSuperAdmin(actorId, targetId, "revoke the sessions of");
     const before = await this.sessions.countActive(targetId);
     await this.sessions.revokeAllForUser(targetId); // 503 SERVICE_UNAVAILABLE when Redis markers cannot be written; nothing is audited then
     await this.prisma.$transaction((tx) => this.audit.record(tx, { actorId, action: "user.revoke_sessions", targetType: "user", targetId, before: { activeSessions: before }, after: { activeSessions: 0 }, ...meta }));
@@ -184,6 +181,13 @@ export class AdminUsersService {
     }
     this.logger.error(`could not bust status cache for user ${userId}: ${(last as Error).message}`);
     throw new AppError("SERVICE_UNAVAILABLE", 503, "The account status is saved but could not be applied everywhere yet; repeat the request");
+  }
+
+  /** Staff below super admin (support, finance) must not be able to act on a super admin account. */
+  private async assertMayActOnSuperAdmin(actorId: string, targetId: string, verb: string) {
+    if (!(await this.roles.platformRoleKeys(targetId)).includes(SUPER_ADMIN_ROLE_KEY)) return;
+    if ((await this.roles.platformRoleKeys(actorId)).includes(SUPER_ADMIN_ROLE_KEY)) return;
+    throw new AppError("ROLE_ESCALATION_DENIED", 403, `Only a super admin can ${verb} a super admin`);
   }
 
   private notFound() {
