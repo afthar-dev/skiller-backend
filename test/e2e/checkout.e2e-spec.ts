@@ -327,6 +327,24 @@ describe("checkout, coupons and fulfilment", () => {
       expect(alert.data).toMatchObject({ kind: "DUPLICATE_PAYMENT" });
     });
 
+    it("MON-6: a second captured payment on a REFUNDED order is recorded as DUPLICATE_PAYMENT and finance is alerted", async () => {
+      const { itemId } = await listing();
+      const { buyer, order } = await start(itemId);
+      const first = fake.capturePayment(order.razorpayOrderId);
+      expect((await verify(buyer, order.orderId, order.razorpayOrderId, first.id)).status).toBe(200);
+      await prisma.order.update({ where: { id: order.orderId }, data: { status: "REFUNDED" } });
+      const second = fake.capturePayment(order.razorpayOrderId);
+      const res = await verify(buyer, order.orderId, order.razorpayOrderId, second.id);
+      expect(res.status).toBe(200);
+      const dup = await prisma.duplicatePayment.findMany({ where: { orderId: order.orderId } });
+      expect(dup).toHaveLength(1);
+      expect(dup[0]).toMatchObject({ razorpayPaymentId: second.id, resolvedAt: null });
+      expect((await financeAlert(order.orderId)).data).toMatchObject({ kind: "DUPLICATE_PAYMENT" });
+      // redelivery of the order's own (first) payment is not a duplicate
+      await deliver("payment.captured", captured(first));
+      expect(await prisma.duplicatePayment.count({ where: { orderId: order.orderId } })).toBe(1);
+    });
+
     it("payment.failed marks a CREATED order FAILED; a later successful payment on the same Razorpay order still fulfils it", async () => {
       const { itemId } = await listing();
       const { buyer, order } = await start(itemId);
