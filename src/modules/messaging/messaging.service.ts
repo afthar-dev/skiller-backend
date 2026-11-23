@@ -162,7 +162,13 @@ export class MessagingService {
   async messages(userId: string, conversationId: string, page: PageQuery, after?: string): Promise<{ items: MessageView[]; nextCursor: string | null }> {
     await this.participation(userId, conversationId);
     if (after !== undefined) {
-      const rows = await this.prisma.message.findMany({ where: { conversationId, id: { gt: after } }, orderBy: { id: "asc" }, take: page.limit });
+      // Page on (createdAt, id): createdAt is strictly increasing per conversation (see append), while ids come from whichever API instance inserted
+      // and can sort the other way round for messages sent within the same millisecond.
+      const anchor = await this.prisma.message.findFirst({ where: { id: after, conversationId }, select: { createdAt: true, id: true } });
+      const where = anchor
+        ? { conversationId, OR: [{ createdAt: { gt: anchor.createdAt } }, { createdAt: anchor.createdAt, id: { gt: anchor.id } }] }
+        : { conversationId, id: { gt: after } };
+      const rows = await this.prisma.message.findMany({ where, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: page.limit });
       return { items: rows.map(toMessageView), nextCursor: null };
     }
     let before: string | undefined;
