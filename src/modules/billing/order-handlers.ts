@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { istDateOf } from "../../common/clock/ist";
 import { AppError } from "../../common/errors/app-error";
 import { EventBus } from "../../common/outbox/event-bus";
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -18,6 +19,9 @@ const FINAL_CODES = new Set(["PAYMENT_AMOUNT_MISMATCH", "PAYMENT_ORDER_MISMATCH"
  * Wires orders to their inputs: Razorpay payment webhooks (through the dispatcher) and the order.paid outbox event
  * (receipt and new-sale notifications). Delivery is at-least-once, so everything behind these is idempotent.
  */
+/** The IST calendar day of an ISO instant, as printed on the receipt (the invoice uses IST too). */
+export const receiptDate = (paidAtIso: string): string => istDateOf(new Date(paidAtIso));
+
 @Injectable()
 export class OrderHandlers implements OnModuleInit {
   private readonly logger = new Logger(OrderHandlers.name);
@@ -77,7 +81,7 @@ export class OrderHandlers implements OnModuleInit {
         body: `We received your payment of ${amount} for ${e.itemTitle}.`,
         link: `/orders/${e.orderId}`,
         data: { orderId: e.orderId },
-        email: { template: "order_receipt", data: { orderId: e.orderId, itemTitle: e.itemTitle, amount, paidOn: e.paidAt.slice(0, 10) } },
+        email: { template: "order_receipt", data: { orderId: e.orderId, itemTitle: e.itemTitle, amount, paidOn: receiptDate(e.paidAt) } },
         sourceEventId: eventId,
       });
       // Organization sellers have no single recipient yet; their sales show up in the wallet.
