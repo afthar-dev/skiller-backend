@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { REFUND_WINDOW_DAYS } from "../../common/refund-window";
 import type { PaidOrder } from "./sellable.registry";
 
 export type RefundEligibilityResult = { eligible: true } | { eligible: false; reason: string };
@@ -13,7 +14,7 @@ export interface RefundEligibility {
   check(input: { order: PaidOrder; now: Date; db?: Prisma.TransactionClient }): Promise<RefundEligibilityResult>;
 }
 
-export const REFUND_WINDOW_DAYS = 7;
+export { REFUND_WINDOW_DAYS };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Phase 2 default: within 7 days of the payment. */
