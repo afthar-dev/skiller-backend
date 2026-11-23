@@ -19,7 +19,7 @@ export interface NotifyInput {
   /** Sent only if the recipient's `email` preference for this type is on. `to` skips the address lookup when the caller already has it. */
   email?: { [T in MailTemplate]: { template: T; data: MailData[T]; to?: string } }[MailTemplate];
   /**
-   * Outbox event id. Makes notify() idempotent: the in-app row is unique per (userId, sourceEventId) and the mail job carries a key
+   * Outbox event id. Makes notify() idempotent: the in-app row is unique per (userId, sourceEventId, type), so two handlers of one event can both notify a user, and the mail job carries a key
    * derived from it, so an at-least-once redelivery neither duplicates the row nor the mail. Handlers must always pass it.
    */
   sourceEventId?: string;
