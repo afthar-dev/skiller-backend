@@ -110,7 +110,7 @@ pnpm --dir edge/playback-gate deploy
 **Redis (`skiller-redis`).** Paid plan, `maxmemoryPolicy: noeviction`, no public access. An evicting policy can bring revoked sessions back to life and lose queue jobs. The free plan keeps nothing on disk; don't use it. After the first deploy, confirm in the dashboard that the policy shows `noeviction`.
 
 **API (`skiller-api`).**
-- Health check path: `/v1/ready`.
+- Health check path: `/v1/health` (liveness only). `/v1/ready` also checks Neon and Redis (2 s timeout each); use it for deploy checks and the external monitor, not for Render's restart decision.
 - Pre-deploy command: `sh -c 'DATABASE_URL="$DIRECT_DATABASE_URL" npm run release'`. It migrates with the Neon **direct** URL before each new version goes live. If it fails, the old version keeps running.
 - Custom domain `api.skiller.in` (the Blueprint adds it). In Cloudflare add the CNAME Render shows (`skiller-api.onrender.com`), **DNS only** (grey cloud), then verify in Render. Render issues the certificate.
 - Plan `standard` (2 GB). Free plans sleep, which drops live message streams.

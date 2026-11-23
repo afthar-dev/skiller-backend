@@ -89,7 +89,8 @@ services:
     plan: standard # 2 GB. Free plans sleep, which breaks live message streams.
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /v1/ready
+    # Liveness only. /v1/ready also checks Neon and Redis, so a database blip would make Render restart healthy instances. Use /v1/ready for deploy checks and monitors.
+    healthCheckPath: /v1/health
     # Migrate with the direct (non-pooled) Neon url before each release goes live.
     preDeployCommand: sh -c 'DATABASE_URL="$DIRECT_DATABASE_URL" npm run release'
     domains:
