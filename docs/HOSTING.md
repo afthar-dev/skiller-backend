@@ -151,11 +151,21 @@ RAZORPAY_WEBHOOK_SECRET=...
 RAZORPAYX_ACCOUNT_NUMBER=...
 RAZORPAYX_WEBHOOK_SECRET=...
 SSR_SHARED_SECRET=...
+# ORIGIN_SHARED_SECRET=...   only with the Cloudflare proxy on api. (see below)
 SUPER_ADMIN_EMAIL=you@example.com
 SENTRY_DSN=...
 ```
 
-`TRUST_PROXY` is the number of proxies in front of the API. Rate limits depend on it. Render puts its own proxy in front, so start at `1` and confirm by checking that logged IPs are real client IPs (sign in from your phone on mobile data and compare). If they show a Render or Cloudflare address, raise it by one. If you later turn on the Cloudflare proxy for `api.`, add one.
+`TRUST_PROXY` is the number of proxies in front of the API. Rate limits depend on it. Render puts its own proxy in front, so start at `1` and confirm by checking that logged IPs are real client IPs (sign in from your phone on mobile data and compare). If they show a Render or Cloudflare address, raise it by one. If you later turn on the Cloudflare proxy for `api.`, add one, and read the next section first.
+
+**Cloudflare proxy in front of `api.` (read before turning it on).** Render keeps answering on `skiller-api.onrender.com` whatever Cloudflare does. With `TRUST_PROXY=2` (Cloudflare plus Render), a client that calls the `onrender.com` hostname directly can send its own `X-Forwarded-For`; Render appends the real address, and with two trusted hops `req.ip` becomes the value the client chose. Every per-IP rate limit (OTP request and verify, step-up, playback) is then bypassable. To close it:
+
+1. Generate `ORIGIN_SHARED_SECRET` (`openssl rand -base64 48`) and set it on the API (and worker) in Render. The API refuses to start in production with `TRUST_PROXY` above 1 and no secret.
+2. In Cloudflare, add a Transform Rule (Modify Request Header, applied to the `api.` hostname) that sets the request header `X-Skiller-Origin` to that secret.
+3. Set `TRUST_PROXY=2`. With the secret set, the API answers `403` to any request without the header, so the `onrender.com` hostname is no longer usable by clients. `/v1/health` and `/v1/ready` stay open because Render probes them at the origin.
+4. Check: `curl -i https://skiller-api.onrender.com/v1/me` must return `403`, and `https://api.skiller.in/v1/me` must return `401`.
+
+Webhook providers (Razorpay, Resend) must call the `api.` hostname, not `onrender.com`, once the guard is on. If you stay on `TRUST_PROXY=1` (no Cloudflare proxy on `api.`), leave `ORIGIN_SHARED_SECRET` unset.
 
 `SSR_SHARED_SECRET` is a random string of at least 32 characters (`openssl rand -base64 48`), identical on the API, the worker and the web app's Vercel project. Rotate it by changing all three. Never set `RAZORPAY_BASE_URL` in production: the API refuses to start with it.
 
@@ -250,4 +260,4 @@ Complete both go-live checklists in `README.md`. In short:
 1. More worker replicas for video.
 2. More API replicas. Sessions, rate limits and live messages already go through Redis.
 3. Larger Neon compute.
-4. Cloudflare proxy in front of `api.` for rate limiting at the edge, then add one to `TRUST_PROXY`.
+4. Cloudflare proxy in front of `api.` for rate limiting at the edge, then add one to `TRUST_PROXY` and set `ORIGIN_SHARED_SECRET` (section 3.5).

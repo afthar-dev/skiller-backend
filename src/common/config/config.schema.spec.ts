@@ -32,14 +32,14 @@ const validEnv: NodeJS.ProcessEnv = {
 
 describe("loadConfig", () => {
   it("API_BASE_URL is required in production (the unsubscribe link must reach the API) and optional elsewhere", () => {
-    const prod = { ...validEnv, NODE_ENV: "production" };
+    const prod = { ...validEnv, NODE_ENV: "production", CORS_ORIGINS: "https://app.skiller.in", COOKIE_DOMAIN: ".skiller.in" };
     expect(() => loadConfig(prod)).toThrow(/API_BASE_URL/);
     expect(loadConfig({ ...prod, API_BASE_URL: "https://api.skiller.in/" }).apiBaseUrl).toBe("https://api.skiller.in");
     expect(loadConfig(validEnv).apiBaseUrl).toBe("https://app.skiller.in");
   });
 
   it("API_BASE_URL is required in production (the unsubscribe link must reach the API) and optional elsewhere", () => {
-    const prod = { ...validEnv, NODE_ENV: "production" };
+    const prod = { ...validEnv, NODE_ENV: "production", CORS_ORIGINS: "https://app.skiller.in", COOKIE_DOMAIN: ".skiller.in" };
     expect(() => loadConfig(prod)).toThrow(/API_BASE_URL/);
     expect(loadConfig({ ...prod, API_BASE_URL: "https://api.skiller.in/" }).apiBaseUrl).toBe("https://api.skiller.in");
     expect(loadConfig(validEnv).apiBaseUrl).toBe("https://app.skiller.in");
@@ -74,6 +74,36 @@ describe("loadConfig", () => {
     expect(loadConfig(validEnv).trustProxy).toBe(0);
     expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);
     expect(() => loadConfig({ ...validEnv, TRUST_PROXY: "-1" })).toThrow(ConfigError);
+  });
+
+  describe("production hardening", () => {
+    const prod = { ...validEnv, NODE_ENV: "production", API_BASE_URL: "https://api.skiller.in", CORS_ORIGINS: "https://skiller.in", COOKIE_DOMAIN: ".skiller.in" };
+
+    it("accepts https origins under COOKIE_DOMAIN", () => {
+      expect(loadConfig(prod).corsOrigins).toEqual(["https://skiller.in"]);
+      expect(loadConfig({ ...prod, CORS_ORIGINS: "https://skiller.in, https://www.skiller.in" }).corsOrigins).toHaveLength(2);
+    });
+
+    it.each(["*", "https://skiller.in,*", "http://skiller.in", "https://*.vercel.app", "https://skiller.vercel.app", "https://skiller.in/app", "skiller.in", "https://evil-skiller.in"])(
+      "rejects CORS_ORIGINS=%s",
+      (origins) => {
+        expect(() => loadConfig({ ...prod, CORS_ORIGINS: origins })).toThrow(ConfigError);
+        expect(() => loadConfig({ ...prod, CORS_ORIGINS: origins })).toThrow(/CORS_ORIGINS/);
+      },
+    );
+
+    it("does not apply the CORS rules outside production", () => {
+      expect(loadConfig({ ...validEnv, CORS_ORIGINS: "http://localhost:5173,*" }).corsOrigins).toContain("*");
+    });
+
+    it("more than one trusted proxy hop needs ORIGIN_SHARED_SECRET (direct onrender.com access could spoof X-Forwarded-For)", () => {
+      expect(loadConfig({ ...prod, TRUST_PROXY: "1" }).trustProxy).toBe(1);
+      expect(() => loadConfig({ ...prod, TRUST_PROXY: "2" })).toThrow(/ORIGIN_SHARED_SECRET/);
+      const ok = loadConfig({ ...prod, TRUST_PROXY: "2", ORIGIN_SHARED_SECRET: "o".repeat(32) });
+      expect(ok.originSharedSecret).toBe("o".repeat(32));
+      expect(() => loadConfig({ ...prod, ORIGIN_SHARED_SECRET: "short" })).toThrow(/ORIGIN_SHARED_SECRET/);
+      expect(loadConfig({ ...validEnv, TRUST_PROXY: "2" }).trustProxy).toBe(2);
+    });
   });
 
   it("loads valid env", () => {

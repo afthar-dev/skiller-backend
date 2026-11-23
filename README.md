@@ -33,7 +33,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `PORT` | no | Default `4000`. |
 | `DATABASE_URL`, `REDIS_URL` | yes | Postgres / Redis connection URLs. |
 | `JWT_SECRET`, `OTP_PEPPER`, `PLAYBACK_SECRET` | yes | Each at least 32 random characters. Rotating `JWT_SECRET` signs everyone out; `PLAYBACK_SECRET` must match the edge gate. |
-| `CORS_ORIGINS` | yes | Comma-separated allowed web origins (credentials are allowed). |
+| `CORS_ORIGINS` | yes | Comma-separated allowed web origins (credentials are allowed). In production each must be a bare `https://` origin equal to `COOKIE_DOMAIN` or a subdomain of it; `*`, `http://` and paths make the API refuse to start. |
 | `WEB_BASE_URL` | yes | Public web app URL, used for links in emails. |
 | `API_BASE_URL` | **yes when `NODE_ENV=production`** | Public URL of this API, used for the unsubscribe link in promotional email (`<API_BASE_URL>/v1/unsubscribe?t=`). The server refuses to start in production without it; elsewhere it defaults to `WEB_BASE_URL`. |
 | `COOKIE_DOMAIN` | yes | Domain of the `skiller_rt` refresh cookie. |
@@ -51,6 +51,7 @@ Validated at boot (`src/common/config/config.schema.ts`); the process exits with
 | `KYC_PEPPER` | no | 32+ character secret keying the HMAC of PAN numbers (duplicate-PAN detection); defaults to `OTP_PEPPER`. Changing it stops old accounts matching new ones. |
 | `SUPER_ADMIN_EMAIL` | yes | Gets the `super_admin` role at seed time. |
 | `TRUST_PROXY` | no | Reverse-proxy hops in front of the API (default `0`). |
+| `ORIGIN_SHARED_SECRET` | no (required in production when `TRUST_PROXY` > 1) | 32+ character secret. When set, only requests carrying it in `X-Skiller-Origin` are served (`/v1/health` and `/v1/ready` excepted); Cloudflare adds the header. Blocks direct access to the platform hostname, which could otherwise spoof `X-Forwarded-For`. See `docs/HOSTING.md`. |
 | `SSR_SHARED_SECRET` | no | 32+ character secret shared with the web app's server (a server-only variable, never in browser code). A request with it in `X-Skiller-Server` may name the visitor in `X-Skiller-Client-Ip`: per-IP rate limits then count that address, and a `@Public` GET (or a signed-out `@OptionalAuth` GET) with no client IP is not rate-limited. Without the secret both headers are ignored. |
 | `SENTRY_DSN` | no | Enables Sentry. Only server errors (status >= 500) are reported. |
 | `LOG_LEVEL` | no | Pino level, default `info`. |
