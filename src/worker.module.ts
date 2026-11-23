@@ -1,4 +1,4 @@
-import { Module, OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
+import { Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { LoggerModule } from "nestjs-pino";
 import { APP_CONFIG, ConfigModule } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
@@ -39,7 +39,7 @@ import { RedisModule } from "./common/redis/redis.module";
 @Module({
   imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
 })
-export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
+export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly runner: QueueWorkerRunner,
     private readonly outboxRelay: OutboxRelay,
@@ -76,7 +76,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.analyticsRollup.schedule();
   }
 
-  async onApplicationShutdown() {
+  /**
+   * Nest runs every onModuleDestroy before any onApplicationShutdown, and the root module's hooks run before the feature modules'. Stopping the workers here
+   * (close() waits for running jobs) means PrismaService, which disconnects in its own onModuleDestroy, is still connected while jobs finish.
+   */
+  async onModuleDestroy() {
     await this.runner.stop();
   }
 }

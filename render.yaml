@@ -89,6 +89,8 @@ services:
     plan: standard # 2 GB. Free plans sleep, which breaks live message streams.
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # Time to finish in-flight requests and close live message streams before Render kills the process after SIGTERM.
+    maxShutdownDelaySeconds: 60
     # Liveness only. /v1/ready also checks Neon and Redis, so a database blip would make Render restart healthy instances. Use /v1/ready for deploy checks and monitors.
     healthCheckPath: /v1/health
     # Migrate with the direct (non-pooled) Neon url before each release goes live.
@@ -113,6 +115,9 @@ services:
     plan: standard # 2 GB minimum for transcoding
     dockerfilePath: ./Dockerfile.worker
     dockerContext: .
+    # On SIGTERM the worker stops taking jobs and waits for running ones (a lesson transcode can take many minutes). 300 is Render's maximum;
+    # a job still running after that is stalled and re-run, so keep it short of that or accept the redo.
+    maxShutdownDelaySeconds: 300
     envVars:
       - key: REDIS_URL
         fromService:
