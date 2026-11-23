@@ -64,7 +64,8 @@ export class RolesController {
 
   @Post("roles")
   @RequirePermission("rbac.manage")
-  @ApiOperation({ summary: "Create a custom role" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Create a custom role (step-up required)" })
   @ApiZodBody(createSchema)
   @ApiResult(201, "Role")
   create(@CurrentUser() user: AuthUser, @Body() body: unknown, @Req() req: Request) {
@@ -73,7 +74,8 @@ export class RolesController {
 
   @Patch("roles/:id")
   @RequirePermission("rbac.manage")
-  @ApiOperation({ summary: "Rename a role or replace its permissions" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Rename a role or replace its permissions (step-up required)" })
   @ApiZodBody(updateSchema)
   @ApiResult(200, "Role", "The role after the edit.")
   update(@CurrentUser() user: AuthUser, @Param("id") id: string, @Body() body: unknown, @Req() req: Request) {
@@ -83,7 +85,8 @@ export class RolesController {
   @Delete("roles/:id")
   @HttpCode(204)
   @RequirePermission("rbac.manage")
-  @ApiOperation({ summary: "Delete a custom role" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Delete a custom role (step-up required)" })
   @ApiNoContent("Deleted.")
   async remove(@CurrentUser() user: AuthUser, @Param("id") id: string, @Req() req: Request) {
     await this.roles.delete(user.id, id, metaOf(req));

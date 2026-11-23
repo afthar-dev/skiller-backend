@@ -6,7 +6,10 @@ import { type PageQuery } from "../../common/http/pagination";
 import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { AuditService } from "../audit";
-import { SUPER_ADMIN_ROLE_KEY } from "./default-roles";
+import { MEMBER_ROLE_KEY, SUPER_ADMIN_ROLE_KEY } from "./default-roles";
+
+/** Roles every ordinary user holds: editing their permissions through the API would escalate the whole user base at once (permission-sync owns them). */
+const UNIVERSAL_ROLE_KEYS: readonly string[] = [MEMBER_ROLE_KEY, "creator"];
 import { PermissionService } from "./permission.service";
 
 /** Request details copied into audit rows. */
@@ -208,6 +211,9 @@ export class RolesService {
     if (patch.permissionKeys) {
       if (current.key === SUPER_ADMIN_ROLE_KEY) {
         throw new AppError("ROLE_SYSTEM_PROTECTED", 409, "The super_admin role always holds every permission");
+      }
+      if (UNIVERSAL_ROLE_KEYS.includes(current.key)) {
+        throw new AppError("ROLE_SYSTEM_PROTECTED", 409, "The permissions of this role are managed by the platform and cannot be edited");
       }
       const keys = [...new Set(patch.permissionKeys)];
       permissionIds = await this.resolvePermissionIds(keys);

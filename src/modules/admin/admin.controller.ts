@@ -79,7 +79,8 @@ export class AdminController {
   @Post("users/:id/revoke-sessions")
   @HttpCode(200)
   @RequirePermission("user.revoke_sessions")
-  @ApiOperation({ summary: "Revoke all of a user's sessions" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Revoke all of a user's sessions (step-up required)" })
   @ApiResult(200, "SessionsRevoked")
   revokeSessions(@CurrentUser() actor: AuthUser, @Param("id") id: string, @Req() req: Request) {
     return this.users.revokeSessions(actor.id, id, metaOf(req));
@@ -114,7 +115,8 @@ export class AdminController {
 
   @Put("flags")
   @RequirePermission("flags.manage")
-  @ApiOperation({ summary: "Create or update a feature flag" })
+  @RequireStepUp()
+  @ApiOperation({ summary: "Create or update a feature flag (step-up required)" })
   @ApiZodBody(flagBody)
   @ApiResult(200, "FeatureFlag")
   putFlag(@CurrentUser() actor: AuthUser, @Body() body: unknown, @Req() req: Request) {
