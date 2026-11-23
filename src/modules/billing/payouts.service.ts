@@ -228,6 +228,12 @@ export class PayoutsService {
         }
       }
       if (current.status === "REQUESTED") {
+        // MON-5: a refund after the hold release can take AVAILABLE below zero (the money may already be in the seller's bank). Paying out
+        // on top of that deepens the loss, so approval waits: finance rejects the request or lets the balance recover first.
+        const balances = await this.ledger.balancesFor(current.ownerType, current.ownerId, tx);
+        if (balances.AVAILABLE < 0n) {
+          throw new AppError("PAYOUT_BALANCE_NEGATIVE", 409, "The seller's available balance is negative (a refund exceeded it); the payout cannot be approved", { availablePaise: toApi(balances.AVAILABLE) });
+        }
         const approved = await tx.payout.update({ where: { id: current.id }, data: { status: "APPROVED", approvedBy: actorId, approvedAt: this.clock.now() } });
         await this.audit.record(tx, { actorId, action: "payout.approve", targetType: "payout", targetId: current.id, before: toPayoutView(current), after: toPayoutView(approved), ...meta });
         await this.outbox.enqueue(tx, this.event("payout.approved", approved));
