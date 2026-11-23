@@ -71,7 +71,11 @@ export class FulfilmentService {
       // Another payment on an already-paid order: only a captured one holds the buyer's money twice.
       return payment.status === "captured" && payment.captured ? this.recordDuplicate(order, payment) : this.paid(order, "ALREADY_PAID");
     }
-    if (!FULFILLABLE.includes(order.status)) return { orderId, status: order.status, outcome: "ALREADY_PAID" };
+    if (!FULFILLABLE.includes(order.status)) {
+      // REFUNDED / PARTIALLY_REFUNDED (MON-6): a different captured payment still holds the buyer's money, so it is recorded and alerted too.
+      if (order.razorpayPaymentId !== paymentId && payment.status === "captured" && payment.captured) return this.recordDuplicate(order, payment);
+      return { orderId, status: order.status, outcome: "ALREADY_PAID" };
+    }
 
     // authorized / created: the money is not ours yet. The caller waits (verify answers 202, the webhook retries).
     if (payment.status === "authorized" || payment.status === "created") return { orderId, status: order.status, outcome: "PENDING_CAPTURE" };
@@ -227,7 +231,7 @@ export class FulfilmentService {
     throw new AppError("PAYMENT_AMOUNT_MISMATCH", 422, "The amount paid does not match the order");
   }
 
-  /** A second payment captured against an order that is already PAID: keep it for a manual refund, never post it. */
+  /** A second payment captured against an order that is already PAID (or refunded since): keep it for a manual refund, never post it. */
   private async recordDuplicate(order: Order, payment: RazorpayPayment): Promise<FulfilResult> {
     const created = await this.prisma.duplicatePayment.createMany({ data: [{ orderId: order.id, razorpayPaymentId: payment.id, amountPaise: payment.amountPaise }], skipDuplicates: true });
     if (created.count === 1) {
@@ -239,7 +243,7 @@ export class FulfilmentService {
         data: { paymentId: payment.id, amountPaise: toApi(payment.amountPaise), paidWith: order.razorpayPaymentId },
       });
     }
-    return this.paid(order, "DUPLICATE_PAYMENT");
+    return order.status === "PAID" ? this.paid(order, "DUPLICATE_PAYMENT") : { orderId: order.id, status: order.status, outcome: "DUPLICATE_PAYMENT" };
   }
 
   private paid(order: Order, outcome: FulfilOutcome): FulfilResult {
