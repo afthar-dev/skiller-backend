@@ -30,7 +30,10 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     // The web app's server calls from a handful of addresses on behalf of every visitor: with its secret it names the visitor, and limits count that address.
-    const trusted = this.isTrustedServer(req);
+    // Only on public reads: that is all the web app's server needs it for, and honouring it elsewhere would let a leaked secret
+    // erase every per-IP limit (otp/request, otp/verify, admin writes) and forge the addresses stored in sessions and audit rows.
+    const publicRead = this.isPublicRead(context, req);
+    const trusted = publicRead && this.isTrustedServer(req);
     const clientIp = trusted ? this.clientIpOf(req) : undefined;
     if (clientIp) Object.defineProperty(req, "ip", { value: clientIp, configurable: true, enumerable: true, writable: true });
 
@@ -40,7 +43,7 @@ export class RateLimitGuard implements CanActivate {
     ]);
     if (!options || options.length === 0) return true;
     // Server-side rendering with no visitor behind it (a build, a revalidation): counting its own address would throttle the site itself.
-    if (trusted && !clientIp && this.isPublicRead(context, req)) return true;
+    if (trusted && !clientIp) return true;
 
     for (const option of options) {
       if (option.anonymousOnly && req.headers?.authorization) continue;
