@@ -127,7 +127,6 @@ export class CurriculumService {
 
   async deleteSection(user: { id: string }, courseId: string, sectionId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
-    let deferred = false;
     await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const section = await tx.courseSection.findFirst({ where: { id: sectionId, courseId }, include: { lessons: true } });
@@ -136,16 +135,14 @@ export class CurriculumService {
       await tx.courseSection.delete({ where: { id: sectionId } });
       await tx.courseSection.updateMany({ where: { courseId, position: { gt: section.position } }, data: { position: { decrement: 1 } } });
       if (section.lessons.some((l) => l.isRequired)) await assertRequiredLessonRemains(tx, courseId);
-      if (section.lessons.some(affectsProgress)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
+      if (section.lessons.some(affectsProgress)) await this.progress.recomputeCourse(tx, courseId);
     });
-    if (deferred) await this.progress.scheduleRecompute(courseId);
   }
 
   async createLesson(user: { id: string }, courseId: string, input: CreateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
     assertFieldsMatchType(input.type, input);
     if (input.type === "QUIZ" && input.isFreePreview) throw quizPreview();
-    let deferred = false;
     const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       // A quiz lesson starts empty: on a live course learners would be blocked by it until questions exist.
@@ -174,16 +171,14 @@ export class CurriculumService {
           resourceAssetId: input.resourceAssetId ?? null,
         },
       });
-      if (affectsProgress(row)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
+      if (affectsProgress(row)) await this.progress.recomputeCourse(tx, courseId);
       return toLessonView(row);
     });
-    if (deferred) await this.progress.scheduleRecompute(courseId);
     return view;
   }
 
   async updateLesson(user: { id: string }, courseId: string, lessonId: string, patch: UpdateLessonInput): Promise<LessonView> {
     const course = await this.policy.loadForAuthor(user, courseId);
-    let deferred = false;
     const view = await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
@@ -208,16 +203,14 @@ export class CurriculumService {
       }
       const updated = await tx.lesson.update({ where: { id: lessonId }, data });
       if (lesson.isRequired && patch.isRequired === false) await assertRequiredLessonRemains(tx, courseId);
-      if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
+      if (patch.isRequired !== undefined && patch.isRequired !== lesson.isRequired) await this.progress.recomputeCourse(tx, courseId);
       return toLessonView(updated);
     });
-    if (deferred) await this.progress.scheduleRecompute(courseId);
     return view;
   }
 
   async deleteLesson(user: { id: string }, courseId: string, lessonId: string): Promise<void> {
     await this.policy.loadForAuthor(user, courseId);
-    let deferred = false;
     await this.prisma.$transaction(async (tx) => {
       await lockCourseForEdit(tx, courseId);
       const lesson = await tx.lesson.findFirst({ where: { id: lessonId, courseId } });
@@ -226,9 +219,8 @@ export class CurriculumService {
       await tx.lesson.delete({ where: { id: lessonId } });
       await tx.lesson.updateMany({ where: { sectionId: lesson.sectionId, position: { gt: lesson.position } }, data: { position: { decrement: 1 } } });
       if (lesson.isRequired) await assertRequiredLessonRemains(tx, courseId);
-      if (affectsProgress(lesson)) deferred = (await this.progress.recomputeCourse(tx, courseId)).deferred;
+      if (affectsProgress(lesson)) await this.progress.recomputeCourse(tx, courseId);
     });
-    if (deferred) await this.progress.scheduleRecompute(courseId);
   }
 
   /**

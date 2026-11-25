@@ -31,6 +31,8 @@ export class RollupProcessor implements JobProcessor, OnModuleInit {
 
   onModuleInit() {
     this.registry.register(this);
+    // A rebuild of up to 31 days runs on the long queue so it never holds up the schedulers on `maintenance`.
+    this.registry.register({ queue: QueueNames.maintenanceLong, jobNames: [ANALYTICS_REBUILD_JOB], process: (job) => this.process(job) });
   }
 
   /** Called once by the worker process. */

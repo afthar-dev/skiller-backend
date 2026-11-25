@@ -7,6 +7,8 @@ import { OutboxService } from "../../common/outbox/outbox.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { QueueNames } from "../../common/queue/queue.constants";
 import { InjectQueue } from "../../common/queue/queue.decorators";
+import type { Redis } from "ioredis";
+import { REDIS } from "../../common/redis/redis.constants";
 import { CourseAccessRules } from "./course-access-rules";
 import type { CourseProgressReader } from "./course-progress";
 import { denied, notEnrolled } from "./learn-errors";
@@ -19,6 +21,9 @@ export const HEARTBEAT_MIN_INTERVAL_MS = 5000;
 export const WATCH_SPEED_FACTOR = 2;
 
 export const COURSE_PROGRESS_RECOMPUTE_JOB = "courses.progress.recompute";
+/** Set while a recompute job for the course is queued and has not started yet; that job will see every edit made until it starts. */
+const pendingKey = (courseId: string) => `courses:progress-recompute:pending:${courseId}`;
+const PENDING_TTL_SEC = 3600;
 
 /**
  * SQL condition: the lesson can be done at all. A QUIZ lesson with no questions cannot be attempted, so it must not block a course
@@ -50,7 +55,8 @@ export class ProgressService implements CourseProgressReader {
     private readonly rules: CourseAccessRules,
     private readonly outbox: OutboxService,
     @Inject(CLOCK) private readonly clock: Clock,
-    @InjectQueue(QueueNames.maintenance) private readonly maintenanceQueue: Queue,
+    @InjectQueue(QueueNames.maintenanceLong) private readonly maintenanceQueue: Queue,
+    @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
   /** Percentage of required lessons the learner has completed (the figure kept on their enrolment). */
@@ -135,19 +141,35 @@ export class ProgressService implements CourseProgressReader {
    */
   async recomputeCourse(tx: Prisma.TransactionClient, courseId: string): Promise<{ deferred: boolean }> {
     const active = await tx.enrolment.count({ where: { courseId, revokedAt: null } });
-    if (active > this.inlineLimit) return { deferred: true };
+    if (active > this.inlineLimit) {
+      // In the editing transaction: the request is committed with the edit (or not at all) and the outbox relays it to scheduleRecompute with retries.
+      await this.outbox.enqueue(tx, { type: "course.progress_recompute_requested", courseId });
+      return { deferred: true };
+    }
     await this.lockEnrolments(tx, courseId, {});
     await this.refresh(tx, courseId, {});
     return { deferred: false };
   }
 
-  /** After the editing transaction committed: queue the recompute of a large course (one job per course, repeated requests collapse into it). */
+  /**
+   * Queues the background recompute of a large course. Not a fixed jobId (BullMQ ignores an add whose id exists in any state, so a failed or running job would
+   * swallow later edits): each run gets its own job, and a Redis flag collapses requests made while a job is still waiting. The job clears the flag when it
+   * starts, so an edit made during a run queues one more run that sees it.
+   */
   async scheduleRecompute(courseId: string): Promise<void> {
-    await this.maintenanceQueue.add(COURSE_PROGRESS_RECOMPUTE_JOB, { courseId }, { jobId: `courses-progress-recompute-${courseId}`, attempts: 3, removeOnComplete: true, removeOnFail: 100 });
+    if ((await this.redis.set(pendingKey(courseId), "1", "EX", PENDING_TTL_SEC, "NX")) !== "OK") return;
+    try {
+      await this.maintenanceQueue.add(COURSE_PROGRESS_RECOMPUTE_JOB, { courseId }, { jobId: `courses-progress-recompute-${courseId}-${Date.now()}`, attempts: 3, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: true, removeOnFail: true });
+    } catch (err) {
+      await this.redis.del(pendingKey(courseId)).catch(() => undefined);
+      throw err;
+    }
   }
 
   /** The background job: the same recompute, in batches of enrolments so learners are never blocked for long. */
   async recomputeInBatches(courseId: string, batch = 500): Promise<number> {
+    // From here the run reads the curriculum fresh; an edit after this point needs a new job.
+    await this.redis.del(pendingKey(courseId));
     let after: string | undefined;
     let total = 0;
     for (;;) {

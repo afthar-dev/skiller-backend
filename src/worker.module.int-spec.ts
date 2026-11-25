@@ -35,6 +35,7 @@ const HANDLED: Record<DomainEventType, boolean> = {
   "course.published": false,
   // Certificates are issued on it.
   "course.completed": true,
+  "course.progress_recompute_requested": true,
 };
 
 describe("WorkerModule boot (src/worker.ts path)", () => {

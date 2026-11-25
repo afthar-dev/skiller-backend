@@ -475,7 +475,7 @@ describe("growth dashboards: rollup, endpoints, activity", () => {
       const range = { from: addDays(day, 5), to: addDays(day, 6) };
       const ok = await post(range);
       expect([ok.status, ok.body]).toEqual([202, { jobId: expect.any(String), ...range }]);
-      const queue = t.app.get<Queue>(queueToken(QueueNames.maintenance), { strict: false });
+      const queue = t.app.get<Queue>(queueToken(QueueNames.maintenanceLong), { strict: false });
       const job = await queue.getJob(ok.body.jobId);
       expect(job).toBeDefined();
       expect(job!.name).toBe(ANALYTICS_REBUILD_JOB);
