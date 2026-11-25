@@ -32,6 +32,11 @@ export class FileProcessor implements JobProcessor, OnModuleInit {
     this.registry.register(this);
   }
 
+  /** All attempts used, or the job stalled out without its catch running: the asset must not stay PROCESSING. */
+  async onExhausted(job: Job<{ assetId: string }>): Promise<void> {
+    await this.lifecycle.markFailed(job.data.assetId, "PROCESSING_ERROR");
+  }
+
   async process(job: Job<{ assetId: string }>): Promise<void> {
     const { assetId } = job.data;
     const asset = await this.prisma.mediaAsset.findUnique({ where: { id: assetId } });

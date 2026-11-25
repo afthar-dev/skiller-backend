@@ -10,6 +10,9 @@ const nul = null as never;
 describe("media queues", () => {
   it("transcodes run alone on their own queue; images and files share a light queue at concurrency 4; cleanup is on maintenance", () => {
     const transcode = new TranscodeProcessor(nul, nul, nul, nul, nul);
+    const registered: string[] = [];
+    new TranscodeProcessor(nul, nul, nul, { register: (p: { queue: string }) => void registered.push(p.queue) } as never, nul).onModuleInit();
+    expect(registered).toEqual([QueueNames.mediaTranscode, QueueNames.mediaTranscodeLong]);
     const image = new ImageProcessor(nul, nul, nul, nul);
     const file = new FileProcessor(nul, nul, nul, nul);
     const cleanup = new MediaCleanupProcessor(nul, nul, nul, nul, nul);

@@ -14,7 +14,7 @@ const BATCH_SIZE = 100;
 
 /**
  * Hourly: unattached assets older than 24 h are deleted (objects under the asset prefix, then the row), and the
- * multipart upload of an abandoned PENDING asset is aborted first. Every consumer of media calls MediaService.attach,
+ * multipart upload of an abandoned PENDING asset is aborted first. Assets still UPLOADED or PROCESSING are skipped (see MediaStuckSweeper). Every consumer of media calls MediaService.attach,
  * so an asset that is in use always has `attachedAt` and is never touched here.
  */
 @Injectable()
@@ -53,6 +53,9 @@ export class MediaCleanupProcessor implements JobProcessor, OnModuleInit {
       const batch = await this.prisma.mediaAsset.findMany({
         where: {
           attachedAt: null,
+          // An upload that is waiting for (or in) processing is not abandoned: the transcode queue can be hours behind, and purging now would delete the row
+          // and prefix under the worker. The stuck-asset sweep fails the ones that really are stuck, and then this job removes them.
+          status: { notIn: ["UPLOADED", "PROCESSING"] },
           // Never attached: 24 h after creation. Detached (replaced/cleared by its owner): 24 h after detaching.
           OR: [{ detachedAt: null, createdAt: { lt: cutoff } }, { detachedAt: { lt: cutoff } }],
           ...(after ? { id: { gt: after } } : {}),

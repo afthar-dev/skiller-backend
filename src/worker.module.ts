@@ -29,6 +29,7 @@ import { SettingsModule } from "./modules/admin/settings.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
 import { MediaCleanupProcessor } from "./modules/media/media-cleanup.processor";
+import { MediaStuckSweeper } from "./modules/media/media-stuck.sweeper";
 import { MediaWorkerModule } from "./modules/media/media-worker.module";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { QueueModule } from "./common/queue/queue.module";
@@ -44,6 +45,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly runner: QueueWorkerRunner,
     private readonly outboxRelay: OutboxRelay,
     private readonly mediaCleanup: MediaCleanupProcessor,
+    private readonly mediaStuck: MediaStuckSweeper,
     private readonly subscriptionMaintenance: SubscriptionMaintenanceProcessor,
     private readonly orderMaintenance: OrderMaintenanceProcessor,
     private readonly holdRelease: HoldReleaseProcessor,
@@ -62,6 +64,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
     await this.runner.start();
     await this.outboxRelay.schedule();
     await this.mediaCleanup.schedule();
+    await this.mediaStuck.schedule();
     await this.subscriptionMaintenance.schedule();
     await this.orderMaintenance.schedule();
     await this.holdRelease.schedule();

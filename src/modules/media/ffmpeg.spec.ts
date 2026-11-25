@@ -1,4 +1,15 @@
-import { buildMasterPlaylist, ladderBasis, ladderFor } from "./ffmpeg";
+import { TRANSCODE_TIMEOUT_MS, buildMasterPlaylist, ladderBasis, ladderFor, transcodeTimeoutFor } from "./ffmpeg";
+
+describe("transcodeTimeoutFor (DAT-4)", () => {
+  it("is the 30 minute floor for a reel and grows with the source duration for a long lesson", () => {
+    expect(transcodeTimeoutFor(90)).toBe(TRANSCODE_TIMEOUT_MS);
+    expect(transcodeTimeoutFor(60 * 60)).toBe(3 * 60 * 60_000);
+    expect(transcodeTimeoutFor(2 * 60 * 60)).toBeGreaterThan(transcodeTimeoutFor(60 * 60));
+  });
+  it("honours a test override of floor and factor", () => {
+    expect(transcodeTimeoutFor(3, 1, 0)).toBe(1);
+  });
+});
 
 describe("ladderFor", () => {
   const names = (h: number) => ladderFor(h).map((r) => r.name);
