@@ -17,7 +17,7 @@ describe("originGuard", () => {
 
   it("rejects requests that did not come through the proxy (missing or wrong secret) with 403", () => {
     const mw = originGuard(SECRET);
-    for (const headers of [{}, { [ORIGIN_SECRET_HEADER]: "wrong".repeat(8) }, { [ORIGIN_SECRET_HEADER]: "" }]) {
+    for (const headers of [{} as Record<string, string>, { [ORIGIN_SECRET_HEADER]: "wrong".repeat(8) }, { [ORIGIN_SECRET_HEADER]: "" }]) {
       const { res, next } = run(mw, "/v1/me", headers);
       expect(res.statusCode).toBe(403);
       expect(next).not.toHaveBeenCalled();
