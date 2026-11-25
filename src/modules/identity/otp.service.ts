@@ -11,11 +11,6 @@ import { MailService } from "../mail";
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
 export const OTP_MAX_ATTEMPTS = 5;
-/**
- * Sign-in codes a stranger can request for someone else's address, so a new request must not cancel the owner's code: the newest
- * few stay valid together (each with its own attempt budget, all under the per-email cap below).
- */
-export const OTP_MAX_LIVE_LOGIN_CHALLENGES = 3;
 /** Codes mailed to one address per hour. Past it requests answer as usual but send nothing: bounds mail-bombing without a lockout the owner can feel (the codes already sent stay valid). */
 export const OTP_HOURLY_SEND_CEILING = 8;
 /** Wrong-or-right guesses across ALL challenges of one email+purpose: brute force cannot be restarted by requesting a new code. */
@@ -77,15 +72,13 @@ export class OtpService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      // Sign-in: the newest few stay redeemable so a stranger's request cannot cancel the owner's code. Step-up (the caller is signed in): only the newest.
-      const keep = input.purpose === "LOGIN" ? OTP_MAX_LIVE_LOGIN_CHALLENGES - 1 : 0;
-      const liveRows = await tx.otpChallenge.findMany({
-        where: { email, purpose: input.purpose, consumedAt: null, expiresAt: { gt: now } },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }], // ids are UUIDv7: time-ordered, so they break ties
-        select: { id: true },
+      // Sign-in codes can be requested by a stranger for someone else's address, so a request only supersedes codes that came from the
+      // same caller address: it can never cancel the owner's code. Live codes stay bounded by the hourly send ceiling and the per-email
+      // attempt cap. Step-up (the caller is signed in): only the newest is live.
+      await tx.otpChallenge.updateMany({
+        where: { email, purpose: input.purpose, consumedAt: null, ...(input.purpose === "LOGIN" ? { ip: input.ip } : {}) },
+        data: { consumedAt: now },
       });
-      const stale = liveRows.slice(keep).map((r) => r.id);
-      if (stale.length > 0) await tx.otpChallenge.updateMany({ where: { id: { in: stale } }, data: { consumedAt: now } });
       await tx.otpChallenge.create({
         data: {
           id: challengeId,

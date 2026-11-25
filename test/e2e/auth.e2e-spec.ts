@@ -203,10 +203,10 @@ describe("auth", () => {
     expect(blocked.status).toBe(429);
     expect(blocked.body.error.code).toBe("RATE_LIMITED");
     expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
-    // the owner, from their own address, is not blocked, and the code they already held still signs them in
-    expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", ownerIp).send({ email })).status).toBe(202);
+    // the stranger's requests did not cancel the code the owner already held, and the owner, from their own address, is not blocked
     const verified = await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", ownerIp).send({ challengeId: owner.body.challengeId, code: ownerCode });
     expect(verified.status).toBe(200);
+    expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", ownerIp).send({ email })).status).toBe(202);
 
     const ip = uniqueIp();
     for (let i = 0; i < 20; i++) {

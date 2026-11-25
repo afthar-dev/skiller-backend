@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- a hand-rolled Prisma delegate fake */
-import { OtpService, OTP_HOURLY_SEND_CEILING, OTP_MAX_LIVE_LOGIN_CHALLENGES } from "./otp.service";
+import { OtpService, OTP_HOURLY_SEND_CEILING } from "./otp.service";
 
 interface Row {
   id: string;
   email: string;
   purpose: string;
   consumedAt: Date | null;
+  ip: string;
   expiresAt: Date;
   createdAt: Date;
   attempts: number;
@@ -17,6 +18,7 @@ function fakePrisma(rows: Row[]) {
     (w.email === undefined || r.email === w.email) &&
     (w.purpose === undefined || r.purpose === w.purpose) &&
     (w.consumedAt === undefined || r.consumedAt === w.consumedAt) &&
+    (w.ip === undefined || r.ip === w.ip) &&
     (w.expiresAt?.gt === undefined || r.expiresAt > w.expiresAt.gt) &&
     (w.createdAt?.gte === undefined || r.createdAt >= w.createdAt.gte) &&
     (w.id?.in === undefined || w.id.in.includes(r.id));
@@ -46,19 +48,20 @@ function build(rows: Row[]) {
   const svc = new OtpService(prisma as never, mail as never, { otpPepper: "p".repeat(32) } as never, { now: () => NOW } as never);
   return { svc, mail, prisma };
 }
-const row = (over: Partial<Row>): Row => ({ id: Math.random().toString(36), email: "v@example.com", purpose: "LOGIN", consumedAt: null, expiresAt: new Date(NOW.getTime() + 5 * MIN), createdAt: new Date(NOW.getTime() - MIN), attempts: 0, ...over });
+const row = (over: Partial<Row>): Row => ({ id: Math.random().toString(36), email: "v@example.com", purpose: "LOGIN", consumedAt: null, ip: "5.5.5.5", expiresAt: new Date(NOW.getTime() + 5 * MIN), createdAt: new Date(NOW.getTime() - MIN), attempts: 0, ...over });
 const live = (rows: Row[]) => rows.filter((r) => r.consumedAt === null && r.expiresAt > NOW);
 
 describe("OtpService abuse limits (SEC-2, SEC-3)", () => {
-  it("a new request does not cancel the codes the owner already holds: the newest few stay live", async () => {
-    const rows = [1, 2, 3].map((n) => row({ id: `old${n}`, createdAt: new Date(NOW.getTime() - n * MIN) }));
-    const { svc, mail } = build(rows);
-    const { challengeId } = await svc.request({ email: "v@example.com", purpose: "LOGIN", ip: "1.2.3.4" });
+  it("a request from another address does not cancel the owner's code; one from the same address supersedes its own earlier code", async () => {
+    const rows = [row({ id: "owner", ip: "5.5.5.5" })];
+    const { svc } = build(rows);
+    const stranger = await svc.request({ email: "v@example.com", purpose: "LOGIN", ip: "6.6.6.6" });
+    await svc.request({ email: "v@example.com", purpose: "LOGIN", ip: "6.6.6.6" });
+    await svc.request({ email: "v@example.com", purpose: "LOGIN", ip: "6.6.6.6" });
     const stillLive = live(rows).map((r) => r.id);
-    expect(stillLive).toHaveLength(OTP_MAX_LIVE_LOGIN_CHALLENGES);
-    expect(stillLive).toEqual(expect.arrayContaining([challengeId, "old1", "old2"]));
-    expect(stillLive).not.toContain("old3");
-    expect(mail.send).toHaveBeenCalledTimes(1);
+    expect(stillLive).toContain("owner");
+    expect(stillLive).not.toContain(stranger.challengeId);
+    expect(stillLive).toHaveLength(2);
   });
 
   it("step-up challenges keep the old rule: only the newest is live", async () => {

@@ -149,6 +149,7 @@ describe("roles and audit", () => {
     const key = roleKey("mgr");
     expect((await createRole(admin, { key, name: "Mgr", scope: "PLATFORM", permissionKeys: ["rbac.manage", "user.view"] })).status).toBe(201);
     expect((await grant(admin, support.userId, { roleKey: key })).status).toBe(201);
+    await stepUp(support);
     const denied = await createRole(support, { key: roleKey("evil"), name: "Evil", scope: "PLATFORM", permissionKeys: ["settings.manage"] });
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe("ROLE_ESCALATION_DENIED");

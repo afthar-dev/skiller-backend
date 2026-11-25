@@ -94,16 +94,15 @@ describe("OtpService", () => {
     for (const r of results) if (r.status === "rejected") expect((r.reason as AppError).code).toMatch(/^OTP_/);
   });
 
-  it("a new request keeps the owner's earlier code valid; only the oldest beyond the newest three is cancelled", async () => {
+  it("a request from another address keeps the owner's code valid; one from the same address supersedes its own earlier code", async () => {
     const e = email();
-    const first = await otp.request({ email: e, purpose: "LOGIN", ip: "1.1.1.1" });
+    const owner = await otp.request({ email: e, purpose: "LOGIN", ip: "1.1.1.1" });
+    const ownerCode = code(e);
+    const first = await otp.request({ email: e, purpose: "LOGIN", ip: "2.2.2.2" });
     const firstCode = code(e);
-    const second = await otp.request({ email: e, purpose: "LOGIN", ip: "2.2.2.2" });
-    const secondCode = code(e);
-    await otp.request({ email: e, purpose: "LOGIN", ip: "3.3.3.3" });
-    await otp.request({ email: e, purpose: "LOGIN", ip: "4.4.4.4" });
+    await otp.request({ email: e, purpose: "LOGIN", ip: "2.2.2.2" });
     expect((await codeError(otp.verify(first.challengeId, firstCode))).code).toBe("OTP_INVALID");
-    await expect(otp.verify(second.challengeId, secondCode)).resolves.toMatchObject({ email: e });
+    await expect(otp.verify(owner.challengeId, ownerCode)).resolves.toMatchObject({ email: e });
   });
 
   it("guesses are capped per email across challenges, so requesting a new code does not restart brute force", async () => {
