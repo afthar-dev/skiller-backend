@@ -27,7 +27,7 @@ describe("FollowsService concurrency (DAT-7)", () => {
         ProfilesService,
         FollowsService,
         { provide: UserBlocks, useValue: { isBlockedEitherWay: async () => false } },
-        { provide: UserStatusCache, useValue: {} },
+        { provide: UserStatusCache, useValue: { get: async () => "ACTIVE" } },
         { provide: MediaUrlResolver, useValue: { publicUrls: async () => new Map() } },
       ],
     }).compile();
