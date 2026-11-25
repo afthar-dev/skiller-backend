@@ -18,6 +18,7 @@
     "db:migrate:new": "prisma migrate dev --skip-seed --name",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
+    "jobs:replay": "ts-node scripts/replay-dead-jobs.ts",
     "db:sync-permissions": "ts-node scripts/sync-permissions.ts",
     "release": "prisma migrate deploy && node dist/release/scripts/sync-permissions.js",
     "release:seed": "prisma migrate deploy && node dist/release/prisma/seed.js",

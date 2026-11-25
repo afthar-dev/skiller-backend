@@ -36,7 +36,7 @@ export class OutboxProcessor implements JobProcessor, OnModuleInit {
     await this.bus.dispatch({ type, ...payload } as DomainEvent, job.data.id);
   }
 
-  /** Every attempt failed: flag the row so it shows up in /admin/outbox/dead (the failed job itself is kept in Redis for replay). */
+  /** Every attempt failed: flag the row so it shows up in /admin/outbox/dead (the failed job itself is kept in Redis; `pnpm jobs:replay outbox` retries it). */
   async onExhausted(job: Job<OutboxJobData>, err: Error): Promise<void> {
     await this.prisma.outboxEvent.updateMany({ where: { id: job.data.id }, data: { deadAt: new Date(), lastError: err.message.slice(0, 2000) } });
   }

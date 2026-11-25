@@ -11,7 +11,7 @@ import { RequirePermission } from "../rbac";
 export class OutboxDeadController {
   constructor(private readonly outbox: OutboxService) {}
 
-  /** Domain events whose handlers failed on every retry: the failed BullMQ job is kept in Redis (queue `outbox`) for replay. */
+  /** Domain events whose handlers failed on every retry: the failed BullMQ job is kept in Redis (queue `outbox`); `pnpm jobs:replay outbox` retries it. */
   @Get("dead")
   @RequirePermission("audit.view")
   @ApiOperation({ summary: "Outbox events that exhausted all delivery attempts, newest first" })

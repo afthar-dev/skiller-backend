@@ -88,7 +88,12 @@ export class WebhooksController {
 
     // jobId = row id makes enqueueing idempotent. Re-adding for an unprocessed duplicate repairs the case where the first
     // delivery stored the row but crashed before the job was added; a finished event is never queued again.
-    if (!row.processedAt) await this.queue.add(WEBHOOK_PROCESS_JOB, { webhookEventId: row.id }, { jobId: row.id });
+    if (!row.processedAt) {
+      // The failed job (all attempts used) is kept and still owns the jobId, so add() would do nothing: a redelivery retries it instead.
+      const existing = await this.queue.getJob(row.id);
+      if (existing && (await existing.isFailed())) await existing.retry("failed");
+      else await this.queue.add(WEBHOOK_PROCESS_JOB, { webhookEventId: row.id }, { jobId: row.id });
+    }
     return { received: true };
   }
 }
