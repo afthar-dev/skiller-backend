@@ -3,6 +3,7 @@ import { LoggerModule } from "nestjs-pino";
 import { APP_CONFIG, ConfigModule } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 import { buildLoggerParams } from "./common/observability/logger";
+import { PruneModule, PruneProcessor } from "./common/prune/prune.processor";
 import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
 import { BillingWorkerModule } from "./modules/billing/billing-worker.module";
@@ -40,7 +41,7 @@ import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
+  imports: [PruneModule, ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
 })
 export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
@@ -49,6 +50,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly outboxRelay: OutboxRelay,
     private readonly mediaCleanup: MediaCleanupProcessor,
     private readonly mediaStuck: MediaStuckSweeper,
+    private readonly prune: PruneProcessor,
     private readonly subscriptionMaintenance: SubscriptionMaintenanceProcessor,
     private readonly orderMaintenance: OrderMaintenanceProcessor,
     private readonly holdRelease: HoldReleaseProcessor,
@@ -70,6 +72,7 @@ export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
     await this.outboxRelay.schedule();
     await this.mediaCleanup.schedule();
     await this.mediaStuck.schedule();
+    await this.prune.schedule();
     await this.subscriptionMaintenance.schedule();
     await this.orderMaintenance.schedule();
     await this.holdRelease.schedule();
