@@ -1,4 +1,4 @@
-import { Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
+import { Logger, Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { LoggerModule } from "nestjs-pino";
 import { APP_CONFIG, ConfigModule } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
@@ -31,7 +31,9 @@ import { NotificationsWorkerModule } from "./modules/notifications/notifications
 import { MediaCleanupProcessor } from "./modules/media/media-cleanup.processor";
 import { MediaStuckSweeper } from "./modules/media/media-stuck.sweeper";
 import { MediaWorkerModule } from "./modules/media/media-worker.module";
+import { waitForMigrations } from "./common/prisma/migration-gate";
 import { PrismaModule } from "./common/prisma/prisma.module";
+import { PrismaService } from "./common/prisma/prisma.service";
 import { QueueModule } from "./common/queue/queue.module";
 import { QueueWorkerRunner } from "./common/queue/queue-worker.runner";
 import { RedisModule } from "./common/redis/redis.module";
@@ -43,6 +45,7 @@ import { RedisModule } from "./common/redis/redis.module";
 export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly runner: QueueWorkerRunner,
+    private readonly prisma: PrismaService,
     private readonly outboxRelay: OutboxRelay,
     private readonly mediaCleanup: MediaCleanupProcessor,
     private readonly mediaStuck: MediaStuckSweeper,
@@ -61,6 +64,8 @@ export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
   ) {}
 
   async onApplicationBootstrap() {
+    // Never run this build's jobs against a schema the API has not migrated yet.
+    await waitForMigrations(this.prisma, { log: (m) => Logger.warn(m, "WorkerModule") });
     await this.runner.start();
     await this.outboxRelay.schedule();
     await this.mediaCleanup.schedule();
