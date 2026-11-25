@@ -7,7 +7,7 @@ const MAX_NAME_LENGTH = 60;
  */
 export function mailSafeName(raw: string, fallback: string): string {
   const cleaned = raw
-    .replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩<>]/g, " ")
+    .replace(/[p{Cc}p{Cf}<>]/gu, " ")
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S*/gi, " ")
     .replace(/\S+@\S+/g, " ")
     .replace(/\b(?:www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]\S*)?/gi, (m) => (/^(?:[a-z]{1,3})\.$/i.test(m) ? m : " "))
