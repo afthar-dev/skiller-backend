@@ -4,6 +4,7 @@ import request from "supertest";
 import { PrismaService } from "../../src/common/prisma/prisma.service";
 import "../../src/modules/billing"; // load order: billing before courses and rbac (module cycles)
 import { COURSE_PROGRESS_READER, type CourseProgressReader } from "../../src/modules/courses";
+import { EventBus } from "../../src/common/outbox/event-bus";
 import { ProgressService } from "../../src/modules/courses/progress.service";
 
 type Session = Awaited<ReturnType<AuthTestApp["login"]>>;
@@ -391,6 +392,9 @@ describe("lesson progress", () => {
       try {
         const added = await http().post(`/v1/studio/courses/${c.id}/lessons`).set(auth(owner)).send({ sectionId: c.sectionId, title: "New", type: "ARTICLE", articleBody: "x" });
         expect(added.status).toBe(201);
+        // The request is an outbox event written with the edit (this app has no relay running, so deliver it by hand, as the worker's outbox processor would).
+        expect(await prisma.outboxEvent.count({ where: { type: "course.progress_recompute_requested", payload: { path: ["courseId"], equals: c.id } } })).toBe(1);
+        await t.app.get(EventBus).dispatch({ type: "course.progress_recompute_requested", courseId: c.id });
         await until(async () => (await enrolment(a.userId, c.id)).progressPct === 33);
       } finally {
         progressService.inlineLimit = previous;
