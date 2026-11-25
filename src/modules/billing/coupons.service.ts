@@ -102,6 +102,20 @@ export class CouponsService {
     await tx.couponRedemption.create({ data: { couponId, userId, orderId, status: "RESERVED" } });
   }
 
+  /**
+   * MON-9: before a buyer reserves a coupon again, their own earlier unpaid reservation of it (an abandoned checkout, another tab) is given
+   * back, so it cannot block them for 24 h. The old order stays payable; fulfilment re-takes the use (and flags it if it was gone).
+   * Call inside the transaction that holds the coupon lock.
+   */
+  async releaseOwnReservations(tx: Prisma.TransactionClient, code: string, userId: string): Promise<void> {
+    const coupon = await tx.coupon.findUnique({ where: { code: normalizeCouponCode(code) }, select: { id: true } });
+    if (!coupon) return;
+    const mine = await tx.couponRedemption.findMany({ where: { couponId: coupon.id, userId, status: "RESERVED" }, select: { orderId: true } });
+    if (mine.length === 0) return;
+    const open = await tx.order.findMany({ where: { id: { in: mine.map((r) => r.orderId) }, buyerId: userId, status: "CREATED" }, select: { id: true } });
+    await this.release(tx, open.map((o) => o.id));
+  }
+
   /** Gives the reserved uses of failed or expired orders back. REDEEMED rows are never touched. */
   async release(db: Prisma.TransactionClient | PrismaService, orderIds: string[]): Promise<void> {
     if (orderIds.length === 0) return;

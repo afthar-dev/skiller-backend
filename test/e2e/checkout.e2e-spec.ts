@@ -476,7 +476,7 @@ describe("checkout, coupons and fulfilment", () => {
   describe("coupons", () => {
     const newCode = (prefix = "C") => `${prefix}${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
 
-    it("platform-funded 20%: buyer pays 80000, seller still gets 90000, platform revenue absorbs the discount (net -11525); lines sum to zero", async () => {
+    it("platform-funded 20% on a 10% plan: buyer pays 80000, the seller is capped at 80000 (MON-1), platform absorbs only the commission (net -1525); lines sum to zero", async () => {
       const { seller, itemId } = await listing();
       const code = newCode("PLAT");
       await coupons.create({ code, kind: "PERCENT", value: 2000n, fundedBy: "PLATFORM", scope: "ALL" });
@@ -489,10 +489,10 @@ describe("checkout, coupons and fulfilment", () => {
       const payment = fake.capturePayment(order.razorpayOrderId);
       expect((await verify(buyer, order.orderId, order.razorpayOrderId, payment.id)).status).toBe(200);
       const e = (await entryOf(order.orderId))!;
-      expect(e.byKind).toEqual({ GATEWAY_CLEARING: -80000n, PENDING: 90000n, PLATFORM_REVENUE: 8475n - 20000n, TAX_PAYABLE: 1525n });
-      expect(e.byKind.PLATFORM_REVENUE).toBe(-11525n);
+      expect(e.byKind).toEqual({ GATEWAY_CLEARING: -80000n, PENDING: 80000n, PLATFORM_REVENUE: 8475n - 10000n, TAX_PAYABLE: 1525n });
+      expect(e.byKind.PLATFORM_REVENUE).toBe(-1525n);
       expect(e.sum).toBe(0n);
-      expect((await ledger.balancesFor("USER", seller.userId)).PENDING).toBe(90000n);
+      expect((await ledger.balancesFor("USER", seller.userId)).PENDING).toBe(80000n);
       expect(await prisma.couponRedemption.count({ where: { orderId: order.orderId, userId: buyer.userId } })).toBe(1);
     });
 
@@ -591,17 +591,27 @@ describe("checkout, coupons and fulfilment", () => {
       expect(res.body.error.code).toBe("COUPON_EXHAUSTED");
     });
 
-    it("ten parallel checkouts by one buyer with a single-use coupon: one succeeds, the rest are COUPON_ALREADY_USED", async () => {
+    it("ten parallel checkouts by one buyer with a single-use coupon: each re-reservation releases the buyer's own earlier unpaid one, so exactly one live reservation remains (MON-9)", async () => {
       const code = newCode("PAR");
       await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL" });
       const a = await listing();
       const buyer = await t.login();
       const results = await Promise.all(Array.from({ length: 10 }, () => checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code })));
-      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
-      const others = results.filter((r) => r.status !== 201);
-      expect(others).toHaveLength(9);
-      expect(others.every((r) => r.status === 409 && r.body.error.code === "COUPON_ALREADY_USED")).toBe(true);
-      expect(await prisma.couponRedemption.count({ where: { coupon: { code } } })).toBe(1);
+      expect(results.every((r) => r.status === 201)).toBe(true);
+      expect(await prisma.couponRedemption.count({ where: { coupon: { code }, status: "RESERVED" } })).toBe(1);
+    });
+
+    it("MON-9: an abandoned checkout with a coupon does not block the same buyer's next checkout with it; the first redemption is RELEASED", async () => {
+      const code = newCode("ABND");
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL" });
+      const a = await listing();
+      const buyer = await t.login();
+      const first = await checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      expect(first.status).toBe(201);
+      const second = await checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      expect(second.status).toBe(201);
+      expect(await prisma.couponRedemption.findUniqueOrThrow({ where: { orderId: first.body.orderId } })).toMatchObject({ status: "RELEASED" });
+      expect(await prisma.couponRedemption.findUniqueOrThrow({ where: { orderId: second.body.orderId } })).toMatchObject({ status: "RESERVED" });
     });
 
     it("a reservation released by a failed payment is re-redeemed when that order is later paid and there is capacity; over capacity it still fulfils and finance is told", async () => {

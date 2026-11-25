@@ -80,6 +80,7 @@ export class CheckoutService {
         let coupon: Coupon | null = null;
         if (req.couponCode) {
           await this.coupons.lockByCode(tx, req.couponCode);
+          await this.coupons.releaseOwnReservations(tx, req.couponCode, buyerId);
           const evaluated = await this.coupons.evaluate(
             {
               buyerId,
