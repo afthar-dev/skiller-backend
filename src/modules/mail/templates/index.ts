@@ -8,6 +8,7 @@ import { OrgInvite, orgInviteSubject } from "./org-invite";
 import { Otp, otpSubject } from "./otp";
 import { PayoutAccountChanged, payoutAccountChangedSubject } from "./payout-account-changed";
 import { PromoCampaign, promoCampaignSubject } from "./promo-campaign";
+import { mailSafeName } from "./safe-name";
 import { Welcome, welcomeSubject } from "./welcome";
 
 export interface RenderedMail {
@@ -46,7 +47,9 @@ function pick<T extends MailTemplate>(template: T, data: MailData[T]) {
       return [welcomeSubject(d), createElement(Welcome, d)] as const;
     }
     case "org_invite": {
-      const d = data as MailData["org_invite"];
+      const raw = data as MailData["org_invite"];
+      // Both names are chosen by other users: no links or addresses, bounded length (phishing from our domain).
+      const d = { ...raw, orgName: mailSafeName(raw.orgName, "an organization"), inviterName: mailSafeName(raw.inviterName, "A Skiller member") };
       return [orgInviteSubject(d), createElement(OrgInvite, d)] as const;
     }
     case "media_failed": {
