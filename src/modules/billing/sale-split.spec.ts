@@ -29,12 +29,26 @@ describe("splitSale", () => {
     });
   });
 
-  it("platform-funded 20% off: buyer pays 80000, seller still gets 90000 of the LIST price, platform revenue absorbs 20000", () => {
+  it("platform-funded 10% off (below the 10% commission): seller keeps the LIST share when the buyer paid enough", () => {
+    const s = splitSale({ ...base, discountPaise: 5000n, fundedBy: "PLATFORM" });
+    expect(s).toEqual({ totalPaise: 95000n, sellerPaise: 90000n, feeNetPaise: 8475n, feeTaxPaise: 1525n, platformDiscountPaise: 5000n });
+    expect(netByKind(s)).toEqual({ clearing: -95000n, seller: 90000n, revenue: 8475n - 5000n, tax: 1525n });
+  });
+
+  it("MON-1: platform-funded 30% off on a 10% plan never credits the seller more than the buyer paid", () => {
+    const s = splitSale({ listPaise: 1_000_000n, discountPaise: 300_000n, fundedBy: "PLATFORM", commissionBps: 1000, gstBps: 1800 });
+    expect(s.totalPaise).toBe(700_000n);
+    expect(s.sellerPaise).toBe(700_000n);
+    expect(s.sellerPaise <= s.totalPaise).toBe(true);
+    // platform absorbs only the commission: no cash is left for it, so revenue nets to -tax
+    expect(s.platformDiscountPaise).toBe(100_000n);
+    expect(saleLines(s).reduce((sum, l) => sum + l.amountPaise, 0n)).toBe(0n);
+  });
+
+  it("platform-funded 20% off on a 10% plan: seller capped at what was paid (80000)", () => {
     const s = splitSale({ ...base, discountPaise: 20000n, fundedBy: "PLATFORM" });
-    expect(s).toEqual({ totalPaise: 80000n, sellerPaise: 90000n, feeNetPaise: 8475n, feeTaxPaise: 1525n, platformDiscountPaise: 20000n });
-    const net = netByKind(s);
-    expect(net).toEqual({ clearing: -80000n, seller: 90000n, revenue: 8475n - 20000n, tax: 1525n });
-    expect(saleLines(s).filter((l) => l.kind === "revenue").map((l) => l.amountPaise)).toEqual([8475n, -20000n]);
+    expect(s).toEqual({ totalPaise: 80000n, sellerPaise: 80000n, feeNetPaise: 8475n, feeTaxPaise: 1525n, platformDiscountPaise: 10000n });
+    expect(netByKind(s)).toEqual({ clearing: -80000n, seller: 80000n, revenue: 8475n - 10000n, tax: 1525n });
   });
 
   it("the commission is floored so a remainder stays with the seller", () => {
@@ -55,6 +69,7 @@ describe("splitSale", () => {
       expect(saleLines(s).reduce((sum, l) => sum + l.amountPaise, 0n)).toBe(0n);
       expect(s.totalPaise).toBe(list - discount);
       expect(s.sellerPaise).toBeGreaterThanOrEqual(0n);
+      expect(s.sellerPaise).toBeLessThanOrEqual(s.totalPaise);
     }
   });
 

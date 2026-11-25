@@ -1,9 +1,16 @@
 import { z } from "zod";
+import { REFUND_WINDOW_DAYS } from "../../common/refund-window";
 
-/** Typed registry of platform settings: per-key Zod schema and default. Unknown keys cannot be read or written. */
+/**
+ * Typed registry of platform settings: per-key Zod schema and default. Unknown keys cannot be read or written.
+ * `writeSchema` is a stricter rule applied only to new writes through the API (reads keep using `schema`, so a value already stored is never discarded).
+ */
 export const SETTINGS = {
-  /** Days a payment is held before payout. */
-  hold_days: { schema: z.number().int().min(0).max(90), default: 7 },
+  /**
+   * Days a payment is held before payout. A write must be at least the refund window (MON-5): releasing earlier lets a seller withdraw money
+   * that a still-eligible refund then has to claw back from an AVAILABLE balance that is already gone.
+   */
+  hold_days: { schema: z.number().int().min(0).max(90), writeSchema: z.number().int().min(REFUND_WINDOW_DAYS).max(90), default: 7 },
   /** Max upload size for a course lesson video, in MB. */
   max_upload_mb_course_lesson: { schema: z.number().int().min(1).max(51200), default: 5120 },
   /** Max reel length in seconds. */
@@ -37,3 +44,9 @@ export const SETTINGS = {
 export type SettingKey = keyof typeof SETTINGS;
 export type SettingValue<K extends SettingKey> = z.infer<(typeof SETTINGS)[K]["schema"]>;
 export const SETTING_KEYS = Object.keys(SETTINGS) as [SettingKey, ...SettingKey[]];
+
+/** Validates a value for a write: the key's `writeSchema` when it has one, else its `schema`. Throws ZodError. */
+export function parseSettingWrite(key: SettingKey, value: unknown): unknown {
+  const def = SETTINGS[key] as { schema: z.ZodTypeAny; writeSchema?: z.ZodTypeAny };
+  return (def.writeSchema ?? def.schema).parse(value);
+}

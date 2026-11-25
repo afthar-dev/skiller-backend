@@ -71,7 +71,11 @@ export class FulfilmentService {
       // Another payment on an already-paid order: only a captured one holds the buyer's money twice.
       return payment.status === "captured" && payment.captured ? this.recordDuplicate(order, payment) : this.paid(order, "ALREADY_PAID");
     }
-    if (!FULFILLABLE.includes(order.status)) return { orderId, status: order.status, outcome: "ALREADY_PAID" };
+    if (!FULFILLABLE.includes(order.status)) {
+      // REFUNDED / PARTIALLY_REFUNDED (MON-6): a different captured payment still holds the buyer's money, so it is recorded and alerted too.
+      if (order.razorpayPaymentId !== paymentId && payment.status === "captured" && payment.captured) return this.recordDuplicate(order, payment);
+      return { orderId, status: order.status, outcome: "ALREADY_PAID" };
+    }
 
     // authorized / created: the money is not ours yet. The caller waits (verify answers 202, the webhook retries).
     if (payment.status === "authorized" || payment.status === "created") return { orderId, status: order.status, outcome: "PENDING_CAPTURE" };
@@ -111,20 +115,24 @@ export class FulfilmentService {
     const provider = this.registry.find(item.itemType);
     if (!provider) throw new AppError("SELLABLE_PROVIDER_MISSING", 500, `No provider is registered for ${item.itemType}`, { orderId });
 
-    const anomalies = await this.redeemCoupon(tx, order);
+    const { anomalies, refusal } = await this.redeemCoupon(tx, order);
 
     // The seller module grants access first (it can be slow; the shared platform ledger rows are locked only afterwards). A permanent
     // refusal (4xx) must not lose the payment: the grant is undone with a savepoint, the sale stays booked, and the failure is
     // recorded for an automatic refund. Anything else (5xx, unknown, DB errors) aborts the whole transaction and is retried.
-    let deliveryError: AppError | null = null;
-    await tx.$executeRaw`SAVEPOINT provider_on_paid`;
-    try {
-      await provider.onPaid(tx, order);
-      await tx.$executeRaw`RELEASE SAVEPOINT provider_on_paid`;
-    } catch (err) {
-      if (!(err instanceof AppError) || err.status >= 500) throw err;
-      await tx.$executeRaw`ROLLBACK TO SAVEPOINT provider_on_paid`;
-      deliveryError = err;
+    // A refusal from the coupon check (MON-9: the discount was already used on another order) is the same kind of permanent refusal:
+    // nothing is delivered, the sale stays booked and the automatic refund path takes over.
+    let deliveryError: AppError | null = refusal;
+    if (!deliveryError) {
+      await tx.$executeRaw`SAVEPOINT provider_on_paid`;
+      try {
+        await provider.onPaid(tx, order);
+        await tx.$executeRaw`RELEASE SAVEPOINT provider_on_paid`;
+      } catch (err) {
+        if (!(err instanceof AppError) || err.status >= 500) throw err;
+        await tx.$executeRaw`ROLLBACK TO SAVEPOINT provider_on_paid`;
+        deliveryError = err;
+      }
     }
     await this.postSale(tx, order);
 
@@ -157,25 +165,28 @@ export class FulfilmentService {
    * expired and is now paid) the use is taken back if there is room. A paid order is never refused: over the limit the buyer keeps
    * the discount they paid for and finance is told; a second live redemption by the same buyer cannot be recorded, also alerted.
    */
-  private async redeemCoupon(tx: Prisma.TransactionClient, order: Order): Promise<Anomaly[]> {
-    if (!order.couponId) return [];
+  private async redeemCoupon(tx: Prisma.TransactionClient, order: Order): Promise<{ anomalies: Anomaly[]; refusal: AppError | null }> {
+    const none = { anomalies: [] as Anomaly[], refusal: null };
+    if (!order.couponId) return none;
     await tx.$queryRaw`SELECT "id" FROM "coupons" WHERE "id" = ${order.couponId} FOR UPDATE`;
     const coupon = await tx.coupon.findUniqueOrThrow({ where: { id: order.couponId } });
     const mine = await tx.couponRedemption.findUnique({ where: { orderId: order.id } });
-    if (mine?.status === "REDEEMED") return [];
+    if (mine?.status === "REDEEMED") return none;
     if (mine?.status === "RESERVED") {
       await tx.couponRedemption.update({ where: { id: mine.id }, data: { status: "REDEEMED" } });
-      return [];
+      return none;
     }
     const anomalies: Anomaly[] = [];
+    let refusal: AppError | null = null;
     const otherByBuyer = await tx.couponRedemption.findFirst({ where: { couponId: coupon.id, userId: order.buyerId, status: { in: LIVE_REDEMPTION }, orderId: { not: order.id } } });
     if (otherByBuyer) {
       anomalies.push({
         kind: "COUPON_REDEMPTION_CONFLICT",
-        message: `Coupon ${coupon.code} was already used by this buyer on another order (order ${order.id}); the discount was honoured because the order existed before.`,
+        message: `Coupon ${coupon.code} was already used by this buyer on another order (order ${order.id}); the discounted order is not delivered and is refunded (MON-9).`,
         dedupeKey: `coupon-conflict:${order.id}`,
         data: { couponCode: coupon.code },
       });
+      refusal = new AppError("COUPON_ALREADY_USED", 409, "This coupon was already used by you on another order, so this discounted order was refunded");
     } else {
       const live = await tx.couponRedemption.count({ where: { couponId: coupon.id, status: { in: LIVE_REDEMPTION } } });
       if (coupon.maxUses !== null && live >= coupon.maxUses) {
@@ -190,7 +201,7 @@ export class FulfilmentService {
       else await tx.couponRedemption.create({ data: { couponId: coupon.id, userId: order.buyerId, orderId: order.id, status: "REDEEMED" } });
     }
     for (const a of anomalies) this.logger.warn(a.message);
-    return anomalies;
+    return { anomalies, refusal };
   }
 
   private async postSale(tx: Prisma.TransactionClient, order: Order): Promise<void> {
@@ -227,7 +238,7 @@ export class FulfilmentService {
     throw new AppError("PAYMENT_AMOUNT_MISMATCH", 422, "The amount paid does not match the order");
   }
 
-  /** A second payment captured against an order that is already PAID: keep it for a manual refund, never post it. */
+  /** A second payment captured against an order that is already PAID (or refunded since): keep it for a manual refund, never post it. */
   private async recordDuplicate(order: Order, payment: RazorpayPayment): Promise<FulfilResult> {
     const created = await this.prisma.duplicatePayment.createMany({ data: [{ orderId: order.id, razorpayPaymentId: payment.id, amountPaise: payment.amountPaise }], skipDuplicates: true });
     if (created.count === 1) {
@@ -239,7 +250,7 @@ export class FulfilmentService {
         data: { paymentId: payment.id, amountPaise: toApi(payment.amountPaise), paidWith: order.razorpayPaymentId },
       });
     }
-    return this.paid(order, "DUPLICATE_PAYMENT");
+    return order.status === "PAID" ? this.paid(order, "DUPLICATE_PAYMENT") : { orderId: order.id, status: order.status, outcome: "DUPLICATE_PAYMENT" };
   }
 
   private paid(order: Order, outcome: FulfilOutcome): FulfilResult {

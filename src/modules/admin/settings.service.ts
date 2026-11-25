@@ -5,7 +5,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { REDIS } from "../../common/redis/redis.constants";
 import { AuditService } from "../audit";
 import type { MutationMeta } from "../rbac";
-import { SETTING_KEYS, SETTINGS, type SettingKey, type SettingValue } from "./settings.registry";
+import { parseSettingWrite, SETTING_KEYS, SETTINGS, type SettingKey, type SettingValue } from "./settings.registry";
 
 export const SETTINGS_CACHE_TTL_SEC = 60;
 const cacheKey = (key: SettingKey) => `settings:${key}`;
@@ -58,7 +58,7 @@ export class SettingsService {
 
   /** Validates against the key's schema (ZodError -> 400 VALIDATION_FAILED), writes with an audit row, then busts the cache. */
   async set(actorId: string, key: SettingKey, value: unknown, meta: MutationMeta = {}) {
-    const parsed = SETTINGS[key].schema.parse(value);
+    const parsed = parseSettingWrite(key, value) as Prisma.InputJsonValue;
     await this.prisma.$transaction(async (tx) => {
       const before = await tx.platformSetting.findUnique({ where: { key } });
       await tx.platformSetting.upsert({ where: { key }, create: { key, value: parsed }, update: { value: parsed } });
@@ -68,7 +68,7 @@ export class SettingsService {
         targetType: "platform_setting",
         targetId: key,
         before: before ? { value: before.value } : { value: SETTINGS[key].default, isDefault: true },
-        after: { value: parsed } as Prisma.InputJsonValue,
+        after: { value: parsed },
         ...meta,
       });
     });

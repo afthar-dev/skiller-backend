@@ -119,7 +119,8 @@ export function failureCodeOf(raw: string | null | undefined): FailureCode {
 /** failureReason of a MANUAL_REVIEW payout that finance found never reached the bank. */
 export const MANUAL_RETURNED_REASON = "MANUAL_REVIEW_RETURNED";
 const notPending = () => new AppError("PAYOUT_NOT_PENDING", 409, "This payout has already been decided");
-const isFourXx = (err: unknown) => err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
+/** 408, 429 and 409 are not refusals: 409 is RazorpayX saying a request with the same idempotency key is still in progress. */
+const isFourXx = (err: unknown) => err instanceof RazorpayApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 409 && err.status !== 429;
 
 /**
  * Payouts: request (locks the funds), approval (finance), sending (RazorpayX, outside any database transaction) and settlement from the
@@ -227,6 +228,12 @@ export class PayoutsService {
         }
       }
       if (current.status === "REQUESTED") {
+        // MON-5: a refund after the hold release can take AVAILABLE below zero (the money may already be in the seller's bank). Paying out
+        // on top of that deepens the loss, so approval waits: finance rejects the request or lets the balance recover first.
+        const balances = await this.ledger.balancesFor(current.ownerType, current.ownerId, tx);
+        if (balances.AVAILABLE < 0n) {
+          throw new AppError("PAYOUT_BALANCE_NEGATIVE", 409, "The seller's available balance is negative (a refund exceeded it); the payout cannot be approved", { availablePaise: toApi(balances.AVAILABLE) });
+        }
         const approved = await tx.payout.update({ where: { id: current.id }, data: { status: "APPROVED", approvedBy: actorId, approvedAt: this.clock.now() } });
         await this.audit.record(tx, { actorId, action: "payout.approve", targetType: "payout", targetId: current.id, before: toPayoutView(current), after: toPayoutView(approved), ...meta });
         await this.outbox.enqueue(tx, this.event("payout.approved", approved));
@@ -312,23 +319,31 @@ export class PayoutsService {
   // ── Sending ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Creates the payout at RazorpayX for an APPROVED payout (the NET amount, reference id and idempotency key = the payout id), outside any
-   * database transaction, then stores PROCESSING + the RazorpayX id with a conditional update. With `recover` the RazorpayX payout for this
-   * reference is looked up first and adopted if it exists (a crash after the call). A definitive refusal (4xx) fails the payout and returns
-   * the funds; an outage throws so the job is retried.
+   * Creates the payout at RazorpayX for an APPROVED payout (the NET amount, reference id and idempotency key = the payout id), then stores
+   * PROCESSING + the RazorpayX id. With `recover` the RazorpayX payout for this reference is looked up first and adopted if it exists (a
+   * crash after the call). A definitive refusal (4xx) fails the payout and returns the funds; an outage (including a 409 "idempotency key in
+   * progress", 408, 429, 5xx) throws so the job is retried.
+   *
+   * MON-3: the whole send runs under the payout row lock (SELECT .. FOR UPDATE), HTTP call included. The send job's retry and the redrive
+   * job therefore cannot both be at RazorpayX for one payout: the second waits, then sees PROCESSING and returns. Without this, the loser
+   * of the race got a 409, found no remote payout yet, FAILED the payout and returned the funds while the winner's payout reached the bank.
+   * Payout volume is low, so holding one pooled connection for the call (bounded by the transaction timeout) is acceptable.
    */
   async send(payoutId: string, opts: { recover?: boolean } = {}): Promise<Payout> {
-    const payout = await this.prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
-    if (payout.status !== "APPROVED" || payout.razorpayxPayoutId) return payout;
-    const account = await this.prisma.payoutAccount.findUniqueOrThrow({ where: { id: payout.payoutAccountId } });
+    const first = await this.prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+    if (first.status !== "APPROVED" || first.razorpayxPayoutId) return first; // cheap exit without taking the lock
+    const { payout, failed } = await this.prisma.$transaction((tx) => this.sendLocked(tx, payoutId, opts), { maxWait: 30_000, timeout: 60_000 });
+    if (failed) await this.alertFailed(payout, failed);
+    return payout;
+  }
+
+  private async sendLocked(tx: Prisma.TransactionClient, payoutId: string, opts: { recover?: boolean }): Promise<{ payout: Payout; failed: string | null }> {
+    const payout = await this.lockAndLoad(tx, payoutId);
+    if (payout.status !== "APPROVED" || payout.razorpayxPayoutId) return { payout, failed: null };
+    const account = await tx.payoutAccount.findUniqueOrThrow({ where: { id: payout.payoutAccountId } });
     // The destination is re-checked at the last moment: if it was replaced or flagged since the approval, nothing is sent and the funds go back.
     const blocked = this.payoutAccounts.blockReason(account);
-    const rejectBlocked = (why: string) =>
-      this.prisma.$transaction(async (tx) => {
-        const current = await this.lockAndLoad(tx, payout.id);
-        if (current.status !== "APPROVED" || current.razorpayxPayoutId) return current;
-        return this.autoReject(tx, current, why, SYSTEM_ACTOR);
-      });
+    const rejectBlocked = async (why: string) => ({ payout: await this.autoReject(tx, payout, why, SYSTEM_ACTOR), failed: null });
     if (blocked && !opts.recover) return rejectBlocked(blocked);
 
     let remote: RazorpayXPayout | null = null;
@@ -358,28 +373,20 @@ export class PayoutsService {
         this.logger.error(`payout ${payout.id}: RazorpayX refused (${(err as Error).message}) and the lookup failed (${(lookupErr as Error).message}); it stays APPROVED`);
         throw new AppError("PAYOUT_GATEWAY_ERROR", 502, "The payout provider is unavailable; the payout will be retried");
       }
-      if (!remote) {
-        await this.failUnsent(payout.id, (err as Error).message);
-        return this.prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
-      }
+      if (!remote) return this.failUnsent(tx, payout, (err as Error).message);
       this.logger.warn(`payout ${payout.id}: adopting RazorpayX payout ${remote.id} that already exists for it`);
     }
-    await this.prisma.payout.updateMany({ where: { id: payout.id, status: "APPROVED", razorpayxPayoutId: null }, data: { status: "PROCESSING", razorpayxPayoutId: remote.id } });
-    return this.prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+    const updated = await tx.payout.update({ where: { id: payout.id }, data: { status: "PROCESSING", razorpayxPayoutId: remote.id } });
+    return { payout: updated, failed: null };
   }
 
-  /** RazorpayX refused for good before anything was created: the payout FAILS and the funds go back to AVAILABLE. */
-  private async failUnsent(payoutId: string, why: string): Promise<void> {
-    const failed = await this.prisma.$transaction(async (tx) => {
-      const current = await this.lockAndLoad(tx, payoutId);
-      if (current.status !== "APPROVED" || current.razorpayxPayoutId) return null;
-      const seller = await this.accounts.ensureSellerAccounts(tx, current.ownerType, current.ownerId);
-      await this.unlock(tx, current, seller, PAYOUT_FAILED_DESCRIPTION);
-      const updated = await tx.payout.update({ where: { id: current.id }, data: { status: "FAILED", failureReason: failureCodeOf(why) } });
-      await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome: "FAILED", reason: failureCodeOf(why) }));
-      return updated;
-    });
-    if (failed) await this.alertFailed(failed, why);
+  /** RazorpayX refused for good before anything was created: the payout FAILS and the funds go back to AVAILABLE. Runs under the payout row lock. */
+  private async failUnsent(tx: Prisma.TransactionClient, current: Payout, why: string): Promise<{ payout: Payout; failed: string }> {
+    const seller = await this.accounts.ensureSellerAccounts(tx, current.ownerType, current.ownerId);
+    await this.unlock(tx, current, seller, PAYOUT_FAILED_DESCRIPTION);
+    const updated = await tx.payout.update({ where: { id: current.id }, data: { status: "FAILED", failureReason: failureCodeOf(why) } });
+    await this.outbox.enqueue(tx, this.event("payout.failed", updated, { outcome: "FAILED", reason: failureCodeOf(why) }));
+    return { payout: updated, failed: why };
   }
 
   /** Sends APPROVED payouts that never reached RazorpayX (older than 5 minutes, measured on the Clock). Returns how many were started. */

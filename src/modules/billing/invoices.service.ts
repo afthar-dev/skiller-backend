@@ -39,12 +39,18 @@ export class InvoicesService {
 
   private async link(
     userId: string,
-    doc: { number: string; objectKey: string; uploadedAt: Date | null; buyerUserId: string | null; sellerOwnerType: string | null; sellerOwnerId: string | null } | null,
+    doc: { number: string; objectKey: string; uploadedAt: Date | null; buyerUserId: string | null; sellerOwnerType: string | null; sellerOwnerId: string | null; subscriptionId?: string | null } | null,
     label: string,
     notFound: string,
     notReady: string,
   ): Promise<DownloadLink> {
-    const mine = !!doc && (doc.buyerUserId === userId || (doc.sellerOwnerType === "USER" && doc.sellerOwnerId === userId));
+    let mine = !!doc && (doc.buyerUserId === userId || (doc.sellerOwnerType === "USER" && doc.sellerOwnerId === userId));
+    // MON-8: an organisation's documents are for its managers (org.manage held in that org), not only the member who checked out.
+    if (doc && !mine && doc.sellerOwnerType === "ORG" && doc.sellerOwnerId) mine = await this.permissions.has(userId, "org.manage", doc.sellerOwnerId, { orgScopedOnly: true });
+    if (doc && !mine && doc.subscriptionId) {
+      const sub = await this.prisma.subscription.findUnique({ where: { id: doc.subscriptionId }, select: { ownerType: true, ownerId: true } });
+      if (sub?.ownerType === "ORG") mine = await this.permissions.has(userId, "org.manage", sub.ownerId, { orgScopedOnly: true });
+    }
     if (!doc || !(mine || (await this.permissions.has(userId, "billing.view_any")))) throw new AppError(notFound, 404, `${label} not found`);
     if (!doc.uploadedAt) throw new AppError(notReady, 409, `The ${label.toLowerCase()} is still being prepared; try again shortly`);
     const url = await this.storage.presignPrivateGet(doc.objectKey, { expiresInSec: INVOICE_URL_TTL_SEC, filename: `${doc.number.replaceAll("/", "-")}.pdf` });

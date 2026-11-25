@@ -12,6 +12,7 @@ import { SettingsService } from "../admin";
 import { NotificationsService } from "../notifications";
 import { AccountsService, LedgerService } from "../wallet";
 import { EntitlementsService, type Owner } from "./entitlements.service";
+import { FinanceAlerts } from "./finance-alerts.service";
 import { fromGatewayAmount, gstSplit } from "./money";
 import { FREE_PLAN_KEY, type LimitKey, type PlanLimits } from "./plan-catalog";
 import { RAZORPAY_CLIENT, RazorpayApiError, type RazorpayClient } from "./razorpay.client";
@@ -23,6 +24,8 @@ export const SUBSCRIPTION_CHARGE_REF = "SUBSCRIPTION_CHARGE";
 export const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
 const ABANDONED_CHECKOUT_MS = 7 * 24 * 60 * 60 * 1000;
 const REUSE_CHECKOUT_MS = 30 * 60 * 1000;
+/** A paid ACTIVE subscription this long past its period end without a renewal is flagged to finance. */
+const MISSED_RENEWAL_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 const BATCH = 200;
 
 type VersionWithPlan = PlanVersion & { plan: Plan };
@@ -78,6 +81,7 @@ export class SubscriptionsService {
     private readonly settings: SettingsService,
     private readonly outbox: OutboxService,
     private readonly notifications: NotificationsService,
+    private readonly alerts: FinanceAlerts,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
@@ -205,6 +209,7 @@ export class SubscriptionsService {
     const amount = paymentId ? fromGatewayAmount(payment?.amount) : null;
     const gstBps = amount !== null ? await this.settings.get("gst_bps") : 0;
 
+    let lateChargeOnto: string | null = null;
     await this.prisma.$transaction(async (tx) => {
       await this.lock(tx, seen.id);
       const row = await tx.subscription.findUniqueOrThrow({ where: { id: seen.id } });
@@ -231,6 +236,19 @@ export class SubscriptionsService {
       // Fresh = this event carries news (a payment we have not booked, or a later period). A replay or reordered event after a
       // failure must not bring a PAST_DUE/CANCELLED/EXPIRED subscription back; only INCOMPLETE and already-live rows move on any event.
       const fresh = postedNew || advances;
+      // MON-2: a charge on a subscription that already ended (CANCELLED/EXPIRED) never revives it while the owner holds another live paid
+      // subscription: reviving would expire the newer paid plan and cancel it at Razorpay, charging the owner twice for the plan they last
+      // bought. The money is booked above; finance is alerted to refund it, and the newer subscription is left alone.
+      if (fresh && (row.status === "CANCELLED" || row.status === "EXPIRED")) {
+        const newer = await tx.subscription.findFirst({
+          where: { ownerType: row.ownerType, ownerId: row.ownerId, id: { not: row.id }, status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] }, razorpaySubscriptionId: { not: null } },
+          select: { id: true },
+        });
+        if (newer) {
+          lateChargeOnto = newer.id;
+          return;
+        }
+      }
       const live = row.status === "ACTIVE" || row.status === "TRIALING";
       if (row.status === "INCOMPLETE" || live || fresh) {
         const newEnd = advances ? periodEnd : row.currentPeriodEnd;
@@ -266,6 +284,16 @@ export class SubscriptionsService {
       }
     });
 
+    if (lateChargeOnto) {
+      await this.alerts.raise({
+        kind: "SUBSCRIPTION_LATE_CHARGE",
+        message: `Razorpay charged ${paymentId ?? "a payment"} on the ended subscription ${seen.razorpaySubscriptionId}, but the owner (${seen.ownerType} ${seen.ownerId}) now holds the live subscription ${lateChargeOnto}. The old subscription was not revived. Refund the payment and make sure the old subscription is cancelled at Razorpay.`,
+        dedupeKey: `subscription-late-charge:${paymentId ?? seen.id}`,
+        data: { oldSubscriptionId: seen.id, liveSubscriptionId: lateChargeOnto, paymentId },
+      });
+      await this.entitlements.invalidate({ ownerType: seen.ownerType, ownerId: seen.ownerId });
+      return;
+    }
     await this.cancelSuperseded(seen);
     await this.entitlements.invalidate({ ownerType: seen.ownerType, ownerId: seen.ownerId });
   }
@@ -327,7 +355,7 @@ export class SubscriptionsService {
    * Grace over -> EXPIRED (the owner is back on Free); cancelled and period-ended -> EXPIRED; booked downgrades whose period
    * ended are applied; abandoned checkouts are retired. Each step is a conditional update, so overlapping runs are harmless.
    */
-  async runMaintenance(): Promise<{ expired: number; downgraded: number; abandoned: number }> {
+  async runMaintenance(): Promise<{ expired: number; downgraded: number; abandoned: number; flagged: number }> {
     const now = this.clock.now();
     let expired = 0;
     let downgraded = 0;
@@ -349,6 +377,13 @@ export class SubscriptionsService {
           });
           if (ok) {
             done++;
+            // MON-2: a lapsed (grace over) subscription must stop at Razorpay too, or its retry charges the owner after they moved on.
+            if (sweep.from === "PAST_DUE" && row.razorpaySubscriptionId) {
+              await this.razorpay.cancelSubscription(row.razorpaySubscriptionId, false).catch((err: unknown) => {
+                if (err instanceof RazorpayApiError && err.status === 400) return; // already cancelled / completed
+                this.logger.warn(`could not cancel lapsed subscription ${row.razorpaySubscriptionId} at Razorpay: ${(err as Error).message}`);
+              });
+            }
             await this.entitlements.invalidate({ ownerType: row.ownerType, ownerId: row.ownerId });
           }
         }
@@ -386,7 +421,30 @@ export class SubscriptionsService {
         if (row.razorpaySubscriptionId) await this.razorpay.cancelSubscription(row.razorpaySubscriptionId, false).catch((err: unknown) => this.logger.warn(`could not cancel abandoned checkout ${row.razorpaySubscriptionId}: ${(err as Error).message}`));
       }
     }
-    return { expired, downgraded, abandoned };
+    return { expired, downgraded, abandoned, flagged: await this.flagMissedRenewals(now) };
+  }
+
+  /**
+   * MON-10: an ACTIVE paid subscription entitles without an end, so a lost renewal / halted webhook would keep the plan (and its lower
+   * commission) forever. One whose paid period ended more than MISSED_RENEWAL_AFTER_MS ago without a renewal is NOT expired here (the
+   * webhook may only be late, and cutting a paying customer is worse): finance is alerted, once per row and period, to check it at Razorpay.
+   */
+  private async flagMissedRenewals(now: Date): Promise<number> {
+    const rows = await this.prisma.subscription.findMany({
+      where: { status: "ACTIVE", cancelAtPeriodEnd: false, razorpaySubscriptionId: { not: null }, currentPeriodEnd: { lt: new Date(now.getTime() - MISSED_RENEWAL_AFTER_MS) } },
+      take: BATCH,
+      orderBy: { id: "asc" },
+    });
+    for (const row of rows) {
+      await this.alerts.raise({
+        kind: "SUBSCRIPTION_LAPSED",
+        message: `Subscription ${row.id} (${row.ownerType} ${row.ownerId}, Razorpay ${row.razorpaySubscriptionId}) is ACTIVE but its paid period ended ${row.currentPeriodEnd?.toISOString()} with no renewal. A webhook was probably lost: check it at Razorpay, then cancel or renew it.`,
+        dedupeKey: `subscription-lapsed:${row.id}:${row.currentPeriodEnd?.getTime()}`,
+        data: { subscriptionId: row.id, razorpaySubscriptionId: row.razorpaySubscriptionId },
+        link: "/admin/subscriptions",
+      });
+    }
+    return rows.length;
   }
 
   // ── Outbox consumer ────────────────────────────────────────────────────────────────────────────────────────────────
