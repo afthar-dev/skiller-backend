@@ -188,15 +188,25 @@ describe("auth", () => {
     expect(b.body.expiresAt).toMatch(/Z$/);
   });
 
-  it("OTP request is rate limited: 5 per email, 20 per IP per 15 minutes", async () => {
+  it("OTP request is rate limited per email AND caller (3 per 15 min), and 20 per IP; a stranger cannot block the owner or cancel their code", async () => {
     const email = uniqueEmail("rl");
-    for (let i = 0; i < 5; i++) {
-      expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", uniqueIp()).send({ email })).status).toBe(202);
+    const strangerIp = uniqueIp();
+    const ownerIp = uniqueIp();
+    const ownerBefore = t.mail.sent.filter((m) => m.to === email.toLowerCase()).length;
+    const owner = await http().post("/v1/auth/otp/request").set("X-Forwarded-For", ownerIp).send({ email });
+    expect(owner.status).toBe(202);
+    const ownerCode = await t.codeFor(email, ownerBefore);
+    for (let i = 0; i < 3; i++) {
+      expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", strangerIp).send({ email })).status).toBe(202);
     }
-    const blocked = await http().post("/v1/auth/otp/request").set("X-Forwarded-For", uniqueIp()).send({ email: ` ${email.toUpperCase()} ` });
+    const blocked = await http().post("/v1/auth/otp/request").set("X-Forwarded-For", strangerIp).send({ email: ` ${email.toUpperCase()} ` });
     expect(blocked.status).toBe(429);
     expect(blocked.body.error.code).toBe("RATE_LIMITED");
     expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+    // the owner, from their own address, is not blocked, and the code they already held still signs them in
+    expect((await http().post("/v1/auth/otp/request").set("X-Forwarded-For", ownerIp).send({ email })).status).toBe(202);
+    const verified = await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", ownerIp).send({ challengeId: owner.body.challengeId, code: ownerCode });
+    expect(verified.status).toBe(200);
 
     const ip = uniqueIp();
     for (let i = 0; i < 20; i++) {
@@ -248,6 +258,17 @@ describe("auth", () => {
       expect((await http().get("/v1/me").set(auth(token))).status).toBe(401);
     }
     expect(await t.app.get(PrismaService).session.count({ where: { userId: a.userId, revokedAt: null } })).toBe(1);
+  });
+
+  it("otp/verify is limited per caller: 30 per 15 minutes, IPv6 callers by /64", async () => {
+    const prefix = uniqueIp().split(".").join(":");
+    const ip6 = (n: number) => `2001:db8:${prefix}::${n}`;
+    const base = { challengeId: "00000000-0000-4000-8000-000000000000", code: "000000" };
+    const a = ip6(1);
+    for (let i = 0; i < 30; i++) expect((await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", a).send(base)).status).toBe(400);
+    expect((await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", a).send(base)).status).toBe(429);
+    expect((await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", ip6(2)).send(base)).status).toBe(429); // same /64
+    expect((await http().post("/v1/auth/otp/verify").set("X-Forwarded-For", uniqueIp()).send(base)).status).toBe(400);
   });
 
   it("TRUST_PROXY=1: different X-Forwarded-For IPs get separate per-IP buckets", async () => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- a hand-rolled Prisma delegate fake */
 import { OtpService, OTP_HOURLY_SEND_CEILING, OTP_MAX_LIVE_LOGIN_CHALLENGES } from "./otp.service";
 
 interface Row {

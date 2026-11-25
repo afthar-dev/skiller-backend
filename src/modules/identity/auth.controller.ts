@@ -8,9 +8,11 @@ import { Public } from "../../common/auth/public.decorator";
 import { APP_CONFIG } from "../../common/config/config.module";
 import type { AppConfig } from "../../common/config/config.schema";
 import { AppError } from "../../common/errors/app-error";
+import { ipKey } from "../../common/redis/ip-key";
 import { RateLimit } from "../../common/redis/rate-limit.decorator";
 import { AuthService } from "./auth.service";
-import { OtpService, normalizeEmail } from "./otp.service";
+import { OTP_REQUEST_LIMITS, OTP_VERIFY_LIMITS } from "./otp-limits";
+import { OtpService } from "./otp.service";
 import { SESSION_TTL_MS, SessionMeta, SessionService } from "./session.service";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { ApiZodBody } from "../../common/openapi/zod-schema";
@@ -21,13 +23,6 @@ export const REFRESH_COOKIE = "skiller_rt";
 
 const requestSchema = z.object({ email: z.string().trim().email().max(254) });
 const verifySchema = z.object({ challengeId: z.string().uuid(), code: z.string().regex(/^\d{6}$/, "code must be 6 digits") });
-
-const WINDOW_15_MIN = 15 * 60;
-
-const emailKey = (req: Request) => {
-  const email = (req.body as { email?: unknown } | undefined)?.email;
-  return typeof email === "string" && email.length <= 254 ? normalizeEmail(email) : `invalid:${req.ip}`;
-};
 
 const metaOf = (req: Request): SessionMeta => ({ ip: req.ip ?? "unknown", userAgent: String(req.headers["user-agent"] ?? "unknown") });
 
@@ -44,10 +39,7 @@ export class AuthController {
   @Public()
   @Post("otp/request")
   @HttpCode(202)
-  @RateLimit(
-    { key: (req) => `otp:email:${emailKey(req)}`, limit: 5, windowSec: WINDOW_15_MIN },
-    { key: (req) => `otp:ip:${req.ip}`, limit: 20, windowSec: WINDOW_15_MIN },
-  )
+  @RateLimit(...OTP_REQUEST_LIMITS)
   @ApiOperation({ summary: "Send a sign-in code to an email address" })
   @ApiZodBody(requestSchema)
   @ApiErrorResponse(429, "Rate limited; see Retry-After.")
@@ -62,6 +54,8 @@ export class AuthController {
   @Public()
   @Post("otp/verify")
   @HttpCode(200)
+  @RateLimit(...OTP_VERIFY_LIMITS)
+  @ApiErrorResponse(429, "Rate limited, or too many guesses for this address; see Retry-After.")
   @ApiOperation({ summary: "Verify a sign-in code; returns an access token and sets the refresh cookie" })
   @ApiZodBody(verifySchema)
   @ApiErrorResponse(401, "Wrong, expired or exhausted code.")
@@ -109,7 +103,7 @@ export class AuthController {
   @ApiOperation({ summary: "Email a step-up code for sensitive actions" })
   @ApiJsonResponse(202, "Step-up challenge created.", objectSchema({ challengeId: schemas.str }))
   async requestStepUp(@CurrentUser() user: AuthUser, @Req() req: Request) {
-    return this.auth.requestStepUp(user.id, req.ip ?? "unknown");
+    return this.auth.requestStepUp(user.id, ipKey(req.ip));
   }
 
   @AuthenticatedOnly()
