@@ -81,7 +81,7 @@ export class OtpService {
       const keep = input.purpose === "LOGIN" ? OTP_MAX_LIVE_LOGIN_CHALLENGES - 1 : 0;
       const liveRows = await tx.otpChallenge.findMany({
         where: { email, purpose: input.purpose, consumedAt: null, expiresAt: { gt: now } },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }], // ids are UUIDv7: time-ordered, so they break ties
         select: { id: true },
       });
       const stale = liveRows.slice(keep).map((r) => r.id);
