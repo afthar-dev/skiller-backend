@@ -63,3 +63,26 @@ describe("SubscriptionsService.runMaintenance grace expiry", () => {
     expect(razorpay.cancelSubscription).toHaveBeenCalledWith("sub_1", false);
   });
 });
+
+describe("SubscriptionsService.runMaintenance missed renewals (MON-10)", () => {
+  it("flags a paid ACTIVE subscription whose period ended more than 2 days ago without a renewal, and does not expire it", async () => {
+    const row = { id: "S1", ownerType: "ORG", ownerId: "O1", status: "ACTIVE", razorpaySubscriptionId: "sub_1", currentPeriodEnd: new Date("2026-05-20") };
+    const seen: Array<{ where: Record<string, unknown> }> = [];
+    const prisma = {
+      subscription: {
+        findMany: async (a: { where: Record<string, unknown> }) => {
+          seen.push(a);
+          return a.where.razorpaySubscriptionId ? [row] : [];
+        },
+        updateMany: jest.fn(async () => ({ count: 0 })),
+      },
+      $transaction: jest.fn(),
+    };
+    const alerts = { raise: jest.fn() };
+    const svc = new SubscriptionsService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, alerts as never, { now: () => new Date("2026-06-01") } as never, {} as never);
+    const res = await svc.runMaintenance();
+    expect(res).toMatchObject({ flagged: 1 });
+    expect(alerts.raise).toHaveBeenCalledWith(expect.objectContaining({ kind: "SUBSCRIPTION_LAPSED", dedupeKey: expect.stringContaining("S1") }));
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});

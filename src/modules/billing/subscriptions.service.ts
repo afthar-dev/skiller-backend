@@ -24,6 +24,8 @@ export const SUBSCRIPTION_CHARGE_REF = "SUBSCRIPTION_CHARGE";
 export const GRACE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
 const ABANDONED_CHECKOUT_MS = 7 * 24 * 60 * 60 * 1000;
 const REUSE_CHECKOUT_MS = 30 * 60 * 1000;
+/** A paid ACTIVE subscription this long past its period end without a renewal is flagged to finance. */
+const MISSED_RENEWAL_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 const BATCH = 200;
 
 type VersionWithPlan = PlanVersion & { plan: Plan };
@@ -353,7 +355,7 @@ export class SubscriptionsService {
    * Grace over -> EXPIRED (the owner is back on Free); cancelled and period-ended -> EXPIRED; booked downgrades whose period
    * ended are applied; abandoned checkouts are retired. Each step is a conditional update, so overlapping runs are harmless.
    */
-  async runMaintenance(): Promise<{ expired: number; downgraded: number; abandoned: number }> {
+  async runMaintenance(): Promise<{ expired: number; downgraded: number; abandoned: number; flagged: number }> {
     const now = this.clock.now();
     let expired = 0;
     let downgraded = 0;
@@ -419,7 +421,30 @@ export class SubscriptionsService {
         if (row.razorpaySubscriptionId) await this.razorpay.cancelSubscription(row.razorpaySubscriptionId, false).catch((err: unknown) => this.logger.warn(`could not cancel abandoned checkout ${row.razorpaySubscriptionId}: ${(err as Error).message}`));
       }
     }
-    return { expired, downgraded, abandoned };
+    return { expired, downgraded, abandoned, flagged: await this.flagMissedRenewals(now) };
+  }
+
+  /**
+   * MON-10: an ACTIVE paid subscription entitles without an end, so a lost renewal / halted webhook would keep the plan (and its lower
+   * commission) forever. One whose paid period ended more than MISSED_RENEWAL_AFTER_MS ago without a renewal is NOT expired here (the
+   * webhook may only be late, and cutting a paying customer is worse): finance is alerted, once per row and period, to check it at Razorpay.
+   */
+  private async flagMissedRenewals(now: Date): Promise<number> {
+    const rows = await this.prisma.subscription.findMany({
+      where: { status: "ACTIVE", cancelAtPeriodEnd: false, razorpaySubscriptionId: { not: null }, currentPeriodEnd: { lt: new Date(now.getTime() - MISSED_RENEWAL_AFTER_MS) } },
+      take: BATCH,
+      orderBy: { id: "asc" },
+    });
+    for (const row of rows) {
+      await this.alerts.raise({
+        kind: "SUBSCRIPTION_LAPSED",
+        message: `Subscription ${row.id} (${row.ownerType} ${row.ownerId}, Razorpay ${row.razorpaySubscriptionId}) is ACTIVE but its paid period ended ${row.currentPeriodEnd?.toISOString()} with no renewal. A webhook was probably lost: check it at Razorpay, then cancel or renew it.`,
+        dedupeKey: `subscription-lapsed:${row.id}:${row.currentPeriodEnd?.getTime()}`,
+        data: { subscriptionId: row.id, razorpaySubscriptionId: row.razorpaySubscriptionId },
+        link: "/admin/subscriptions",
+      });
+    }
+    return rows.length;
   }
 
   // ── Outbox consumer ────────────────────────────────────────────────────────────────────────────────────────────────
