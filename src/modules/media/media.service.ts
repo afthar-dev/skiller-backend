@@ -20,7 +20,7 @@ import { MediaAttachments } from "./media-attachments";
 import { MediaLifecycle } from "./media-lifecycle";
 import { effectiveMaxBytes } from "./media-limits";
 import { enqueueMediaJob, queueNameFor } from "./media-jobs";
-import { MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, PART_SIZE, SOURCE_BUCKET, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { publicUrlsOf } from "./media-url-resolver";
 import { R2Client, isNoSuchUpload } from "./r2.client";
 
