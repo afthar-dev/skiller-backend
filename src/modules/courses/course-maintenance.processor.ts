@@ -30,6 +30,8 @@ export class CourseMaintenanceProcessor implements JobProcessor, OnModuleInit {
 
   onModuleInit() {
     this.registry.register(this);
+    // The recompute of a large course runs on the long queue so it never holds up the schedulers on `maintenance`.
+    this.registry.register({ queue: QueueNames.maintenanceLong, jobNames: [COURSE_PROGRESS_RECOMPUTE_JOB], process: (job) => this.process(job) });
   }
 
   /** Called once by the worker process. */

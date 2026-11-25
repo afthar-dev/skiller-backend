@@ -9,7 +9,7 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import type { JobProcessor } from "../../common/queue/job-processor";
 import { ProcessorRegistry } from "../../common/queue/processor-registry";
 import { QueueNames } from "../../common/queue/queue.constants";
-import { MediaTimeoutError, MediaToolError, PROBE_TIMEOUT_MS, TRANSCODE_TIMEOUT_MS, extractPoster, ladderBasis, ladderFor, probe, transcodeToHls } from "./ffmpeg";
+import { MediaTimeoutError, MediaToolError, PROBE_TIMEOUT_MS, TRANSCODE_MS_PER_SOURCE_SEC, TRANSCODE_TIMEOUT_MS, transcodeTimeoutFor, extractPoster, ladderBasis, ladderFor, probe, transcodeToHls } from "./ffmpeg";
 import { MediaLifecycle, PermanentMediaFailure } from "./media-lifecycle";
 import { ALLOWED_VIDEO_FORMATS, MEDIA_RULES, SOURCE_BUCKET, TRANSCODE_JOB, assetPrefix, sourcePrefixOf } from "./media.rules";
 import { effectiveMaxBytes } from "./media-limits";
@@ -42,10 +42,14 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
   readonly queue = QueueNames.mediaTranscode;
   readonly jobNames = [TRANSCODE_JOB];
   readonly concurrency = 1; // ffmpeg saturates the machine; scale by running more worker processes
+  // The worker is redeployed (SIGTERM, then SIGKILL) while a long transcode may be running; each kill stalls the job once. Three stalls are a real crash loop.
+  readonly maxStalledCount = 3;
   private readonly logger = new Logger(TranscodeProcessor.name);
   /** Public so tests can shrink them; a hung ffmpeg is SIGKILLed at the limit. */
   probeTimeoutMs = PROBE_TIMEOUT_MS;
   transcodeTimeoutMs = TRANSCODE_TIMEOUT_MS;
+  /** The limit per rendition is max(transcodeTimeoutMs, source duration * this), so a long lesson is not killed for being long. */
+  transcodeMsPerSourceSec = TRANSCODE_MS_PER_SOURCE_SEC;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -57,6 +61,23 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
 
   onModuleInit() {
     this.registry.register(this);
+    // Course lessons run on their own queue (so a reel never waits behind one) with this same code. Jobs queued on the reel queue before that split are still served above.
+    this.registry.register({
+      queue: QueueNames.mediaTranscodeLong,
+      jobNames: this.jobNames,
+      concurrency: this.concurrency,
+      maxStalledCount: this.maxStalledCount,
+      process: (job) => this.process(job),
+      onExhausted: (job, err) => this.onExhausted(job, err),
+    });
+  }
+
+  /** Every attempt failed, or the job stalled out (worker killed or OOM) without the catch in process() running: the asset must not stay PROCESSING. */
+  async onExhausted(job: Job<{ assetId: string }>, _err: Error): Promise<void> {
+    const { assetId } = job.data;
+    const asset = await this.prisma.mediaAsset.findUnique({ where: { id: assetId } });
+    if (!asset) return;
+    if (await this.lifecycle.markFailed(assetId, "PROCESSING_ERROR")) await this.r2.deletePrefix(asset.bucket, `${assetPrefix(asset)}/hls/`).catch(() => undefined);
   }
 
   async process(job: Job<{ assetId: string }>): Promise<void> {
@@ -104,7 +125,7 @@ export class TranscodeProcessor implements JobProcessor, OnModuleInit {
     const posterPath = join(dir, "poster.jpg");
     let renditions;
     try {
-      renditions = await transcodeToHls(source, hlsDir, ladderFor(ladderBasis(info)), { timeoutMs: this.transcodeTimeoutMs, maxDurationSec: maxDuration });
+      renditions = await transcodeToHls(source, hlsDir, ladderFor(ladderBasis(info)), { timeoutMs: transcodeTimeoutFor(info.durationSec, this.transcodeTimeoutMs, this.transcodeMsPerSourceSec), maxDurationSec: maxDuration });
       await extractPoster(source, posterPath, 1, info.durationSec);
     } catch (err) {
       if (err instanceof MediaTimeoutError) throw new PermanentMediaFailure("PROCESSING_TIMEOUT");

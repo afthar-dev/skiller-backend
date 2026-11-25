@@ -1,8 +1,9 @@
-import { Module, OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
+import { Logger, Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { LoggerModule } from "nestjs-pino";
 import { APP_CONFIG, ConfigModule } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
 import { buildLoggerParams } from "./common/observability/logger";
+import { PruneModule, PruneProcessor } from "./common/prune/prune.processor";
 import { OutboxModule } from "./common/outbox/outbox.module";
 import { OutboxRelay } from "./common/outbox/outbox.relay";
 import { BillingWorkerModule } from "./modules/billing/billing-worker.module";
@@ -29,21 +30,27 @@ import { SettingsModule } from "./modules/admin/settings.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { NotificationsWorkerModule } from "./modules/notifications/notifications-worker.module";
 import { MediaCleanupProcessor } from "./modules/media/media-cleanup.processor";
+import { MediaStuckSweeper } from "./modules/media/media-stuck.sweeper";
 import { MediaWorkerModule } from "./modules/media/media-worker.module";
+import { waitForMigrations } from "./common/prisma/migration-gate";
 import { PrismaModule } from "./common/prisma/prisma.module";
+import { PrismaService } from "./common/prisma/prisma.service";
 import { QueueModule } from "./common/queue/queue.module";
 import { QueueWorkerRunner } from "./common/queue/queue-worker.runner";
 import { RedisModule } from "./common/redis/redis.module";
 
 // Feature modules that own queue processors / relays are added to `imports` as they land.
 @Module({
-  imports: [ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
+  imports: [PruneModule, ConfigModule, LoggerModule.forRootAsync({ inject: [APP_CONFIG], useFactory: (config: AppConfig) => buildLoggerParams(config) }), PrismaModule, RedisModule, QueueModule.register(), OutboxModule, MailModule, SettingsModule, RbacWorkerModule, UsersWorkerModule, MediaWorkerModule, NotificationsWorkerModule, WalletWorkerModule, BillingWorkerModule, CoursesWorkerModule, ReelsWorkerModule, GrowthWorkerModule, AnalyticsWorkerModule],
 })
-export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdown {
+export class WorkerModule implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly runner: QueueWorkerRunner,
+    private readonly prisma: PrismaService,
     private readonly outboxRelay: OutboxRelay,
     private readonly mediaCleanup: MediaCleanupProcessor,
+    private readonly mediaStuck: MediaStuckSweeper,
+    private readonly prune: PruneProcessor,
     private readonly subscriptionMaintenance: SubscriptionMaintenanceProcessor,
     private readonly orderMaintenance: OrderMaintenanceProcessor,
     private readonly holdRelease: HoldReleaseProcessor,
@@ -59,9 +66,13 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
   ) {}
 
   async onApplicationBootstrap() {
+    // Never run this build's jobs against a schema the API has not migrated yet.
+    await waitForMigrations(this.prisma, { log: (m) => Logger.warn(m, "WorkerModule") });
     await this.runner.start();
     await this.outboxRelay.schedule();
     await this.mediaCleanup.schedule();
+    await this.mediaStuck.schedule();
+    await this.prune.schedule();
     await this.subscriptionMaintenance.schedule();
     await this.orderMaintenance.schedule();
     await this.holdRelease.schedule();
@@ -76,7 +87,11 @@ export class WorkerModule implements OnApplicationBootstrap, OnApplicationShutdo
     await this.analyticsRollup.schedule();
   }
 
-  async onApplicationShutdown() {
+  /**
+   * Nest runs every onModuleDestroy before any onApplicationShutdown, and the root module's hooks run before the feature modules'. Stopping the workers here
+   * (close() waits for running jobs) means PrismaService, which disconnects in its own onModuleDestroy, is still connected while jobs finish.
+   */
+  async onModuleDestroy() {
     await this.runner.stop();
   }
 }

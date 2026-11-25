@@ -110,7 +110,7 @@ pnpm --dir edge/playback-gate deploy
 **Redis (`skiller-redis`).** Paid plan, `maxmemoryPolicy: noeviction`, no public access. An evicting policy can bring revoked sessions back to life and lose queue jobs. The free plan keeps nothing on disk; don't use it. After the first deploy, confirm in the dashboard that the policy shows `noeviction`.
 
 **API (`skiller-api`).**
-- Health check path: `/v1/ready`.
+- Health check path: `/v1/health` (liveness only). `/v1/ready` also checks Neon and Redis (2 s timeout each); use it for deploy checks and the external monitor, not for Render's restart decision.
 - Pre-deploy command: `sh -c 'DATABASE_URL="$DIRECT_DATABASE_URL" npm run release'`. It migrates with the Neon **direct** URL before each new version goes live. If it fails, the old version keeps running.
 - Custom domain `api.skiller.in` (the Blueprint adds it). In Cloudflare add the CNAME Render shows (`skiller-api.onrender.com`), **DNS only** (grey cloud), then verify in Render. Render issues the certificate.
 - Plan `standard` (2 GB). Free plans sleep, which drops live message streams.
@@ -251,3 +251,13 @@ Complete both go-live checklists in `README.md`. In short:
 2. More API replicas. Sessions, rate limits and live messages already go through Redis.
 3. Larger Neon compute.
 4. Cloudflare proxy in front of `api.` for rate limiting at the edge, then add one to `TRUST_PROXY`.
+
+### 8.1 Video transcoding capacity
+
+Reels use the `media-transcode` queue and course lessons the `media-transcode-long` queue, one job at a time each, so a long lesson never delays a reel. Both run in the one worker process and share its CPU: on a 1 vCPU `standard` worker a lesson and a reel transcoding together each take about twice as long.
+
+Each rendition is one ffmpeg run that decodes the source again, and its time limit is `max(30 min, 3 x source duration)`, so a long lesson is not killed for being long (a hung ffmpeg still is).
+
+Benchmark (single thread, `-preset veryfast`, synthetic 1080p30 source, a developer desktop, not a Render instance): a 60 s clip took about 10 s for the 480p rendition and about 58 s for the 1080p rendition, i.e. roughly real time for 1080p on one core. A 60-minute 1080p lecture therefore needs about 1 hour for the 1080p rendition alone and 1.5 to 2 hours for all four, more on a slower vCPU. Before launch, repeat it on the real plan: generate a 45-minute clip with `ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 2700 ...`, run `transcodeToHls` in `docker run --cpus=1 --memory=2g`, and note the time per rung here.
+
+Guidance: keep the `standard` worker for reels and lessons up to about 30 minutes; move the worker to `pro` (2+ CPUs) before accepting hour-long lessons, and tell instructors the supported length. A worker redeploy waits up to 5 minutes (`maxShutdownDelaySeconds`) for the running transcode; a longer one is stalled and starts again (up to 3 times), and anything left stuck is re-queued or failed by the hourly sweep (`media.stuck-sweep`).

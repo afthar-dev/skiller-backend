@@ -11,7 +11,14 @@ export const ffprobePath = () => process.env.FFPROBE_PATH || "ffprobe";
 
 export const SEGMENT_SECONDS = 6;
 export const PROBE_TIMEOUT_MS = 30_000;
+/** Floor of the per-rendition limit: a hung ffmpeg on a short clip is killed after this long. */
 export const TRANSCODE_TIMEOUT_MS = 30 * 60_000;
+/** Allowed ffmpeg time per second of source, per rendition (3x real time). A 60-minute lesson may spend 3 hours on each rendition before it is treated as hung. */
+export const TRANSCODE_MS_PER_SOURCE_SEC = 3000;
+
+/** Per-rendition time limit: never below `floorMs`, and growing with the length of the source (DAT-4). */
+export const transcodeTimeoutFor = (durationSec: number, floorMs = TRANSCODE_TIMEOUT_MS, msPerSourceSec = TRANSCODE_MS_PER_SOURCE_SEC): number =>
+  Math.max(floorMs, Math.ceil(Math.max(0, durationSec) * msPerSourceSec));
 
 /** Inputs are untrusted: only plain local files may be opened (no http/tcp/concat/subfile/... from inside a crafted container). */
 const INPUT_GUARD = ["-protocol_whitelist", "file"];

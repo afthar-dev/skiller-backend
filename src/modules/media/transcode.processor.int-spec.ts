@@ -195,12 +195,13 @@ const mediaTmpDirs = () => readdirSync(tmpdir()).filter((n) => n.startsWith("ski
 
   it("a hung ffmpeg is killed and the asset fails with PROCESSING_TIMEOUT", async () => {
     const { row } = await h.createAsset({ purpose: "COURSE_LESSON", source: "sample-portrait-100s.mp4", mime: "video/mp4" });
-    const original = h.transcode.transcodeTimeoutMs;
+    const original = [h.transcode.transcodeTimeoutMs, h.transcode.transcodeMsPerSourceSec];
     h.transcode.transcodeTimeoutMs = 1;
+    h.transcode.transcodeMsPerSourceSec = 0; // the limit scales with the duration; switch that off so 1 ms really is the limit
     try {
       await run(row.id);
     } finally {
-      h.transcode.transcodeTimeoutMs = original;
+      [h.transcode.transcodeTimeoutMs, h.transcode.transcodeMsPerSourceSec] = original;
     }
     expect(await reload(row.id)).toMatchObject({ status: "FAILED", failureReason: "PROCESSING_TIMEOUT" });
   });

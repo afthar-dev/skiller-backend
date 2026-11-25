@@ -18,7 +18,7 @@ export class RebuildService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    @InjectQueue(QueueNames.maintenance) private readonly maintenanceQueue: Queue,
+    @InjectQueue(QueueNames.maintenanceLong) private readonly maintenanceQueue: Queue,
   ) {}
 
   async request(actorId: string, range: DayRange, meta: ActionMeta = {}): Promise<{ jobId: string; from: string; to: string }> {

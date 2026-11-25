@@ -19,7 +19,8 @@ import { ProfilesService } from "../users";
 import { MediaAttachments } from "./media-attachments";
 import { MediaLifecycle } from "./media-lifecycle";
 import { effectiveMaxBytes } from "./media-limits";
-import { FILE_JOB, IMAGE_JOB, MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, MEDIA_JOB_ATTEMPTS, MEDIA_RULES, PART_SIZE, SOURCE_BUCKET, TRANSCODE_JOB, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
+import { enqueueMediaJob, queueNameFor } from "./media-jobs";
+import { MAX_PENDING_UPLOADS, PART_RESIGNS_PER_HOUR, PART_SIZE, SOURCE_BUCKET, UPLOADS_PER_HOUR, partSizes, sourceKeyOf, requiresCreator, toApiPurpose, validateUpload, type ApiPurpose } from "./media.rules";
 import { publicUrlsOf } from "./media-url-resolver";
 import { R2Client, isNoSuchUpload } from "./r2.client";
 
@@ -75,6 +76,7 @@ export class MediaService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(CLOCK) private readonly clock: Clock,
     @InjectQueue(QueueNames.mediaTranscode) private readonly transcodeQueue: Queue,
+    @InjectQueue(QueueNames.mediaTranscodeLong) private readonly transcodeLongQueue: Queue,
     @InjectQueue(QueueNames.mediaLight) private readonly lightQueue: Queue,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
@@ -192,10 +194,10 @@ export class MediaService {
       throw err;
     }
 
-    const kind = MEDIA_RULES[asset.purpose].kind;
-    const job = kind === "image" ? IMAGE_JOB : kind === "video" ? TRANSCODE_JOB : FILE_JOB;
+    // If the API dies between the flip above and this add, the asset sits in UPLOADED with no job; the stuck-asset sweep (MediaStuckSweeper) queues it.
+    const queues: Partial<Record<string, Queue>> = { [QueueNames.mediaTranscode]: this.transcodeQueue, [QueueNames.mediaTranscodeLong]: this.transcodeLongQueue, [QueueNames.mediaLight]: this.lightQueue };
     try {
-      await (kind === "video" ? this.transcodeQueue : this.lightQueue).add(job, { assetId }, { jobId: assetId, attempts: MEDIA_JOB_ATTEMPTS, backoff: { type: "fixed", delay: 5000 } });
+      await enqueueMediaJob(queues[queueNameFor(asset.purpose)]!, asset.purpose, assetId);
     } catch (err) {
       await this.prisma.mediaAsset.updateMany({ where: { id: assetId, status: "UPLOADED" }, data: { status: "PENDING" } });
       throw err;

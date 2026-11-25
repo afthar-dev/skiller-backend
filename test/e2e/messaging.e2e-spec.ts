@@ -318,6 +318,19 @@ describe("messaging", () => {
       expect((await messages(b, id, `?after=${ids[3]}`)).body.items).toEqual([]);
     });
 
+    it("?after= pages on (createdAt, id), so a later message whose id sorts earlier is still returned (DAT-9)", async () => {
+      const { a, b, id } = await pair();
+      const first = (await send(a, id, "one")).body.id as string;
+      const second = (await send(b, id, "two")).body.id as string;
+      const [m1, m2] = await Promise.all([prisma.message.findUniqueOrThrow({ where: { id: first } }), prisma.message.findUniqueOrThrow({ where: { id: second } })]);
+      // Make the ids sort the other way round from the creation order (two API instances with skewed clocks).
+      const lo = "00000000-0000-7000-8000-" + uniq().padEnd(12, "0");
+      await prisma.message.update({ where: { id: m2.id }, data: { id: lo } });
+      expect(lo < m1.id).toBe(true);
+      const since = await messages(b, id, `?after=${first}`);
+      expect(since.body.items.map((m: { body: string }) => m.body)).toEqual(["two"]);
+    });
+
     it("unread counts come from lastReadAt: the other person's visible messages after it; reading resets; my own never count; a new message counts again", async () => {
       const { a, b, id } = await pair(); // a wrote "first"
       expect(await unread(b)).toBe(1);

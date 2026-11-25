@@ -36,6 +36,11 @@ export class ImageProcessor implements JobProcessor, OnModuleInit {
     this.registry.register(this);
   }
 
+  /** All attempts used, or the job stalled out without its catch running: the asset must not stay PROCESSING. */
+  async onExhausted(job: Job<{ assetId: string }>): Promise<void> {
+    await this.lifecycle.markFailed(job.data.assetId, "PROCESSING_ERROR");
+  }
+
   /** Source -> webp at 256 and 1024 px wide (never upscaled). Avatars are cropped to a centred square. */
   async process(job: Job<{ assetId: string }>): Promise<void> {
     const { assetId } = job.data;

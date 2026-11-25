@@ -6,6 +6,18 @@ import type { Prisma, Profile } from "@prisma/client";
 import { UserBlocks } from "../moderation";
 import { ProfilesService } from "./profiles.service";
 
+/**
+ * Moves the follower's followingCount and the followee's followersCount by `delta`. The two profile rows are always locked in userId order, so two people
+ * following each other at the same moment cannot deadlock.
+ */
+async function bumpCounters(tx: Prisma.TransactionClient, followerId: string, followeeId: string, delta: 1 | -1): Promise<void> {
+  const steps = [
+    { userId: followerId, data: { followingCount: { increment: delta } } },
+    { userId: followeeId, data: { followersCount: { increment: delta } } },
+  ].sort((a, b) => (a.userId < b.userId ? -1 : 1));
+  for (const step of steps) await tx.profile.update({ where: { userId: step.userId }, data: step.data });
+}
+
 @Injectable()
 export class FollowsService {
   constructor(
@@ -25,8 +37,7 @@ export class FollowsService {
     await this.prisma.$transaction(async (tx) => {
       const created = await tx.follow.createMany({ data: [{ followerId, followeeId: target.userId }], skipDuplicates: true });
       if (created.count === 0) return;
-      await tx.profile.update({ where: { userId: target.userId }, data: { followersCount: { increment: 1 } } });
-      await tx.profile.update({ where: { userId: followerId }, data: { followingCount: { increment: 1 } } });
+      await bumpCounters(tx, followerId, target.userId, 1);
     });
   }
 
@@ -36,8 +47,7 @@ export class FollowsService {
     await this.prisma.$transaction(async (tx) => {
       const removed = await tx.follow.deleteMany({ where: { followerId, followeeId: target.userId } });
       if (removed.count === 0) return;
-      await tx.profile.update({ where: { userId: target.userId }, data: { followersCount: { decrement: 1 } } });
-      await tx.profile.update({ where: { userId: followerId }, data: { followingCount: { decrement: 1 } } });
+      await bumpCounters(tx, followerId, target.userId, -1);
     });
   }
 

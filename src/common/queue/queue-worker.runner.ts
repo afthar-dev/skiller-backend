@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { Job, UnrecoverableError, Worker } from "bullmq";
+import { DelayedError, Job, UnrecoverableError, Worker } from "bullmq";
 import type { Redis } from "ioredis";
 import { reportException } from "../observability/sentry";
 import type { JobProcessor } from "./job-processor";
@@ -9,6 +9,14 @@ import { backoffStrategy } from "./queue.options";
 
 const LIMITER_REFRESH_MS = 60_000;
 const matches = (p: JobProcessor, job: Job) => !p.jobNames || p.jobNames.includes(job.name);
+
+/** A job no processor here knows (a newer API queued a new job name before this worker was replaced) goes back to the queue this long later. */
+export const UNKNOWN_JOB_RETRY_MS = 60_000;
+/** ...until it is this old: then it is a real mistake (a typo, a removed job) and fails loudly instead of cycling for ever. */
+export const UNKNOWN_JOB_GIVE_UP_MS = 6 * 60 * 60 * 1000;
+const STALLED_MESSAGE = "stalled more than allowable limit";
+/** BullMQ fails a job whose worker died too often without running the processor's catch, and without an exhausted attempt count. */
+const isStalledFailure = (err: Error) => err.message.includes(STALLED_MESSAGE);
 
 // Starts one BullMQ Worker per queue that has registered processors, at that queue's concurrency (queues are dedicated
 // per workload: BullMQ cannot filter by job name, so a slow job type needs its own queue).
@@ -33,19 +41,20 @@ export class QueueWorkerRunner {
     for (const queue of this.registry.queues()) {
       const processors = this.registry.for(queue);
       const concurrency = Math.max(...processors.map((p) => p.concurrency ?? 1));
+      const maxStalledCount = Math.max(0, ...processors.map((p) => p.maxStalledCount ?? 0));
       const limiter = await this.limiterFor(queue);
       const worker = new Worker(
         queue,
-        async (job: Job) => {
+        async (job: Job, token?: string) => {
           const targets = processors.filter((p) => matches(p, job));
-          if (targets.length === 0) this.logger.warn(`job ${job.id} (${job.name}) on ${queue} matched no processor and was dropped`);
+          if (targets.length === 0) return this.deferUnknown(queue, job, token);
           for (const p of targets) await p.process(job);
         },
-        { connection: this.connection, concurrency, settings: { backoffStrategy }, ...(limiter ? { limiter } : {}) },
+        { connection: this.connection, concurrency, settings: { backoffStrategy }, ...(maxStalledCount > 0 ? { maxStalledCount } : {}), ...(limiter ? { limiter } : {}) },
       );
       worker.on("failed", (job, err) => {
         this.logger.warn(`job ${job?.id} on ${queue} failed (attempt ${job?.attemptsMade}): ${err.message}`);
-        if (job && (job.attemptsMade >= (job.opts.attempts ?? 1) || err instanceof UnrecoverableError)) void this.exhausted(queue, processors, job, err);
+        if (job && (job.attemptsMade >= (job.opts.attempts ?? 1) || err instanceof UnrecoverableError || isStalledFailure(err))) void this.exhausted(queue, processors, job, err);
       });
       worker.on("error", (err) => this.logger.error(`worker ${queue}: ${err.message}`));
       this.workers.push(worker);
@@ -56,6 +65,17 @@ export class QueueWorkerRunner {
       this.limiterTimer.unref();
     }
     this.logger.log(`workers started: ${this.registry.queues().join(", ") || "(none)"}`);
+  }
+
+  /**
+   * Never completes a job nobody can run (that would lose it): it is put back as delayed, without using up an attempt, so a worker that knows the name
+   * (the one from the new release) picks it up. After UNKNOWN_JOB_GIVE_UP_MS it fails instead.
+   */
+  private async deferUnknown(queue: string, job: Job, token?: string): Promise<never> {
+    if (Date.now() - job.timestamp > UNKNOWN_JOB_GIVE_UP_MS) throw new Error(`no processor for job ${job.name} on ${queue}`);
+    this.logger.warn(`job ${job.id} (${job.name}) on ${queue} matched no processor; delaying it for a worker that knows it`);
+    await job.moveToDelayed(Date.now() + UNKNOWN_JOB_RETRY_MS, token);
+    throw new DelayedError();
   }
 
   /** Reads every processor's limiter again and applies it to the running Workers (a setting changed). A failing read keeps the old limit. */
