@@ -591,6 +591,27 @@ describe("checkout, coupons and fulfilment", () => {
       expect(res.body.error.code).toBe("COUPON_EXHAUSTED");
     });
 
+    it("MON-9: a superseded unpaid order cannot be paid with the discount once the buyer used the coupon on the newer order: it is not delivered and goes to the automatic refund path", async () => {
+      const code = newCode("SUPR");
+      await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL" });
+      const a = await listing();
+      const buyer = await t.login();
+      const older = await checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      const newer = await checkout(buyer, { itemType: "TEST_ITEM", itemId: a.itemId, couponCode: code });
+      expect([older.status, newer.status]).toEqual([201, 201]);
+      const pNewer = fake.capturePayment(newer.body.razorpayOrderId);
+      expect((await verify(buyer, newer.body.orderId, newer.body.razorpayOrderId, pNewer.id)).status).toBe(200);
+      const pOlder = fake.capturePayment(older.body.razorpayOrderId);
+      await verify(buyer, older.body.orderId, older.body.razorpayOrderId, pOlder.id);
+      const row = await prisma.order.findUniqueOrThrow({ where: { id: older.body.orderId } });
+      expect(row.status).toBe("PAID");
+      expect(row.fulfilmentFailedAt).not.toBeNull();
+      expect(row.fulfilmentError).toContain("COUPON_ALREADY_USED");
+      expect(testState.paid).not.toContain(older.body.orderId);
+      expect(testState.paid).toContain(newer.body.orderId);
+      expect(await prisma.couponRedemption.count({ where: { coupon: { code }, status: "REDEEMED" } })).toBe(1);
+    });
+
     it("ten parallel checkouts by one buyer with a single-use coupon: each re-reservation releases the buyer's own earlier unpaid one, so exactly one live reservation remains (MON-9)", async () => {
       const code = newCode("PAR");
       await coupons.create({ code, kind: "PERCENT", value: 1000n, fundedBy: "PLATFORM", scope: "ALL" });
