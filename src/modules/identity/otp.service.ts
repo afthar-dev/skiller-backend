@@ -11,6 +11,18 @@ import { MailService } from "../mail";
 
 export const OTP_TTL_MS = 10 * 60 * 1000;
 export const OTP_MAX_ATTEMPTS = 5;
+/**
+ * Sign-in codes a stranger can request for someone else's address, so a new request must not cancel the owner's code: the newest
+ * few stay valid together (each with its own attempt budget, all under the per-email cap below).
+ */
+export const OTP_MAX_LIVE_LOGIN_CHALLENGES = 3;
+/** Codes mailed to one address per hour. Past it requests answer as usual but send nothing: bounds mail-bombing without a lockout the owner can feel (the codes already sent stay valid). */
+export const OTP_HOURLY_SEND_CEILING = 8;
+/** Wrong-or-right guesses across ALL challenges of one email+purpose: brute force cannot be restarted by requesting a new code. */
+export const OTP_MAX_ATTEMPTS_PER_EMAIL_HOUR = 20;
+export const OTP_MAX_ATTEMPTS_PER_EMAIL_DAY = 50;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 export interface OtpRequestInput {
   email: string;
@@ -58,12 +70,22 @@ export class OtpService {
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
     const expiresAt = new Date(now.getTime() + OTP_TTL_MS);
 
+    if (input.purpose === "LOGIN") {
+      const sentLastHour = await this.prisma.otpChallenge.count({ where: { email, purpose: input.purpose, createdAt: { gte: new Date(now.getTime() - HOUR_MS) } } });
+      // Same answer as a real request (no enumeration, no signal to the sender), but nothing is created or mailed.
+      if (sentLastHour >= OTP_HOURLY_SEND_CEILING) return { challengeId, expiresAt };
+    }
+
     await this.prisma.$transaction(async (tx) => {
-      // Only the newest challenge for an email+purpose may be redeemed.
-      await tx.otpChallenge.updateMany({
-        where: { email, purpose: input.purpose, consumedAt: null },
-        data: { consumedAt: now },
+      // Sign-in: the newest few stay redeemable so a stranger's request cannot cancel the owner's code. Step-up (the caller is signed in): only the newest.
+      const keep = input.purpose === "LOGIN" ? OTP_MAX_LIVE_LOGIN_CHALLENGES - 1 : 0;
+      const liveRows = await tx.otpChallenge.findMany({
+        where: { email, purpose: input.purpose, consumedAt: null, expiresAt: { gt: now } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
       });
+      const stale = liveRows.slice(keep).map((r) => r.id);
+      if (stale.length > 0) await tx.otpChallenge.updateMany({ where: { id: { in: stale } }, data: { consumedAt: now } });
       await tx.otpChallenge.create({
         data: {
           id: challengeId,
@@ -84,6 +106,7 @@ export class OtpService {
 
   async verify(challengeId: string, code: string, expect: OtpVerifyExpectation = {}): Promise<OtpVerifyResult> {
     const now = this.clock.now();
+    await this.assertAttemptBudget(challengeId, now);
     const purposeFilter = expect.purpose ? Prisma.sql`AND "purpose" = ${expect.purpose}::"OtpPurpose"` : Prisma.empty;
     const userFilter = expect.userId ? Prisma.sql`AND "userId" = ${expect.userId}` : Prisma.empty;
 
@@ -116,6 +139,22 @@ export class OtpService {
     if (consumed.count === 0) throw new AppError("OTP_INVALID", 400, "Invalid code", { attemptsLeft: 0 });
 
     return { email: row.email, purpose: row.purpose, userId: row.userId ?? undefined };
+  }
+
+  /** Refuses (without counting) once the email has used its guesses across challenges; an unknown challenge falls through to the normal rejection. */
+  private async assertAttemptBudget(challengeId: string, now: Date): Promise<void> {
+    const challenge = await this.prisma.otpChallenge.findUnique({ where: { id: challengeId }, select: { email: true, purpose: true } });
+    if (!challenge) return;
+    const recent = await this.prisma.otpChallenge.findMany({
+      where: { email: challenge.email, purpose: challenge.purpose, createdAt: { gte: new Date(now.getTime() - DAY_MS) } },
+      select: { attempts: true, createdAt: true },
+    });
+    const hourAgo = now.getTime() - HOUR_MS;
+    const lastHour = recent.filter((r) => r.createdAt.getTime() >= hourAgo).reduce((n, r) => n + r.attempts, 0);
+    const lastDay = recent.reduce((n, r) => n + r.attempts, 0);
+    if (lastHour >= OTP_MAX_ATTEMPTS_PER_EMAIL_HOUR || lastDay >= OTP_MAX_ATTEMPTS_PER_EMAIL_DAY) {
+      throw new AppError("OTP_LOCKED", 429, "Too many attempts for this address; try again later", { retryAfterSec: 15 * 60 });
+    }
   }
 
   private async explainRejection(challengeId: string, now: Date, expect: OtpVerifyExpectation): Promise<AppError> {
