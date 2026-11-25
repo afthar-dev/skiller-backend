@@ -181,12 +181,12 @@ describe("signed-out visitors and free-preview lessons", () => {
       expect(JSON.stringify(res.body.watermark)).not.toMatch(/@/); // no email, no id
     });
 
-    it("a signed-out visitor is refused the video of a paid lesson with the same 403 a non-enrolled user gets", async () => {
+    it("a signed-out visitor is refused the video of a paid lesson with the same 404 a non-enrolled user gets", async () => {
       const c = await course(await owner());
       const stranger = await t.login();
       const signedOut = await http().get(playUrl(c.paidAsset)).set(anon());
       const signedIn = await http().get(playUrl(c.paidAsset)).set(auth(stranger));
-      expect(signedOut.status).toBe(403);
+      expect(signedOut.status).toBe(404);
       expect(signedOut.body.error).toEqual(signedIn.body.error);
     });
 
