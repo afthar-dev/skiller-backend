@@ -1,7 +1,8 @@
 # FREE DEMO Blueprint (for showing the client, NOT for real users or real money).
 # One free web service runs the database update, the API and the worker together (Dockerfile.demo, scripts/start-demo.sh).
 # Free Render limits: the service sleeps after ~15 min without visitors (first visit then takes ~1 min),
-# Redis keeps nothing across restarts (everyone is signed out), 512 MB memory (keep demo videos short).
+# Redis is a Render Key Value you create yourself; its free plan keeps nothing across restarts (everyone is signed out).
+# 512 MB memory: keep demo videos short.
 # Production uses render.yaml instead. Steps: DEPLOYMENT.md, Part 7.
 envVarGroups:
   - name: skiller-demo-shared
@@ -75,13 +76,6 @@ envVarGroups:
         sync: false
 
 services:
-  - type: keyvalue
-    name: skiller-demo-redis
-    region: singapore
-    plan: free
-    maxmemoryPolicy: noeviction
-    ipAllowList: [] # private network only
-
   - type: web
     name: skiller-demo-api
     runtime: docker
@@ -95,9 +89,7 @@ services:
     envVars:
       - key: PORT
         value: "4000"
+      # Internal URL of your Render Key Value (redis://red-...:6379). It must be in the same region and use maxmemory policy noeviction.
       - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: skiller-demo-redis
-          property: connectionString
+        sync: false
       - fromGroup: skiller-demo-shared
