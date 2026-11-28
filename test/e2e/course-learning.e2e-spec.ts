@@ -89,9 +89,9 @@ describe("learner access to course content", () => {
       const owner = await creator();
       const c = await course(owner);
       const stranger = await t.login();
-      expect((await play(stranger, c.paidAsset)).status).toBe(403);
+      expect((await play(stranger, c.paidAsset)).status).toBe(404);
       const learner = await t.login();
-      expect((await play(learner, c.paidAsset)).status).toBe(403);
+      expect((await play(learner, c.paidAsset)).status).toBe(404);
       await enrol(learner, c.slug);
       expect((await play(learner, c.paidAsset)).status).toBe(200);
     });
@@ -102,9 +102,9 @@ describe("learner access to course content", () => {
       const open = await course(owner);
       expect((await play(stranger, open.previewAsset)).status).toBe(200);
       const flagged = await course(owner, { flagged: true });
-      expect((await play(stranger, flagged.previewAsset)).status).toBe(403);
+      expect((await play(stranger, flagged.previewAsset)).status).toBe(404);
       const draft = await course(owner, { status: "DRAFT" });
-      expect((await play(stranger, draft.previewAsset)).status).toBe(403);
+      expect((await play(stranger, draft.previewAsset)).status).toBe(404);
     });
 
     it("a refunded learner loses playback immediately; a rebuy restores it", async () => {
@@ -114,7 +114,7 @@ describe("learner access to course content", () => {
       const orderId = await purchased(c.id, buyer.userId);
       expect((await play(buyer, c.paidAsset)).status).toBe(200);
       await prisma.$transaction((tx) => t.app.get(EnrolmentsService).revokeForOrder(tx, { courseId: c.id, userId: buyer.userId, orderId }));
-      expect((await play(buyer, c.paidAsset)).status).toBe(403);
+      expect((await play(buyer, c.paidAsset)).status).toBe(404);
     });
 
     it("a buyer keeps playing after the course is archived or flagged", async () => {
@@ -165,7 +165,7 @@ describe("learner access to course content", () => {
       expect((await play(learner, c.paidAsset)).status).toBe(200);
       await prisma.userRole.delete({ where: { id: grant.id } });
       await t.app.get(PermissionService).invalidateUser(learner.userId);
-      expect((await play(learner, c.paidAsset)).status).toBe(403);
+      expect((await play(learner, c.paidAsset)).status).toBe(404);
     });
   });
 

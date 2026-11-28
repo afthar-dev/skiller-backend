@@ -7,6 +7,7 @@ export { UserStatusCache } from "./user-status.cache";
 export { ViewerResolver } from "./viewer-resolver";
 export { AuthGuard } from "./auth.guard";
 export { RequireStepUp } from "./require-step-up.decorator";
+export { StepUpGuard } from "./step-up.guard";
 export { MEMBER_ROLE_GRANTER } from "./member-role-granter";
 export type { MemberRoleGranter } from "./member-role-granter";
 export { IdentityModule } from "./identity.module";

@@ -2,6 +2,22 @@ import { z } from "zod";
 
 const secret = (name: string) => z.string({ required_error: `${name} is required` }).min(32, `${name} must be at least 32 characters`);
 
+/** Why a CORS origin is not acceptable in production, or null. */
+function corsOriginProblem(origin: string, cookieHost: string): string | null {
+  if (origin.includes("*")) return "must not contain a wildcard";
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return "is not a valid origin (expected https://host)";
+  }
+  if (url.protocol !== "https:") return "must use https";
+  if (origin.replace(/\/+$/, "") !== url.origin) return "must be a bare origin (scheme and host only, no path)";
+  const host = url.hostname.toLowerCase();
+  if (host !== cookieHost && !host.endsWith(`.${cookieHost}`)) return `must be ${cookieHost} or a subdomain of it (COOKIE_DOMAIN)`;
+  return null;
+}
+
 const envSchema = z
   .object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -46,6 +62,8 @@ const envSchema = z
   TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
   // Shared with the web app's server (never its browser code). A request that carries it may name the real client in X-Skiller-Client-Ip.
   SSR_SHARED_SECRET: secret("SSR_SHARED_SECRET").optional(),
+  // Set when the Cloudflare proxy fronts the API: only requests carrying it in X-Skiller-Origin are served (health checks excepted).
+  ORIGIN_SHARED_SECRET: secret("ORIGIN_SHARED_SECRET").optional(),
   SUPER_ADMIN_EMAIL: z.string().email(),
   })
   .superRefine((e, ctx) => {
@@ -60,6 +78,18 @@ const envSchema = z
     // Payments sent to another host in production would silently stop real charges.
     if (e.NODE_ENV === "production" && e.RAZORPAY_BASE_URL) {
       ctx.addIssue({ code: "custom", path: ["RAZORPAY_BASE_URL"], message: "must not be set in production (it is for tests and local development)" });
+    }
+    // Production CORS answers credentialed calls: every origin must be an exact https origin under the cookie domain, never a wildcard.
+    if (e.NODE_ENV === "production") {
+      const cookieHost = e.COOKIE_DOMAIN.replace(/^\./, "").toLowerCase();
+      for (const raw of e.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)) {
+        const problem = corsOriginProblem(raw, cookieHost);
+        if (problem) ctx.addIssue({ code: "custom", path: ["CORS_ORIGINS"], message: `${JSON.stringify(raw)} ${problem}` });
+      }
+    }
+    // With two or more trusted hops, a client that reaches the origin directly can choose the address the limits see.
+    if (e.NODE_ENV === "production" && e.TRUST_PROXY > 1 && !e.ORIGIN_SHARED_SECRET) {
+      ctx.addIssue({ code: "custom", path: ["ORIGIN_SHARED_SECRET"], message: "is required in production when TRUST_PROXY is above 1 (it blocks direct access that bypasses the proxy; see docs/HOSTING.md)" });
     }
     // A shared secret would let a body signed for the Razorpay endpoint pass for a RazorpayX one.
     if (e.RAZORPAY_WEBHOOK_SECRET && e.RAZORPAY_WEBHOOK_SECRET === e.RAZORPAYX_WEBHOOK_SECRET) {
@@ -109,6 +139,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     razorpayx: { accountNumber: e.RAZORPAYX_ACCOUNT_NUMBER, webhookSecret: e.RAZORPAYX_WEBHOOK_SECRET },
     trustProxy: e.TRUST_PROXY,
     ssrSharedSecret: e.SSR_SHARED_SECRET,
+    originSharedSecret: e.ORIGIN_SHARED_SECRET,
     sentryDsn: e.SENTRY_DSN,
     superAdminEmail: e.SUPER_ADMIN_EMAIL.toLowerCase(),
   };

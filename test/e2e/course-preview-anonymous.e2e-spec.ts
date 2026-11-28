@@ -181,12 +181,12 @@ describe("signed-out visitors and free-preview lessons", () => {
       expect(JSON.stringify(res.body.watermark)).not.toMatch(/@/); // no email, no id
     });
 
-    it("a signed-out visitor is refused the video of a paid lesson with the same 403 a non-enrolled user gets", async () => {
+    it("a signed-out visitor is refused the video of a paid lesson with the same 404 a non-enrolled user gets", async () => {
       const c = await course(await owner());
       const stranger = await t.login();
       const signedOut = await http().get(playUrl(c.paidAsset)).set(anon());
       const signedIn = await http().get(playUrl(c.paidAsset)).set(auth(stranger));
-      expect(signedOut.status).toBe(403);
+      expect(signedOut.status).toBe(404);
       expect(signedOut.body.error).toEqual(signedIn.body.error);
     });
 
@@ -194,18 +194,18 @@ describe("signed-out visitors and free-preview lessons", () => {
       const o = await owner();
       for (const over of [{ flagged: true }, { status: "IN_REVIEW" as const }, { status: "DRAFT" as const }]) {
         const c = await course(o, over);
-        expect((await http().get(playUrl(c.previewAsset)).set(anon())).status).toBe(403);
+        expect((await http().get(playUrl(c.previewAsset)).set(anon())).status).toBe(404);
       }
     });
 
     it("an unknown asset is 404, a resource file is refused, and a bad token is 401", async () => {
       const c = await course(await owner());
       expect((await http().get(playUrl(uuidv7())).set(anon())).status).toBe(404);
-      expect((await http().get(playUrl(c.resourceAsset)).set(anon())).status).toBe(403);
+      expect((await http().get(playUrl(c.resourceAsset)).set(anon())).status).toBe(404);
       expect((await http().get(playUrl(c.previewAsset)).set({ ...anon(), Authorization: "Bearer nonsense" })).status).toBe(401);
     });
 
-    it("signed-in behaviour is unchanged: the token and watermark name the user, a paid video is 403 until enrolled", async () => {
+    it("signed-in behaviour is unchanged: the token and watermark name the user, a paid video is 404 until enrolled", async () => {
       const c = await course(await owner());
       const learner = await t.login();
       const preview = await http().get(playUrl(c.previewAsset)).set(auth(learner));
@@ -213,7 +213,7 @@ describe("signed-out visitors and free-preview lessons", () => {
       expect(preview.body.watermark).toBe(learner.email);
       const token = new URL(preview.body.manifestUrl).searchParams.get("t") as string;
       expect(JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString()).u).toBe(learner.userId);
-      expect((await http().get(playUrl(c.paidAsset)).set(auth(learner))).status).toBe(403);
+      expect((await http().get(playUrl(c.paidAsset)).set(auth(learner))).status).toBe(404);
     });
 
     it("signed-out playback is limited per address, signed-in playback keeps its own per-user limit", async () => {

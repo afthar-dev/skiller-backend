@@ -20,7 +20,7 @@
             }
           }
         },
-        "summary": "Liveness",
+        "summary": "Liveness (no dependencies: use this for the platform health check)",
         "tags": [
           "Health"
         ]
@@ -229,6 +229,16 @@
           },
           "401": {
             "description": "Wrong, expired or exhausted code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited, or too many guesses for this address; see Retry-After.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1048,7 +1058,7 @@
             "bearer": []
           }
         ],
-        "summary": "Create a custom role",
+        "summary": "Create a custom role (step-up required)",
         "tags": [
           "Admin"
         ]
@@ -1198,7 +1208,7 @@
             "bearer": []
           }
         ],
-        "summary": "Rename a role or replace its permissions",
+        "summary": "Rename a role or replace its permissions (step-up required)",
         "tags": [
           "Admin"
         ]
@@ -1255,7 +1265,7 @@
             "bearer": []
           }
         ],
-        "summary": "Delete a custom role",
+        "summary": "Delete a custom role (step-up required)",
         "tags": [
           "Admin"
         ]
@@ -5880,7 +5890,7 @@
             "bearer": []
           }
         ],
-        "summary": "Revoke all of a user's sessions",
+        "summary": "Revoke all of a user's sessions (step-up required)",
         "tags": [
           "Admin"
         ]
@@ -6186,7 +6196,7 @@
             "bearer": []
           }
         ],
-        "summary": "Create or update a feature flag",
+        "summary": "Create or update a feature flag (step-up required)",
         "tags": [
           "Admin"
         ]

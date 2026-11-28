@@ -77,6 +77,8 @@ export class AuthService {
   }
 
   async verifyStepUp(userId: string, sessionId: string, challengeId: string, code: string): Promise<void> {
+    // A signed-in caller guessing step-up codes: bounded per user on top of the per-email cap across challenges.
+    await consumeRateLimit(this.redis, `stepup-verify:user:${userId}`, 15, 15 * 60);
     // Bound to purpose STEP_UP and to this user inside the single UPDATE: a LOGIN challenge or someone else's never matches.
     await this.otp.verify(challengeId, code, { purpose: "STEP_UP", userId });
     await this.stepUp.grant(sessionId);

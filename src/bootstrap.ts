@@ -1,6 +1,7 @@
 import { INestApplication } from "@nestjs/common";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import { originGuard } from "./common/http/origin-guard.middleware";
 import { captureRawBody } from "./common/http/raw-body-capture";
 import { APP_CONFIG } from "./common/config/config.module";
 import type { AppConfig } from "./common/config/config.schema";
@@ -11,6 +12,8 @@ export function configureApp<T extends INestApplication>(app: T): T {
   // req.ip (per-IP rate limits, session/OTP audit IPs) is only the real client behind a proxy when this is the right hop count.
   if (config.trustProxy > 0) app.getHttpAdapter().getInstance().set("trust proxy", config.trustProxy);
   app.setGlobalPrefix("v1");
+  // Registered first: a request that bypassed the Cloudflare proxy is refused before anything else reads it.
+  app.use(originGuard(config.originSharedSecret));
   app.use(helmet());
   app.use(captureRawBody(["/v1/webhooks/razorpay", "/v1/webhooks/razorpayx"]));
   app.use(cookieParser());

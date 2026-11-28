@@ -39,7 +39,8 @@ export class PlaybackService {
 
     const asset = await this.prisma.mediaAsset.findUnique({ where: { id: assetId } });
     if (!asset) throw new AppError("MEDIA_NOT_FOUND", 404, "Media not found");
-    if (!(await this.allowed(userId, asset))) throw new AppError("FORBIDDEN", 403, "You do not have access to this media");
+    // Same answer as a missing asset: a caller cannot tell an existing private asset id from an unused one.
+    if (!(await this.allowed(userId, asset))) throw new AppError("MEDIA_NOT_FOUND", 404, "Media not found");
     if (asset.bucket !== "PRIVATE" || asset.purpose !== "COURSE_LESSON") {
       throw new AppError("MEDIA_NOT_PLAYABLE", 422, "Only private lesson videos can be played through signed playback");
     }

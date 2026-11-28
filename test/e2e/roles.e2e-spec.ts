@@ -149,6 +149,7 @@ describe("roles and audit", () => {
     const key = roleKey("mgr");
     expect((await createRole(admin, { key, name: "Mgr", scope: "PLATFORM", permissionKeys: ["rbac.manage", "user.view"] })).status).toBe(201);
     expect((await grant(admin, support.userId, { roleKey: key })).status).toBe(201);
+    await stepUp(support);
     const denied = await createRole(support, { key: roleKey("evil"), name: "Evil", scope: "PLATFORM", permissionKeys: ["settings.manage"] });
     expect(denied.status).toBe(403);
     expect(denied.body.error.code).toBe("ROLE_ESCALATION_DENIED");
@@ -190,6 +191,35 @@ describe("roles and audit", () => {
     const res = await grant(granter, target.userId, { roleKey: key });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe("STEP_UP_REQUIRED");
+  });
+
+  it("role create, edit and delete require a step-up; the member and creator roles cannot be re-permissioned", async () => {
+    const managerKey = roleKey("rolemgr");
+    await createRole(admin, { key: managerKey, name: "Role manager", scope: "PLATFORM", permissionKeys: ["rbac.manage", "user.view"] });
+    const manager = await t.login();
+    await grant(admin, manager.userId, { roleKey: managerKey });
+    const target = await prisma.role.findUniqueOrThrow({ where: { key: managerKey } });
+    const member = await prisma.role.findUniqueOrThrow({ where: { key: "member" } });
+
+    const body = { key: roleKey("sneaky"), name: "S", scope: "PLATFORM", permissionKeys: ["user.view"] };
+    const attempts = [
+      await createRole(manager, body),
+      await http().patch(`/v1/admin/roles/${target.id}`).set(auth(manager)).send({ name: "Renamed" }),
+      await http().delete(`/v1/admin/roles/${target.id}`).set(auth(manager)),
+      await http().patch(`/v1/admin/roles/${member.id}`).set(auth(manager)).send({ permissionKeys: ["user.view"] }),
+    ];
+    for (const res of attempts) {
+      expect(res.status).toBe(403);
+      expect(res.body.error.code).toBe("STEP_UP_REQUIRED");
+    }
+
+    await stepUp(manager);
+    const edited = await http().patch(`/v1/admin/roles/${member.id}`).set(auth(manager)).send({ permissionKeys: ["user.view"] });
+    expect(edited.status).toBe(409);
+    expect(edited.body.error.code).toBe("ROLE_SYSTEM_PROTECTED");
+    const creator = await prisma.role.findUniqueOrThrow({ where: { key: "creator" } });
+    expect((await http().patch(`/v1/admin/roles/${creator.id}`).set(auth(manager)).send({ permissionKeys: ["user.view"] })).body.error.code).toBe("ROLE_SYSTEM_PROTECTED");
+    expect((await createRole(manager, body)).status).toBe(201);
   });
 
   it("revoking the last active super_admin is LAST_SUPER_ADMIN; an expired grant does not count as active", async () => {
